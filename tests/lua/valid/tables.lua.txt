@@ -1,0 +1,78 @@
+-- saved as txt to avoid formatter
+
+print("basics:")
+a = {
+  a = 1;
+  ["b"] = 2;
+  3,
+}
+print(a.a, a.b, a[1], #a)
+
+print("\nlen outside init:")
+a = {}
+a[1] = 1
+print(#a)
+
+print("\nmerging:")
+a = { 1 }
+a[3] = 3
+print(#a)
+a[2] = 2
+print(#a)
+
+print("\nmerging in init:")
+a = { [2] = 2, 1 }
+print(#a)
+
+print("\nshrinking:")
+a = { 1, nil, 3 }
+print(#a)
+a[3] = nil
+print(#a)
+
+print("\nvariadic:")
+local function foo(...) return ... end
+a = { foo(1, 2, 3, 4) }
+print(#a, a[2])
+
+print("\nexpresion execution order:")
+a = {
+  [print(1) or 1] = print(2),
+  print(3),
+  [print(4) or 1] = print(5),
+}
+
+print("\n1 element - late flush:")
+a = {
+  [1] = 1,
+  2,
+  [1] = 3
+}
+print(a[1])
+
+print("\n50 elements - early flush:")
+a = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  [1] = 2
+}
+print(#a, a[1])
+
+print("\n49 elements - late flush:")
+a = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1,
+  [1] = 2
+}
+print(#a, a[1])
+
+print("\nexpression access")
+a.a = 2
+print((a)[1])
+print((a).a)

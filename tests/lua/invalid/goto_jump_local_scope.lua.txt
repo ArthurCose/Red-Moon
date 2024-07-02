@@ -1,0 +1,8 @@
+goto continue
+
+local a = 1
+print(a)
+
+::continue::
+
+print("huh")

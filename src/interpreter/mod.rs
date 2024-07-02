@@ -1,0 +1,27 @@
+mod byte_string;
+mod function_ref;
+mod heap;
+mod instruction;
+mod interpreted_function;
+mod metatable_keys;
+mod module;
+mod multi;
+mod native_function;
+mod string_ref;
+mod table;
+mod table_ref;
+mod thread;
+mod value;
+mod value_stack;
+mod vm;
+
+pub use byte_string::ByteString;
+pub use function_ref::FunctionRef;
+pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
+pub use module::{Chunk, Module, SourceMapping};
+pub use multi::{FromMulti, IntoMulti, MultiValue};
+pub use string_ref::StringRef;
+pub use table_ref::TableRef;
+pub use value::{FromValue, IntoValue, Value};
+pub use value_stack::Primitive;
+pub use vm::Vm;

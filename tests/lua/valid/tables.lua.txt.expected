@@ -1,0 +1,39 @@
+basics:
+1	2	3	1
+
+len outside init:
+1
+
+merging:
+1
+3
+
+merging in init:
+2
+
+shrinking:
+3
+1
+
+variadic:
+4	2
+
+expresion execution order:
+1
+2
+3
+4
+5
+
+1 element - late flush:
+2
+
+50 elements - early flush:
+50	2
+
+49 elements - late flush:
+49	1
+
+expression access
+1
+2

@@ -1,0 +1,50 @@
+tables:
+__len	 called with args: 	table
+__unm	 called with args: 	table
+__bnot	 called with args: 	table
+__add	 called with args: 	table	1
+__add	 called with args: 	1	table
+__sub	 called with args: 	table	1
+__sub	 called with args: 	1	table
+__mul	 called with args: 	table	1
+__mul	 called with args: 	1	table
+__div	 called with args: 	table	1
+__div	 called with args: 	1	table
+__idiv	 called with args: 	table	1
+__idiv	 called with args: 	1	table
+__mod	 called with args: 	table	1
+__mod	 called with args: 	1	table
+__pow	 called with args: 	table	1
+__pow	 called with args: 	1	table
+__band	 called with args: 	table	1
+__band	 called with args: 	1	table
+__bor	 called with args: 	table	1
+__bor	 called with args: 	1	table
+__bxor	 called with args: 	table	1
+__bxor	 called with args: 	1	table
+__shl	 called with args: 	table	1
+__shl	 called with args: 	1	table
+__shr	 called with args: 	table	1
+__shr	 called with args: 	1	table
+__eq	 called with args: 	table	1
+__eq	 called with args: 	1	table
+__eq	 called with args: 	table	1
+__eq	 called with args: 	1	table
+__lt	 called with args: 	table	1
+__lt	 called with args: 	1	table
+__lt	 called with args: 	1	table
+__lt	 called with args: 	table	1
+__le	 called with args: 	table	1
+__le	 called with args: 	1	table
+__le	 called with args: 	1	table
+__le	 called with args: 	table	1
+__index	 called with args: 	table	1
+__newindex	 called with args: 	table	1	2
+__call	 called with args: 	table	1	2
+
+__index short circuit:
+5
+5
+
+simple __index chain
+1

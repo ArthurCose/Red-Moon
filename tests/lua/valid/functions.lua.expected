@@ -1,0 +1,53 @@
+functions:
+3
+8	1	2	3	4
+1	8
+
+closure curry:
+28
+29
+30
+
+closure scopes:
+1
+2
+3
+3
+
+closure scopes 2:
+1
+2
+3
+3
+
+conditions:
+a
+b
+c
+
+variadic:
+1	2	3
+a	b	c
+4	1	2	3
+1	1	2	3
+-1
+1	2	3
+2	3	nil
+5	2	3
+
+tail calls
+1
+2
+3
+4
+5
+
+empty return
+2
+
+
+recursion:
+6
+
+method:
+table	2

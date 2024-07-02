@@ -1,0 +1,8 @@
+do
+  ::jump::
+  print("hello")
+end
+
+goto jump
+
+print("world")

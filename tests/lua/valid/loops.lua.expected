@@ -1,0 +1,74 @@
+while loop:
+1
+2
+3
+4
+5
+
+while loop break:
+1
+2
+3
+
+repeat loop:
+1
+2
+3
+4
+5
+
+repeat loop minimal:
+ran once
+
+repeat loop break:
+1
+2
+3
+
+numeric for loop:
+1
+2
+3
+4
+5
+
+numeric for loop break:
+1
+2
+3
+
+numeric for loop reverse:
+5
+4
+3
+2
+1
+
+numeric for loop step:
+1
+3
+5
+7
+9
+
+numeric for loop scope:
+0
+
+generic for loop:
+1
+2
+3
+4
+5
+
+generic for loop expression:
+-5
+-4
+-3
+-2
+-1
+
+generic for loop break:
+1
+2
+3

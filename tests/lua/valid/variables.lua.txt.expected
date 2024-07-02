@@ -1,0 +1,24 @@
+assignment:
+1	2	3	4	9	nil
+
+locals:
+nil
+9	8	7
+3	4	nil
+9	8	7
+1	12	3
+1	2	3
+
+nested exp_list:
+3	0
+
+operations with variable return:
+1
+2
+2
+
+empty variadic:
+1
+
+expression assignment:
+4	5	6

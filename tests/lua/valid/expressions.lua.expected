@@ -1,0 +1,30 @@
+values:
+hello
+hi	hello	world	true	1.0	2	false	255	nil
+
+short circuit:
+1	2	3	false	false
+
+arithmetic:
+5	7	6	3.0	4	-6	1.4142135623730951
+
+boolean comparison:
+true	false	true	false	false	true	true	true
+
+string comparison:
+true	false	false	true	false	true
+
+string arithmetic:
+2	2.0	2	2.0	2.0
+
+function comparison:
+true	false	false
+
+concat:
+ab
+a1
+1b
+
+length:
+4
+5
