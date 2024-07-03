@@ -1832,7 +1832,7 @@ where
                     instructions.push(Instruction::FlushToTable(
                         top_register,
                         list_start,
-                        next_register,
+                        next_register - 1,
                     ));
                     reserve_len += next_register - list_start;
 
