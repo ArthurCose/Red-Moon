@@ -23,6 +23,8 @@ enum VariablePath<'source> {
     Local(Register),
     /// Two stack registers: table and key
     TableValue(LuaToken<'source>, Register, Register),
+    /// Two stack registers: table and key
+    TableField(LuaToken<'source>, Register, ConstantIndex),
     /// stack register
     Collapsed(Register),
 }
@@ -618,13 +620,30 @@ where
                             let instructions = &mut self.top_function.instructions;
                             instructions.push(Instruction::CopyToLocalDeref(local, top_register));
                         }
-                        VariablePath::TableValue(_, table_index, key_index) => {
+                        VariablePath::TableValue(token, table_index, key_index) => {
                             self.resolve_function_body(top_register + 2, is_method)?;
+
+                            self.top_function
+                                .map_following_instructions(self.source, token.offset);
+
                             let instructions = &mut self.top_function.instructions;
                             instructions.push(Instruction::CopyToTableValue(
                                 table_index,
                                 key_index,
                                 top_register + 2,
+                            ));
+                        }
+                        VariablePath::TableField(token, table_index, string_index) => {
+                            self.resolve_function_body(top_register + 1, is_method)?;
+
+                            self.top_function
+                                .map_following_instructions(self.source, token.offset);
+
+                            let instructions = &mut self.top_function.instructions;
+                            instructions.push(Instruction::CopyToTableField(
+                                table_index,
+                                string_index,
+                                top_register + 1,
                             ));
                         }
                         VariablePath::Collapsed(_) => unreachable!(),
@@ -732,8 +751,10 @@ where
 
                         let mut next_register = top_register;
 
-                        if let VariablePath::TableValue(..) = path {
-                            next_register += 2;
+                        match path {
+                            VariablePath::TableValue(..) => next_register += 2,
+                            VariablePath::TableField(..) => next_register += 1,
+                            _ => {}
                         }
 
                         loop {
@@ -753,8 +774,10 @@ where
                                 .into());
                             }
 
-                            if let VariablePath::TableValue(..) = path {
-                                next_register += 2;
+                            match path {
+                                VariablePath::TableValue(..) => next_register += 2,
+                                VariablePath::TableField(..) => next_register += 1,
+                                _ => {}
                             }
 
                             lhs_list.push(path);
@@ -775,8 +798,6 @@ where
 
                         self.resolve_exp_list(assign_token, next_register)?;
 
-                        let instructions = &mut self.top_function.instructions;
-
                         for path in lhs_list {
                             // start with increment to skip the len
                             next_register += 1;
@@ -785,16 +806,30 @@ where
                                 VariablePath::Local(local) => {
                                     Instruction::CopyToLocalDeref(local, next_register)
                                 }
-                                VariablePath::TableValue(_, table_index, key_index) => {
+                                VariablePath::TableValue(token, table_index, key_index) => {
+                                    self.top_function
+                                        .map_following_instructions(self.source, token.offset);
+
                                     Instruction::CopyToTableValue(
                                         table_index,
                                         key_index,
                                         next_register,
                                     )
                                 }
+                                VariablePath::TableField(token, table_index, string_index) => {
+                                    self.top_function
+                                        .map_following_instructions(self.source, token.offset);
+
+                                    Instruction::CopyToTableField(
+                                        table_index,
+                                        string_index,
+                                        next_register,
+                                    )
+                                }
                                 VariablePath::Collapsed(_) => unreachable!(),
                             };
 
+                            let instructions = &mut self.top_function.instructions;
                             instructions.push(instruction);
                         }
                     } else if next_token.label == LuaTokenLabel::Assign {
@@ -822,6 +857,23 @@ where
                                     table_index,
                                     key_index,
                                     top_register + 2,
+                                ));
+                            }
+                            VariablePath::TableField(token, table_index, string_index) => {
+                                self.resolve_expression(
+                                    top_register + 1,
+                                    ReturnMode::Static(1),
+                                    0,
+                                )?;
+
+                                self.top_function
+                                    .map_following_instructions(self.source, token.offset);
+
+                                let instructions = &mut self.top_function.instructions;
+                                instructions.push(Instruction::CopyToTableField(
+                                    table_index,
+                                    string_index,
+                                    top_register + 1,
                                 ));
                             }
                             VariablePath::Collapsed(_) => unreachable!(),
@@ -911,12 +963,7 @@ where
                     let token = self.expect(LuaTokenLabel::Name)?;
 
                     let string_index = self.top_function.intern_string(self.source, token)?;
-
-                    let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::LoadBytes(top_register + 1, string_index));
-
-                    let key_index = top_register + 1;
-                    path = VariablePath::TableValue(token, top_register, key_index);
+                    path = VariablePath::TableField(token, top_register, string_index);
                 }
                 LuaTokenLabel::OpenBracket => {
                     self.copy_variable(top_register, path);
@@ -972,14 +1019,9 @@ where
             self.token_iter.next();
 
             let token = self.expect(LuaTokenLabel::Name)?;
-
             let string_index = self.top_function.intern_string(self.source, token)?;
 
-            let instructions = &mut self.top_function.instructions;
-            instructions.push(Instruction::LoadBytes(top_register + 1, string_index));
-
-            let key_index = top_register + 1;
-            path = VariablePath::TableValue(token, top_register, key_index);
+            path = VariablePath::TableField(token, top_register, string_index);
         }
 
         Ok(path)
@@ -1014,9 +1056,8 @@ where
 
             let instructions = &mut self.top_function.instructions;
             instructions.push(Instruction::CopyLocal(top_register, env_index));
-            instructions.push(Instruction::LoadBytes(top_register + 1, string_index));
 
-            VariablePath::TableValue(token, top_register, top_register + 1)
+            VariablePath::TableField(token, top_register, string_index)
         };
 
         Ok(path)
@@ -1066,6 +1107,17 @@ where
                     dest_index,
                     table_index,
                     key_index,
+                ));
+            }
+            VariablePath::TableField(token, table_index, string_index) => {
+                self.top_function
+                    .map_following_instructions(self.source, token.offset);
+
+                let instructions = &mut self.top_function.instructions;
+                instructions.push(Instruction::CopyTableField(
+                    dest_index,
+                    table_index,
+                    string_index,
                 ));
             }
             VariablePath::Collapsed(register) => {
@@ -1288,11 +1340,10 @@ where
 
                 let instructions = &mut self.top_function.instructions;
                 // load function
-                instructions.push(Instruction::LoadBytes(top_register, string_index));
-                instructions.push(Instruction::CopyTableValue(
+                instructions.push(Instruction::CopyTableField(
                     top_register,
                     top_register + 2,
-                    top_register,
+                    string_index,
                 ));
                 // call function
                 call_instruction_index = instructions.len();
@@ -1872,14 +1923,13 @@ where
 
                     let string_index = self.top_function.intern_string(self.source, token)?;
 
-                    self.resolve_expression(next_register + 1, ReturnMode::Static(1), 0)?;
+                    self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
 
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::LoadBytes(next_register, string_index));
-                    instructions.push(Instruction::CopyToTableValue(
+                    instructions.push(Instruction::CopyToTableField(
                         top_register,
+                        string_index,
                         next_register,
-                        next_register + 1,
                     ));
                 }
                 _ => {

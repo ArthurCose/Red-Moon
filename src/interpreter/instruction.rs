@@ -107,6 +107,16 @@ pub enum Instruction {
     /// Copies a value from a table onto the stack
     ///
     /// (dest, table, key)
+    CopyTableField(Register, Register, ConstantIndex),
+
+    /// Copies a value from the stack to a table
+    ///
+    /// (dest, table, key)
+    CopyToTableField(Register, ConstantIndex, Register),
+
+    /// Copies a value from a table onto the stack
+    ///
+    /// (dest, table, key)
     CopyTableValue(Register, Register, Register),
 
     /// Copies a value from the stack to a table

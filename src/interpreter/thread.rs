@@ -595,109 +595,52 @@ impl CallContext {
                     table.flush(self.table_flush_count, value_stack.get_slice(start..end));
                     self.table_flush_count += end - start;
                 }
+                Instruction::CopyTableField(dest, table_index, bytes_index) => {
+                    let base = value_stack.get(self.register_base + *table_index as usize);
+                    let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
+                        return Err(
+                            IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
+                        );
+                    };
+
+                    if let Some(call_result) =
+                        self.copy_from_table(vm, value_stack, *dest, base, heap_key.into())?
+                    {
+                        return Ok(call_result);
+                    }
+                }
+                Instruction::CopyToTableField(table_index, bytes_index, src) => {
+                    let base = value_stack.get(self.register_base + *table_index as usize);
+                    let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
+                        return Err(
+                            IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
+                        );
+                    };
+
+                    if let Some(call_result) =
+                        self.copy_to_table(vm, value_stack, base, heap_key.into(), *src)?
+                    {
+                        return Ok(call_result);
+                    }
+                }
                 Instruction::CopyTableValue(dest, table_index, key_index) => {
                     let base = value_stack.get(self.register_base + *table_index as usize);
-                    let mut index_base = base;
                     let key = value_stack.get(self.register_base + *key_index as usize);
 
-                    // initial test
-                    let StackValue::HeapValue(base_heap_key) = base else {
-                        return Err(RuntimeErrorData::AttemptToIndexInvalid);
-                    };
-
-                    let mut value = match heap.get(base_heap_key).unwrap() {
-                        HeapValue::Table(table) => table.get(key),
-                        HeapValue::Bytes(_) => StackValue::Primitive(Primitive::Nil),
-                        _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
-                    };
-
-                    if value == StackValue::Primitive(Primitive::Nil) {
-                        // resolve using __index
-                        let metamethod_key = vm.metatable_keys().index.0.key().into();
-                        let max_chain_depth = vm.limits().metatable_chain_depth;
-                        let mut chain_depth = 0;
-
-                        let heap = vm.heap_mut();
-                        let mut next_index_base = index_base;
-
-                        while next_index_base != StackValue::Primitive(Primitive::Nil) {
-                            if chain_depth > max_chain_depth {
-                                return Err(RuntimeErrorData::MetatableChainTooLong);
-                            }
-
-                            index_base = next_index_base;
-
-                            let StackValue::HeapValue(heap_key) = index_base else {
-                                return Err(RuntimeErrorData::AttemptToIndexInvalid);
-                            };
-
-                            let heap_value = heap.get(heap_key).unwrap();
-
-                            match heap_value {
-                                HeapValue::Table(table) => {
-                                    value = table.get(key);
-
-                                    if value != StackValue::Primitive(Primitive::Nil) {
-                                        break;
-                                    }
-                                }
-                                HeapValue::NativeFunction(_) | HeapValue::Function(_) => {
-                                    let function_index = value_stack.len() - self.register_base;
-                                    value_stack.extend([
-                                        heap_key.into(),
-                                        Primitive::Integer(2).into(),
-                                        base,
-                                        key,
-                                    ]);
-
-                                    return Ok(CallResult::Call(
-                                        function_index,
-                                        ReturnMode::Destination(*dest),
-                                    ));
-                                }
-                                _ => {}
-                            };
-
-                            next_index_base = heap.get_metavalue(heap_key, metamethod_key);
-                            chain_depth += 1;
-                        }
+                    if let Some(call_result) =
+                        self.copy_from_table(vm, value_stack, *dest, base, key)?
+                    {
+                        return Ok(call_result);
                     }
-
-                    value_stack.set(self.register_base + *dest as usize, value);
                 }
                 Instruction::CopyToTableValue(table_index, key_index, src) => {
-                    let metamethod_key = vm.metatable_keys().newindex.0.key().into();
+                    let base = value_stack.get(self.register_base + *table_index as usize);
                     let key = value_stack.get(self.register_base + *key_index as usize);
 
-                    let StackValue::HeapValue(heap_key) =
-                        value_stack.get(self.register_base + *table_index as usize)
-                    else {
-                        return Err(RuntimeErrorData::AttemptToIndexInvalid);
-                    };
-
-                    let src_value = value_stack.get(self.register_base + *src as usize);
-                    let heap = vm.heap_mut();
-
-                    if let Some(function_key) = heap.get_metamethod(heap_key, metamethod_key) {
-                        let function_index = value_stack.len() - self.register_base;
-
-                        value_stack.extend([
-                            function_key.into(),
-                            Primitive::Integer(3).into(),
-                            heap_key.into(),
-                            key,
-                            src_value,
-                        ]);
-
-                        return Ok(CallResult::Call(function_index, ReturnMode::Static(0)));
-                    } else {
-                        let table_value = heap.get_mut(heap_key).unwrap();
-
-                        let HeapValue::Table(table) = table_value else {
-                            return Err(RuntimeErrorData::AttemptToIndexInvalid);
-                        };
-
-                        table.set(key, src_value);
+                    if let Some(call_result) =
+                        self.copy_to_table(vm, value_stack, base, key, *src)?
+                    {
+                        return Ok(call_result);
                     }
                 }
                 Instruction::CopyArg(dest, index) => {
@@ -1583,6 +1526,129 @@ impl CallContext {
             function_index,
             ReturnMode::Destination(dest),
         ))
+    }
+
+    fn copy_from_table(
+        &self,
+        vm: &mut Vm,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        base: StackValue,
+        key: StackValue,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        // initial test
+        let StackValue::HeapValue(base_heap_key) = base else {
+            return Err(RuntimeErrorData::AttemptToIndexInvalid);
+        };
+
+        let mut value = match vm.heap_mut().get(base_heap_key).unwrap() {
+            HeapValue::Table(table) => table.get(key),
+            HeapValue::Bytes(_) => StackValue::Primitive(Primitive::Nil),
+            _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
+        };
+
+        let mut index_base = base;
+
+        if value == StackValue::Primitive(Primitive::Nil) {
+            // resolve using __index
+            let metamethod_key = vm.metatable_keys().index.0.key().into();
+            let max_chain_depth = vm.limits().metatable_chain_depth;
+            let mut chain_depth = 0;
+
+            let heap = vm.heap_mut();
+            let mut next_index_base = index_base;
+
+            while next_index_base != StackValue::Primitive(Primitive::Nil) {
+                if chain_depth > max_chain_depth {
+                    return Err(RuntimeErrorData::MetatableChainTooLong);
+                }
+
+                index_base = next_index_base;
+
+                let StackValue::HeapValue(heap_key) = index_base else {
+                    return Err(RuntimeErrorData::AttemptToIndexInvalid);
+                };
+
+                let heap_value = heap.get(heap_key).unwrap();
+
+                match heap_value {
+                    HeapValue::Table(table) => {
+                        value = table.get(key);
+
+                        if value != StackValue::Primitive(Primitive::Nil) {
+                            break;
+                        }
+                    }
+                    HeapValue::NativeFunction(_) | HeapValue::Function(_) => {
+                        let function_index = value_stack.len() - self.register_base;
+                        value_stack.extend([
+                            heap_key.into(),
+                            Primitive::Integer(2).into(),
+                            base,
+                            key,
+                        ]);
+
+                        return Ok(Some(CallResult::Call(
+                            function_index,
+                            ReturnMode::Destination(dest),
+                        )));
+                    }
+                    _ => {}
+                };
+
+                next_index_base = heap.get_metavalue(heap_key, metamethod_key);
+                chain_depth += 1;
+            }
+        }
+
+        value_stack.set(self.register_base + dest as usize, value);
+
+        Ok(None)
+    }
+
+    fn copy_to_table(
+        &self,
+        vm: &mut Vm,
+        value_stack: &mut ValueStack,
+        table_stack_value: StackValue,
+        key: StackValue,
+        src: u8,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let StackValue::HeapValue(heap_key) = table_stack_value else {
+            return Err(RuntimeErrorData::AttemptToIndexInvalid);
+        };
+
+        let metamethod_key = vm.metatable_keys().newindex.0.key().into();
+
+        let src_value = value_stack.get(self.register_base + src as usize);
+        let heap = vm.heap_mut();
+
+        if let Some(function_key) = heap.get_metamethod(heap_key, metamethod_key) {
+            let function_index = value_stack.len() - self.register_base;
+
+            value_stack.extend([
+                function_key.into(),
+                Primitive::Integer(3).into(),
+                heap_key.into(),
+                key,
+                src_value,
+            ]);
+
+            Ok(Some(CallResult::Call(
+                function_index,
+                ReturnMode::Static(0),
+            )))
+        } else {
+            let table_value = heap.get_mut(heap_key).unwrap();
+
+            let HeapValue::Table(table) = table_value else {
+                return Err(RuntimeErrorData::AttemptToIndexInvalid);
+            };
+
+            table.set(key, src_value);
+
+            Ok(None)
+        }
     }
 }
 
