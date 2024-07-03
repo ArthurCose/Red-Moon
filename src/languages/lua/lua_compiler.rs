@@ -1823,7 +1823,13 @@ where
                 let instructions = &mut self.top_function.instructions;
 
                 // resolve jump
-                instructions[jump_index] = Instruction::Jump(instructions.len().into());
+                if instructions.len() - jump_index > 2 {
+                    instructions[jump_index] = Instruction::Jump(instructions.len().into());
+                } else {
+                    // optimization, invert condition to remove the jump
+                    instructions[jump_index - 1] = Instruction::TestTruthy(true, a);
+                    instructions.remove(jump_index);
+                }
             }
             LuaTokenLabel::Or => {
                 // jump / skip calculating `b`` if `a` is truthy (accept the first truthy value)
@@ -1836,9 +1842,16 @@ where
                 // calculate b in a as we want to swap it anyway
                 self.resolve_expression(a, return_mode, next_priority)?;
 
-                // resolve jump
                 let instructions = &mut self.top_function.instructions;
-                instructions[jump_index] = Instruction::Jump(instructions.len().into());
+
+                // resolve jump
+                if instructions.len() - jump_index > 2 {
+                    instructions[jump_index] = Instruction::Jump(instructions.len().into());
+                } else {
+                    // optimization, invert condition to remove the jump
+                    instructions[jump_index - 1] = Instruction::TestTruthy(false, a);
+                    instructions.remove(jump_index);
+                }
             }
             _ => unreachable!(),
         }
