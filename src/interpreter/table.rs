@@ -1,12 +1,13 @@
 use super::heap::HeapKey;
 use super::value_stack::{Primitive, StackValue};
 use indexmap::IndexMap;
+use rustc_hash::FxBuildHasher;
 use std::ops::Range;
 
 #[derive(Clone, Default)]
 pub(crate) struct Table {
     metatable: Option<HeapKey>,
-    map: IndexMap<StackValue, StackValue>,
+    map: IndexMap<StackValue, StackValue, FxBuildHasher>,
     list: Vec<StackValue>,
 }
 
