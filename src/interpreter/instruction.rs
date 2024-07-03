@@ -249,17 +249,12 @@ pub enum Instruction {
 
     /// Expects two numbers at src, the limit and the step
     ///
-    /// Sets up a numeric for loop, use before TestNumericFor
+    /// Jump using JumpToForLoop to increment the local
     ///
     /// (src, local)
-    PrepNumericFor(Register, Register),
+    NumericFor(Register, Register),
 
-    /// Expects two numbers at src, the limit and the step
-    ///
-    /// Updates the local, the next instruction will be skipped until the local exceeds the limit
-    ///
-    /// (src, local)
-    TestNumericFor(Register, Register),
+    JumpToForLoop(InstructionIndex),
 
     Jump(InstructionIndex),
 

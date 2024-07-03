@@ -489,6 +489,7 @@ impl CallContext {
         vm: &mut Vm,
     ) -> Result<CallResult, RuntimeErrorData> {
         let definition = &self.function.definition;
+        let mut for_loop_jump = false;
 
         while let Some(instruction) = definition.instructions.get(self.next_instruction_index) {
             if vm.tracked_stack_size() + value_stack.len() > vm.limits().stack_size {
@@ -1140,7 +1141,7 @@ impl CallContext {
                         self.next_instruction_index += 1;
                     }
                 }
-                Instruction::PrepNumericFor(src, local) => {
+                Instruction::NumericFor(src, local) => {
                     let limit = coerce_stack_value_to_integer(
                         heap,
                         value_stack.get(self.register_base + *src as usize),
@@ -1151,11 +1152,16 @@ impl CallContext {
                         value_stack.get(self.register_base + *src as usize + 1),
                         || RuntimeErrorData::StepMustBeNumber,
                     )?;
-                    let value = coerce_stack_value_to_integer(
+                    let mut value = coerce_stack_value_to_integer(
                         heap,
                         self.locals.get(*local as usize),
                         || RuntimeErrorData::InitialValueMustBeNumber,
                     )?;
+
+                    if for_loop_jump {
+                        value += step;
+                        for_loop_jump = false;
+                    }
 
                     let stop = match step.is_positive() {
                         true => value > limit,
@@ -1164,38 +1170,13 @@ impl CallContext {
 
                     if !stop {
                         self.locals
-                            .set(*local as usize, Primitive::Integer(value - step).into());
-                    }
-                }
-                Instruction::TestNumericFor(src, local) => {
-                    let limit = coerce_stack_value_to_integer(
-                        heap,
-                        value_stack.get(self.register_base + *src as usize),
-                        || RuntimeErrorData::LimitMustBeNumber,
-                    )?;
-                    let step = coerce_stack_value_to_integer(
-                        heap,
-                        value_stack.get(self.register_base + *src as usize + 1),
-                        || RuntimeErrorData::StepMustBeNumber,
-                    )?;
-                    let value = coerce_stack_value_to_integer(
-                        heap,
-                        self.locals.get(*local as usize),
-                        || RuntimeErrorData::InitialValueMustBeNumber,
-                    )?;
-
-                    let next_value = value + step;
-
-                    let stop = match step.is_positive() {
-                        true => next_value > limit,
-                        false => next_value < limit,
-                    };
-
-                    if !stop {
-                        self.locals
-                            .set(*local as usize, Primitive::Integer(next_value).into());
+                            .set(*local as usize, Primitive::Integer(value).into());
                         self.next_instruction_index += 1;
                     }
+                }
+                Instruction::JumpToForLoop(i) => {
+                    self.next_instruction_index = (*i).into();
+                    for_loop_jump = true;
                 }
                 Instruction::Jump(i) => {
                     self.next_instruction_index = (*i).into();

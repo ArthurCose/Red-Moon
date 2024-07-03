@@ -492,10 +492,14 @@ where
                     let start_index;
                     let branch_index;
 
+                    let mut use_for_jump = false;
+
                     match next_token.label {
                         LuaTokenLabel::Assign => {
                             (start_index, branch_index) =
                                 self.resolve_numeric_for_params(top_register, name_token)?;
+
+                            use_for_jump = true;
 
                             block_register += 2;
                         }
@@ -526,7 +530,11 @@ where
                     let instructions = &mut self.top_function.instructions;
 
                     // jump back to the start
-                    instructions.push(Instruction::Jump(start_index.into()));
+                    if use_for_jump {
+                        instructions.push(Instruction::JumpToForLoop(start_index.into()));
+                    } else {
+                        instructions.push(Instruction::Jump(start_index.into()));
+                    }
 
                     // resolve break jumps
                     let next_instruction = instructions.len();
@@ -2070,10 +2078,8 @@ where
         }
 
         let instructions = &mut self.top_function.instructions;
-        instructions.push(Instruction::PrepNumericFor(top_register, local_index));
-
         let start_index = instructions.len();
-        instructions.push(Instruction::TestNumericFor(top_register, local_index));
+        instructions.push(Instruction::NumericFor(top_register, local_index));
         let jump_index = instructions.len();
         instructions.push(Instruction::Jump(0.into()));
 
