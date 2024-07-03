@@ -68,7 +68,11 @@ impl ValueStack {
     }
 
     pub(crate) fn get(&self, index: usize) -> StackValue {
-        self.values.get(index).cloned().unwrap_or_default()
+        if let Some(value) = self.values.get(index) {
+            *value
+        } else {
+            StackValue::Primitive(Primitive::Nil)
+        }
     }
 
     pub(crate) fn get_slice(&self, mut range: Range<usize>) -> &[StackValue] {
