@@ -55,11 +55,6 @@ pub enum ReturnMode {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    /// Clears anything on the stack at this register and beyond
-    ///
-    /// (dest)
-    Clear(Register),
-
     /// Stores nil in a register
     ///
     /// (dest)
@@ -84,6 +79,13 @@ pub enum Instruction {
     ///
     /// (dest, index)
     LoadBytes(Register, ConstantIndex),
+
+    /// Loads an integer from the numbers list and stores it in a register
+    ///
+    /// Clears values past the destination
+    ///
+    /// (dest, index)
+    PrepExpression(Register, ConstantIndex),
 
     /// Creates a table, reserves space for the list part of the table
     ///

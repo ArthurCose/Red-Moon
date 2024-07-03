@@ -1387,7 +1387,7 @@ where
             .register_number(self.source, first_token, 0)?;
         let instructions = &mut self.top_function.instructions;
         let count_instruction_index = instructions.len();
-        instructions.push(Instruction::LoadInt(top_register, count_constant));
+        instructions.push(Instruction::PrepExpression(top_register, count_constant));
 
         let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
             return Ok(());
@@ -1396,9 +1396,6 @@ where
         if !starts_expression(next_token.label) {
             return Ok(());
         }
-
-        // clear anything still on the stack past the length
-        instructions.push(Instruction::Clear(top_register + 1));
 
         // track the start of the first and last expression for updating function return modes to variadic
         let first_expression_start = instructions.len();
@@ -1440,7 +1437,8 @@ where
             self.top_function
                 .register_number(self.source, next_token, total as _)?;
         let instructions = &mut self.top_function.instructions;
-        instructions[count_instruction_index] = Instruction::LoadInt(top_register, count_constant);
+        instructions[count_instruction_index] =
+            Instruction::PrepExpression(top_register, count_constant);
 
         self.variadic_to_single_static(top_register, first_expression_start..last_expression_start);
 

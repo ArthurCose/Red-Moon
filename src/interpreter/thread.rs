@@ -499,9 +499,6 @@ impl CallContext {
             self.next_instruction_index += 1;
 
             match instruction {
-                Instruction::Clear(dest) => {
-                    value_stack.chip(self.register_base + *dest as usize, 0);
-                }
                 Instruction::SetNil(dest) => {
                     value_stack.set(self.register_base + *dest as usize, Primitive::Nil.into());
                 }
@@ -529,6 +526,16 @@ impl CallContext {
                     };
 
                     value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                }
+                Instruction::PrepExpression(dest, index) => {
+                    let Some(number) = definition.numbers.get(*index as usize) else {
+                        return Err(IllegalInstruction::MissingNumberConstant(*index).into());
+                    };
+                    let value = Primitive::Integer(*number).into();
+
+                    let dest_index = self.register_base + *dest as usize;
+                    value_stack.set(dest_index, value);
+                    value_stack.chip(dest_index + 1, 0);
                 }
                 Instruction::CreateTable(dest, len_index) => {
                     let Some(&len) = definition.numbers.get(*len_index as usize) else {
