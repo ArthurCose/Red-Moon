@@ -104,6 +104,10 @@ impl ValueStack {
         self.values.insert(index, value);
     }
 
+    pub(crate) fn extend(&mut self, iter: impl IntoIterator<Item = StackValue>) {
+        self.values.extend(iter);
+    }
+
     pub(crate) fn chip(&mut self, start: usize, keep: usize) {
         let end = self.len().saturating_sub(keep).max(start);
 

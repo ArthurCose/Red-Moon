@@ -106,9 +106,7 @@ impl MultiValue {
     pub(crate) fn push_stack_multi(&self, value_stack: &mut ValueStack) {
         value_stack.push(Primitive::Integer(self.len() as _).into());
 
-        for value in self.values.iter().rev() {
-            value_stack.push(value.to_stack_value());
-        }
+        value_stack.extend(self.values.iter().rev().map(|value| value.to_stack_value()));
     }
 }
 

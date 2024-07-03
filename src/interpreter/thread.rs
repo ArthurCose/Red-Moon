@@ -62,7 +62,7 @@ impl Thread {
             HeapValue::Function(function) => {
                 let function = function.clone();
 
-                value_stack.set(0, value);
+                value_stack.push(value);
                 args.push_stack_multi(&mut value_stack);
                 vm.store_multi(args);
 
@@ -191,14 +191,17 @@ impl Thread {
                                 ReturnMode::Static(return_count) => {
                                     self.value_stack.chip(stack_start, 0);
 
-                                    for i in 0..return_count as usize {
-                                        let Some(value) = return_values.pop_front() else {
-                                            break;
-                                        };
-
-                                        self.value_stack
-                                            .set(stack_start + i, value.to_stack_value());
-                                    }
+                                    self.value_stack.extend(
+                                        std::iter::from_fn(|| {
+                                            Some(
+                                                return_values
+                                                    .pop_front()
+                                                    .map(|v| v.to_stack_value())
+                                                    .unwrap_or_default(),
+                                            )
+                                        })
+                                        .take(return_count as usize),
+                                    );
                                 }
                                 ReturnMode::Destination(dest) => {
                                     self.value_stack.chip(stack_start, 0);
@@ -215,14 +218,10 @@ impl Thread {
 
                                     let return_count = return_values.len();
 
-                                    for i in 0..return_count {
-                                        let Some(value) = return_values.pop_front() else {
-                                            break;
-                                        };
-
-                                        self.value_stack
-                                            .set(stack_start + i, value.to_stack_value());
-                                    }
+                                    // append return values
+                                    self.value_stack.extend(std::iter::from_fn(|| {
+                                        return_values.pop_front().map(|v| v.to_stack_value())
+                                    }));
 
                                     // add the return count
                                     let len_register = register_base + len_index as usize;
@@ -393,13 +392,8 @@ impl Thread {
                             }
 
                             let dest_index = parent_base + dest as usize;
-
-                            // clear everything at the dest and beyond
                             self.value_stack.chip(dest_index, 0);
-
-                            for (i, value) in values.into_iter().enumerate() {
-                                self.value_stack.set(dest_index + i, value);
-                            }
+                            self.value_stack.extend(values.into_iter());
                         }
                         ReturnMode::TailCall => unreachable!(),
                     }
@@ -651,11 +645,12 @@ impl CallContext {
                                 }
                                 HeapValue::NativeFunction(_) | HeapValue::Function(_) => {
                                     let function_index = value_stack.len() - self.register_base;
-                                    value_stack.set(value_stack.len(), heap_key.into());
-                                    value_stack
-                                        .set(value_stack.len(), Primitive::Integer(2).into());
-                                    value_stack.set(value_stack.len(), base);
-                                    value_stack.set(value_stack.len(), key);
+                                    value_stack.extend([
+                                        heap_key.into(),
+                                        Primitive::Integer(2).into(),
+                                        base,
+                                        key,
+                                    ]);
 
                                     return Ok(CallResult::Call(
                                         function_index,
@@ -688,11 +683,13 @@ impl CallContext {
                     if let Some(function_key) = heap.get_metamethod(heap_key, metamethod_key) {
                         let function_index = value_stack.len() - self.register_base;
 
-                        value_stack.set(value_stack.len(), function_key.into());
-                        value_stack.set(value_stack.len(), Primitive::Integer(3).into());
-                        value_stack.set(value_stack.len(), heap_key.into());
-                        value_stack.set(value_stack.len(), key);
-                        value_stack.set(value_stack.len(), src_value);
+                        value_stack.extend([
+                            function_key.into(),
+                            Primitive::Integer(3).into(),
+                            heap_key.into(),
+                            key,
+                            src_value,
+                        ]);
 
                         return Ok(CallResult::Call(function_index, ReturnMode::Static(0)));
                     } else {
@@ -772,7 +769,8 @@ impl CallContext {
                         self.locals.set(*local as usize, value);
                     }
 
-                    self.pending_captures.set(*child_local as usize, value);
+                    let child_index = *child_local as usize;
+                    self.pending_captures.set(child_index, value);
                 }
                 Instruction::Closure(dest, function_index) => {
                     let Some(&heap_key) = definition.functions.get(*function_index as usize) else {
@@ -1529,10 +1527,12 @@ impl CallContext {
 
         let function_index = value_stack.len() - self.register_base;
 
-        value_stack.set(value_stack.len(), function_key.into());
-        value_stack.set(value_stack.len(), Primitive::Integer(2).into());
-        value_stack.set(value_stack.len(), value_a);
-        value_stack.set(value_stack.len(), value_b);
+        value_stack.extend([
+            function_key.into(),
+            Primitive::Integer(2).into(),
+            value_a,
+            value_b,
+        ]);
 
         Some(CallResult::Call(
             function_index,
@@ -1579,9 +1579,7 @@ impl CallContext {
         let function_key = heap.get_metamethod(heap_key, metamethod_key)?;
         let function_index = value_stack.len() - self.register_base;
 
-        value_stack.set(value_stack.len(), function_key.into());
-        value_stack.set(value_stack.len(), Primitive::Integer(1).into());
-        value_stack.set(value_stack.len(), value_a);
+        value_stack.extend([function_key.into(), Primitive::Integer(1).into(), value_a]);
 
         Some(CallResult::Call(
             function_index,

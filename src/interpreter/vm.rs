@@ -282,7 +282,7 @@ impl Vm {
             .collect();
 
         let mut captures = ValueStack::default();
-        captures.set(0, environment);
+        captures.push(environment);
 
         let key = self.heap.create_with_key(|key| {
             HeapValue::Function(Function {
