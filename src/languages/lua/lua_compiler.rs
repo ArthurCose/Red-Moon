@@ -557,7 +557,7 @@ where
                     // tail call optimization
                     if let Some(Instruction::Call(register, return_mode)) = instructions.last_mut()
                     {
-                        if *return_mode == ReturnMode::Variadic(top_register)
+                        if *return_mode == ReturnMode::Extend(top_register)
                             && *register == top_register + 1
                         {
                             *return_mode = ReturnMode::TailCall;
@@ -1354,7 +1354,7 @@ where
         let mut last_expression_start = instructions.len();
 
         // resolve the first expression
-        self.resolve_expression(top_register + 1, ReturnMode::Variadic(top_register), 0)?;
+        self.resolve_expression(top_register + 1, ReturnMode::Extend(top_register), 0)?;
         total += 1;
 
         // resolve the rest
@@ -1371,7 +1371,7 @@ where
 
             self.resolve_expression(
                 top_register + 1 + total,
-                ReturnMode::Variadic(top_register),
+                ReturnMode::Extend(top_register),
                 0,
             )?;
             total += 1;
@@ -1406,7 +1406,7 @@ where
             match instruction {
                 Instruction::Call(_, mode) => {
                     // need to test the target in case of nested exp_list
-                    if *mode == ReturnMode::Variadic(count_register) {
+                    if *mode == ReturnMode::Extend(count_register) {
                         *mode = ReturnMode::Static(1);
                     }
                 }
@@ -1579,7 +1579,7 @@ where
                         ReturnMode::Static(1) => {
                             instructions.push(Instruction::CopyArg(top_register, skip));
                         }
-                        ReturnMode::Variadic(count) => {
+                        ReturnMode::Extend(count) => {
                             instructions.push(Instruction::CopyVariadic(top_register, count, skip));
                         }
                         _ => unreachable!(),
@@ -1888,7 +1888,7 @@ where
                     // try reading this as an expression
                     self.resolve_partially_consumed_expression(
                         next_register,
-                        ReturnMode::Variadic(count_register),
+                        ReturnMode::Extend(count_register),
                         token,
                         0,
                     )?;

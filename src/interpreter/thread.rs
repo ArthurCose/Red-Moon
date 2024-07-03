@@ -210,7 +210,7 @@ impl Thread {
                                     self.value_stack
                                         .set(register_base + dest as usize, value.to_stack_value());
                                 }
-                                ReturnMode::Variadic(len_index) => {
+                                ReturnMode::Extend(len_index) => {
                                     self.value_stack.chip(stack_start, 0);
 
                                     let return_count = return_values.len();
@@ -361,7 +361,7 @@ impl Thread {
                             // store value
                             self.value_stack.set(parent_base + dest as usize, value);
                         }
-                        ReturnMode::Variadic(len_index) => {
+                        ReturnMode::Extend(len_index) => {
                             // remove extra values past the return values
                             self.value_stack
                                 .chip(context.register_base + registry_index + return_count + 1, 0);

@@ -44,7 +44,7 @@ pub enum ReturnMode {
     /// Clear the function and args on the stack, store a single result at a specific register
     Destination(Register),
     /// Swap the function and args on the stack with the return values, add the return count subtracted by one to a specific register
-    Variadic(Register),
+    Extend(Register),
     /// Stores multiple result at a specific register without a return count
     ///
     /// The destination and beyond will be cleared before placing values
