@@ -206,12 +206,10 @@ impl Thread {
                                 ReturnMode::Destination(dest) => {
                                     self.value_stack.chip(stack_start, 0);
 
-                                    let Some(value) = return_values.pop_front() else {
-                                        break;
-                                    };
+                                    let value = return_values.pop_front().unwrap_or_default();
 
-                                    self.value_stack
-                                        .set(register_base + dest as usize, value.to_stack_value());
+                                    let dest_index = register_base + dest as usize;
+                                    self.value_stack.set(dest_index, value.to_stack_value());
                                 }
                                 ReturnMode::Extend(len_index) => {
                                     self.value_stack.chip(stack_start, 0);
