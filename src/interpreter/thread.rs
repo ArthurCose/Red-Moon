@@ -531,7 +531,11 @@ impl CallContext {
 
                     value_stack.set(self.register_base + *dest as usize, heap_key.into());
                 }
-                Instruction::PrepExpression(dest, index) => {
+                Instruction::ClearAfter(dest) => {
+                    let dest_index = self.register_base + *dest as usize;
+                    value_stack.chip(dest_index + 1, 0);
+                }
+                Instruction::PrepMulti(dest, index) => {
                     let Some(number) = definition.numbers.get(*index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(*index).into());
                     };
@@ -704,7 +708,9 @@ impl CallContext {
                     let total = self.register_base.saturating_sub(arg_index);
 
                     if total > 0 {
+                        // todo: recycle?
                         let mut values = Vec::new();
+
                         for i in 0..total {
                             values.push(value_stack.get(arg_index + i));
                         }
@@ -715,6 +721,25 @@ impl CallContext {
 
                         let count_value = Primitive::Integer(count + total as i64).into();
                         value_stack.set(count_index, count_value);
+                    }
+                }
+                Instruction::CopyUnsizedVariadic(dest, skip) => {
+                    let dest_index = self.register_base + *dest as usize;
+                    let arg_index = self.stack_start + 2 + *skip as usize;
+
+                    let total = self.register_base.saturating_sub(arg_index);
+
+                    if total > 0 {
+                        // todo: recycle?
+                        let mut values = Vec::new();
+
+                        for i in 0..total {
+                            values.push(value_stack.get(arg_index + i));
+                        }
+
+                        for (i, value) in values.into_iter().enumerate() {
+                            value_stack.set(dest_index + i, value);
+                        }
                     }
                 }
                 Instruction::Capture(dest, src) => {

@@ -686,11 +686,9 @@ where
                         self.copy_stack_value(local, top_register);
                     } else {
                         let name_token = self.expect(LuaTokenLabel::Name)?;
-                        let first_lhs_index =
-                            self.top_function.register_local(self.source, name_token)?;
 
                         // todo: maybe recycle this?
-                        let mut lhs_list = Vec::new();
+                        let mut lhs_list = vec![name_token];
 
                         loop {
                             peeked_token = self.token_iter.peek().cloned().transpose()?;
@@ -709,35 +707,26 @@ where
                             self.token_iter.next();
 
                             let name_token = self.expect(LuaTokenLabel::Name)?;
-                            let local =
-                                self.top_function.register_local(self.source, name_token)?;
-                            lhs_list.push(local);
+                            lhs_list.push(name_token);
                         }
+
+                        let first_lhs_index = self.top_function.next_register;
 
                         if peeked_token.is_some_and(|token| token.label == LuaTokenLabel::Assign) {
                             // consume token
                             self.token_iter.next();
 
-                            let mut next_register = self.top_function.next_register;
-
-                            self.resolve_exp_list(token, next_register)?;
-
-                            // increment to skip the len
-                            next_register += 1;
-
-                            self.copy_stack_value(first_lhs_index, next_register);
-
-                            for index in lhs_list {
-                                next_register += 1;
-                                self.copy_stack_value(index, next_register);
-                            }
+                            self.resolve_unsized_exp_list(first_lhs_index)?;
                         } else {
                             let instructions = &mut self.top_function.instructions;
-                            instructions.push(Instruction::SetNil(first_lhs_index));
 
-                            for index in lhs_list {
-                                instructions.push(Instruction::SetNil(index));
+                            for i in 0..(lhs_list.len() as Register) {
+                                instructions.push(Instruction::SetNil(i + first_lhs_index));
                             }
+                        }
+
+                        for token in lhs_list {
+                            self.top_function.register_local(self.source, token)?;
                         }
                     }
                 }
@@ -1473,7 +1462,7 @@ where
             .register_number(self.source, first_token, 0)?;
         let instructions = &mut self.top_function.instructions;
         let count_instruction_index = instructions.len();
-        instructions.push(Instruction::PrepExpression(top_register, count_constant));
+        instructions.push(Instruction::PrepMulti(top_register, count_constant));
 
         let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
             return Ok(());
@@ -1523,7 +1512,60 @@ where
                 .register_number(self.source, next_token, total as _)?;
         let instructions = &mut self.top_function.instructions;
         instructions[count_instruction_index] =
-            Instruction::PrepExpression(top_register, count_constant);
+            Instruction::PrepMulti(top_register, count_constant);
+
+        self.variadic_to_single_static(top_register, first_expression_start..last_expression_start);
+
+        Ok(())
+    }
+
+    /// Adds expression results to the stack without a count
+    fn resolve_unsized_exp_list(
+        &mut self,
+        top_register: Register,
+    ) -> Result<(), LuaCompilationError> {
+        let instructions = &mut self.top_function.instructions;
+        instructions.push(Instruction::ClearAfter(top_register));
+
+        let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
+            return Ok(());
+        };
+
+        if !starts_expression(next_token.label) {
+            return Ok(());
+        }
+
+        // track the start of the first and last expression for updating function return modes to variadic
+        let first_expression_start = instructions.len();
+        let mut last_expression_start = instructions.len();
+
+        // resolve the first expression
+        let r = self.resolve_expression(
+            top_register,
+            ReturnMode::UnsizedDestinationPreserve(top_register),
+            0,
+        )?;
+        self.copy_stack_value(top_register, r);
+        let mut i = 1;
+
+        // resolve the rest
+        while let Some(next_token) = self.token_iter.peek().cloned().transpose()? {
+            if next_token.label != LuaTokenLabel::Comma {
+                break;
+            }
+
+            // consume comma
+            self.token_iter.next();
+
+            let instructions = &mut self.top_function.instructions;
+            last_expression_start = instructions.len();
+
+            let dest = top_register + i;
+            let r =
+                self.resolve_expression(dest, ReturnMode::UnsizedDestinationPreserve(dest), 0)?;
+            self.copy_stack_value(dest, r);
+            i += 1;
+        }
 
         self.variadic_to_single_static(top_register, first_expression_start..last_expression_start);
 
@@ -1539,8 +1581,12 @@ where
         for instruction in &mut instructions[range] {
             match instruction {
                 Instruction::Call(_, mode) => {
-                    // need to test the target in case of nested exp_list
-                    if *mode == ReturnMode::Extend(count_register) {
+                    // for ReturnMode::Extend we need to test the target in case of a nested exp_list
+                    // for ReturnMode::UnsizedDestinationPreserve we don't need to test the target,
+                    // since it's only used in assignment, which can't be nested
+                    if *mode == ReturnMode::Extend(count_register)
+                        || matches!(mode, ReturnMode::UnsizedDestinationPreserve(_))
+                    {
                         *mode = ReturnMode::Static(1);
                     }
                 }
@@ -1729,6 +1775,9 @@ where
                         }
                         ReturnMode::Extend(count) => {
                             instructions.push(Instruction::CopyVariadic(top_register, count, skip));
+                        }
+                        ReturnMode::UnsizedDestinationPreserve(dest) => {
+                            instructions.push(Instruction::CopyUnsizedVariadic(dest, skip));
                         }
                         _ => unreachable!(),
                     }

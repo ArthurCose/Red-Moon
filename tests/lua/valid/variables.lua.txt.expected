@@ -9,6 +9,9 @@ nil
 1	12	3
 1	2	3
 
+shadowing:
+6
+
 nested exp_list:
 3	0
 

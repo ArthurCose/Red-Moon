@@ -85,12 +85,17 @@ pub enum Instruction {
     /// (dest, index)
     LoadBytes(Register, ConstantIndex),
 
+    /// Clears values past the destination
+    ///
+    /// (dest)
+    ClearAfter(Register),
+
     /// Loads an integer from the numbers list and stores it in a register
     ///
     /// Clears values past the destination
     ///
     /// (dest, index)
-    PrepExpression(Register, ConstantIndex),
+    PrepMulti(Register, ConstantIndex),
 
     /// Creates a table, reserves space for the list part of the table
     ///
@@ -143,6 +148,11 @@ pub enum Instruction {
     ///
     /// (dest, count_dest, skip)
     CopyVariadic(Register, Register, Register),
+
+    /// Copies args to the destination
+    ///
+    /// (dest, skip)
+    CopyUnsizedVariadic(Register, Register),
 
     /// Promotes a stack value to a heap value if it's not already
     /// Passes as an up value to the next Closure instruction
