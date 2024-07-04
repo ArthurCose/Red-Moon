@@ -39,13 +39,19 @@ fn instructions_print() {
             byte_strings,
             numbers: vec![3],
             instructions: vec![
-                Instruction::CopyLocal(0, 0),
-                Instruction::LoadBytes(1, 0),
-                Instruction::CopyTableValue(0, 0, 1),
+                // Copy `_ENV` into the first stack register
+                Instruction::CopyUpValue(0, 0),
+                // replace with `_ENV.print`
+                Instruction::CopyTableField(0, 0, 0),
+                // "!" ("hello world !" in reverse)
                 Instruction::LoadBytes(4, 3),
+                // "world"
                 Instruction::LoadBytes(3, 2),
+                // "hello"
                 Instruction::LoadBytes(2, 1),
+                // load arg count (3)
                 Instruction::LoadInt(1, 0),
+                // call `_ENV.print`
                 Instruction::Call(0, ReturnMode::Multi),
             ],
             chunks: Default::default(),

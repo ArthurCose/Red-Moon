@@ -20,6 +20,11 @@ pub enum LuaCompilationError {
         line: usize,
         col: usize,
     },
+    ReachedCaptureLimit {
+        offset: usize,
+        line: usize,
+        col: usize,
+    },
     ReachedFunctionLimit,
     ReachedNumberLimit {
         offset: usize,
@@ -57,6 +62,12 @@ impl LuaCompilationError {
         Self::ReachedLocalsLimit { offset, line, col }
     }
 
+    pub fn new_reached_capture_limit(source: &str, offset: usize) -> Self {
+        let (line, col) = line_and_col(source, offset);
+
+        Self::ReachedCaptureLimit { offset, line, col }
+    }
+
     pub(crate) fn new_reached_number_limit(source: &str, offset: usize) -> LuaCompilationError {
         let (line, col) = line_and_col(source, offset);
 
@@ -89,6 +100,13 @@ impl std::fmt::Display for LuaCompilationError {
                 write!(f, "{}:{}: break used outside of a loop", line, col)
             }
             Self::ReachedLocalsLimit { line, col, .. } => {
+                write!(
+                    f,
+                    "{}:{}: too many local variables (limit is 200)",
+                    line, col
+                )
+            }
+            Self::ReachedCaptureLimit { line, col, .. } => {
                 write!(
                     f,
                     "{}:{}: too many local variables (limit is 200)",

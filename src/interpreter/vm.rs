@@ -260,7 +260,7 @@ impl Vm {
             let key = self.heap.create_with_key(|key| {
                 HeapValue::Function(Function {
                     key,
-                    captures: Default::default(),
+                    up_values: Default::default(),
                     definition: Rc::new(FunctionDefinition {
                         label: label.clone(),
                         byte_strings,
@@ -287,7 +287,7 @@ impl Vm {
         let key = self.heap.create_with_key(|key| {
             HeapValue::Function(Function {
                 key,
-                captures: captures.into(),
+                up_values: captures.into(),
                 definition: Rc::new(FunctionDefinition {
                     label,
                     byte_strings,

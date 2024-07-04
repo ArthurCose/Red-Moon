@@ -1,4 +1,4 @@
-use super::heap::HeapKey;
+use super::heap::{Heap, HeapKey, HeapValue};
 use std::ops::Range;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -28,6 +28,7 @@ impl Eq for Primitive {}
 pub(crate) enum StackValue {
     Primitive(Primitive),
     HeapValue(HeapKey),
+    Pointer(HeapKey),
 }
 
 impl Default for StackValue {
@@ -73,6 +74,22 @@ impl ValueStack {
         } else {
             StackValue::Primitive(Primitive::Nil)
         }
+    }
+
+    pub(crate) fn get_deref(&self, heap: &Heap, index: usize) -> StackValue {
+        let Some(value) = self.values.get(index) else {
+            return StackValue::Primitive(Primitive::Nil);
+        };
+
+        if let StackValue::Pointer(key) = value {
+            let HeapValue::StackValue(value) = heap.get(*key).unwrap() else {
+                unreachable!();
+            };
+
+            return *value;
+        }
+
+        *value
     }
 
     pub(crate) fn get_slice(&self, mut range: Range<usize>) -> &[StackValue] {

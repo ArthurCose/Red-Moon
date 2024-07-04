@@ -266,6 +266,13 @@ impl Value {
                     }
                 }
             }
+            StackValue::Pointer(key) => {
+                let HeapValue::StackValue(value) = heap.get(key).unwrap() else {
+                    unreachable!()
+                };
+
+                return Self::from_stack_value(heap, *value);
+            }
         };
 
         Ok(value)

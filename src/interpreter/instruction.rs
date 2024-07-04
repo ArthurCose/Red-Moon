@@ -126,10 +126,6 @@ pub enum Instruction {
     /// (table, key, src)
     CopyToTableValue(Register, Register, Register),
 
-    /// Copies a value from an arg to a local
-    /// (local, arg)
-    CopyArgToLocal(Register, Register),
-
     /// Copies a value from an arg to the destination
     /// (dest, arg)
     CopyArg(Register, Register),
@@ -139,43 +135,54 @@ pub enum Instruction {
     /// (dest, count_dest, skip)
     CopyVariadic(Register, Register, Register),
 
-    /// Promotes a local value to a heap value if it's not already
-    /// Stores internally to pass as a local to the next Closure instruction
+    /// Promotes a stack value to a heap value if it's not already
+    /// Passes as an up value to the next Closure instruction
     ///
-    /// (child_local, local)
+    /// (dest, src)
     Capture(Register, Register),
 
-    /// Loads a function onto the stack, creates a new function if locals were captured
+    /// Copies an up value to the next Closure instruction
+    ///
+    /// (dest, src)
+    CaptureUpValue(Register, Register),
+
+    /// Loads a function onto the stack, creates a new function if values were captured
     ///
     /// (dest, function_index)
     Closure(Register, ConstantIndex),
 
-    /// Sets a local to Nil
+    /// Sets an up value to Nil
     ///
-    /// (dest, value)
-    ClearLocal(Register),
+    /// (dest)
+    ClearUpValue(Register),
 
-    /// Copies a local to the stack
-    /// The first local for a module's top level function will be initialized with the default environment
+    /// Copies an up value to the stack
+    /// The first up value for a module's top level function will be initialized with the default environment
     ///
-    /// (dest, local)
-    CopyLocal(Register, Register),
+    /// (dest, src)
+    CopyUpValue(Register, Register),
 
-    /// Copies a value to a local
+    /// Copies a value to an up value
     ///
-    /// (local, src)
-    CopyToLocal(Register, Register),
+    /// (dest, src)
+    CopyToUpValue(Register, Register),
 
-    /// Copies a value to a local
-    /// If the local points to another value that value will be updated instead (used for closures)
+    /// Copies a value to a up value
+    /// If the value points to another value, the pointed to value will be updated instead (used for closures)
     ///
-    /// (local, src)
-    CopyToLocalDeref(Register, Register),
+    /// (dest, src)
+    CopyToUpValueDeref(Register, Register),
 
     /// Copies values between stack registers
     ///
     /// (dest, src)
     Copy(Register, Register),
+
+    /// Copies a value
+    /// If the value points to another value, the pointed to value will be updated instead (used for closures)
+    ///
+    /// (dest, src)
+    CopyToDeref(Register, Register),
 
     /// (dest, src)
     Len(Register, Register),

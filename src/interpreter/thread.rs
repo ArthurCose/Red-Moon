@@ -155,7 +155,7 @@ impl Thread {
                                 // remove caller and recycle value stacks
                                 let call = self.call_stack.pop().unwrap();
                                 vm.store_value_stack(call.pending_captures);
-                                vm.store_value_stack(call.locals);
+                                vm.store_value_stack(call.up_values);
 
                                 // adopt caller's return mode and stack placement
                                 return_mode = call.return_mode;
@@ -271,7 +271,7 @@ impl Thread {
                                 // remove the caller and recycle value stacks
                                 let call = self.call_stack.pop().unwrap();
                                 vm.store_value_stack(call.pending_captures);
-                                vm.store_value_stack(call.locals);
+                                vm.store_value_stack(call.up_values);
                                 self.value_stack
                                     .chip(call.stack_start, self.value_stack.len() - stack_start);
 
@@ -323,7 +323,7 @@ impl Thread {
 
                     // recycle value stacks
                     vm.store_value_stack(context.pending_captures);
-                    vm.store_value_stack(context.locals);
+                    vm.store_value_stack(context.up_values);
 
                     let mut return_count = return_count as usize;
 
@@ -449,7 +449,7 @@ impl Thread {
             err.trace.push_frame(frame);
 
             vm.store_value_stack(call.pending_captures);
-            vm.store_value_stack(call.locals);
+            vm.store_value_stack(call.up_values);
         }
 
         err
@@ -464,12 +464,12 @@ struct CallContext {
     register_base: usize,
     table_flush_count: usize,
     return_mode: ReturnMode,
-    locals: ValueStack,
+    up_values: ValueStack,
 }
 
 impl CallContext {
     fn new(function: Function, stack_start: usize, register_base: usize, vm: &mut Vm) -> Self {
-        let locals = (*function.captures).clone();
+        let up_values = (*function.up_values).clone();
 
         Self {
             function,
@@ -479,7 +479,7 @@ impl CallContext {
             register_base,
             table_flush_count: 0,
             return_mode: ReturnMode::Multi,
-            locals,
+            up_values,
         }
     }
 
@@ -604,7 +604,8 @@ impl CallContext {
                     self.table_flush_count += end - start;
                 }
                 Instruction::CopyTableField(dest, table_index, bytes_index) => {
-                    let base = value_stack.get(self.register_base + *table_index as usize);
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
                     let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
@@ -618,7 +619,8 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyToTableField(table_index, bytes_index, src) => {
-                    let base = value_stack.get(self.register_base + *table_index as usize);
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
                     let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
@@ -632,8 +634,9 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyTableValue(dest, table_index, key_index) => {
-                    let base = value_stack.get(self.register_base + *table_index as usize);
-                    let key = value_stack.get(self.register_base + *key_index as usize);
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                    let key = value_stack.get_deref(heap, self.register_base + *key_index as usize);
 
                     if let Some(call_result) =
                         self.copy_from_table(vm, value_stack, *dest, base, key)?
@@ -642,8 +645,9 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyToTableValue(table_index, key_index, src) => {
-                    let base = value_stack.get(self.register_base + *table_index as usize);
-                    let key = value_stack.get(self.register_base + *key_index as usize);
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                    let key = value_stack.get_deref(heap, self.register_base + *key_index as usize);
 
                     if let Some(call_result) =
                         self.copy_to_table(vm, value_stack, base, key, *src)?
@@ -690,36 +694,29 @@ impl CallContext {
                         value_stack.set(count_index, count_value);
                     }
                 }
-                Instruction::CopyArgToLocal(local, index) => {
-                    let stack_index = self.stack_start + 2 + *index as usize;
+                Instruction::Capture(dest, src) => {
+                    let mut value = value_stack.get(self.register_base + *src as usize);
 
-                    if stack_index >= self.register_base {
-                        // out of args, set nil
-                        self.locals.set(*local as usize, Default::default());
-                    } else {
-                        let value = value_stack.get(stack_index);
-                        self.locals.set(*local as usize, value);
-                    }
-                }
-                Instruction::Capture(child_local, local) => {
-                    let mut value = self.locals.get(*local as usize);
-
-                    let already_promoted = if let StackValue::HeapValue(heap_key) = value {
-                        // if it's a heap value that points to a stack value, then it was promoted
-                        matches!(heap.get(heap_key).unwrap(), HeapValue::StackValue(..))
-                    } else {
-                        false
-                    };
-
-                    if !already_promoted {
+                    if !matches!(value, StackValue::Pointer(_)) {
                         // move the stack value to the heap
                         let heap_key = heap.create(HeapValue::StackValue(value));
-                        value = heap_key.into();
-                        self.locals.set(*local as usize, value);
+                        value = StackValue::Pointer(heap_key);
+                        value_stack.set(self.register_base + *src as usize, value);
                     }
 
-                    let child_index = *child_local as usize;
-                    self.pending_captures.set(child_index, value);
+                    self.pending_captures.set(*dest as usize, value);
+                }
+                Instruction::CaptureUpValue(dest, src) => {
+                    let mut value = self.up_values.get(*src as usize);
+
+                    if !matches!(value, StackValue::Pointer(_)) {
+                        // move the stack value to the heap
+                        let heap_key = heap.create(HeapValue::StackValue(value));
+                        value = StackValue::Pointer(heap_key);
+                        self.up_values.set(*src as usize, value);
+                    }
+
+                    self.pending_captures.set(*dest as usize, value);
                 }
                 Instruction::Closure(dest, function_index) => {
                     let Some(&heap_key) = definition.functions.get(*function_index as usize) else {
@@ -737,54 +734,47 @@ impl CallContext {
 
                         // copy the function to pass captures
                         let mut func = func.clone();
-                        func.captures = Rc::new(std::mem::take(&mut self.pending_captures));
+                        func.up_values = Rc::new(std::mem::take(&mut self.pending_captures));
 
                         let heap_key = heap.create(HeapValue::Function(func));
 
                         value_stack.set(self.register_base + *dest as usize, heap_key.into());
                     }
                 }
-                Instruction::ClearLocal(local) => {
-                    self.locals.set(*local as usize, Primitive::Nil.into());
+                Instruction::ClearUpValue(dest) => {
+                    self.up_values.set(*dest as usize, Primitive::Nil.into());
                 }
-                Instruction::CopyLocal(dest, local) => {
-                    let local_value = self.locals.get(*local as usize);
-                    let mut value = local_value;
-
-                    if let StackValue::HeapValue(heap_key) = value {
-                        let heap_value = heap.get(heap_key).unwrap();
-
-                        if let HeapValue::StackValue(stack_value) = heap_value {
-                            value = *stack_value;
-                        }
-                    }
-
+                Instruction::CopyUpValue(dest, src) => {
+                    let value = self.up_values.get_deref(heap, *src as usize);
                     value_stack.set(self.register_base + *dest as usize, value);
                 }
-                Instruction::CopyToLocal(local, src) => {
-                    let value = value_stack.get(self.register_base + *src as usize);
-                    self.locals.set(*local as usize, value);
+                Instruction::CopyToUpValue(dest, src) => {
+                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
+                    self.up_values.set(*dest as usize, value);
                 }
-                Instruction::CopyToLocalDeref(local, src) => {
-                    let value = value_stack.get(self.register_base + *src as usize);
+                Instruction::CopyToUpValueDeref(dest, src) => {
+                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
 
-                    let mut promoted = false;
-
-                    if let StackValue::HeapValue(heap_key) = self.locals.get(*local as usize) {
-                        if let HeapValue::StackValue(_) = heap.get(heap_key).unwrap() {
-                            // pointing to another stack value
-                            heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
-                            promoted = true;
-                        }
-                    }
-
-                    if !promoted {
-                        self.locals.set(*local as usize, value);
+                    if let StackValue::Pointer(heap_key) = self.up_values.get(*dest as usize) {
+                        // pointing to another stack value
+                        heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+                    } else {
+                        self.up_values.set(*dest as usize, value);
                     }
                 }
                 Instruction::Copy(dest, src) => {
-                    let value = value_stack.get(self.register_base + *src as usize);
+                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
                     value_stack.set(self.register_base + *dest as usize, value);
+                }
+                Instruction::CopyToDeref(dest, src) => {
+                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
+                    let dest_index = self.register_base + *dest as usize;
+
+                    if let StackValue::Pointer(heap_key) = value_stack.get(dest_index) {
+                        heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+                    } else {
+                        value_stack.set(dest_index, value);
+                    }
                 }
                 Instruction::Not(dest, src) => {
                     let value = !value_stack.is_truthy(self.register_base + *src as usize);
@@ -797,7 +787,7 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().len.0.key().into();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get(self.register_base + *src as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + *src as usize);
 
                     let StackValue::HeapValue(heap_key) = value_a else {
                         return Err(RuntimeErrorData::NoLength);
@@ -908,7 +898,7 @@ impl CallContext {
                     }
                 }
                 Instruction::IntegerDivision(dest, a, b) => {
-                    let value_b = value_stack.get(self.register_base + *b as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
 
                     match value_b {
                         StackValue::Primitive(Primitive::Integer(0)) => {
@@ -1024,8 +1014,8 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().eq.0.key().into();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get(self.register_base + *a as usize);
-                    let value_b = value_stack.get(self.register_base + *b as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + *a as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
 
                     if let Some(call_result) = self.try_binary_metamethods(
                         (heap, value_stack),
@@ -1102,8 +1092,8 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().concat.0.key();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get(self.register_base + *a as usize);
-                    let value_b = value_stack.get(self.register_base + *b as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + *a as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
 
                     // default behavior
                     let string_a = stringify(heap, value_a);
@@ -1135,7 +1125,7 @@ impl CallContext {
                     }
                 }
                 Instruction::TestNil(src) => {
-                    if value_stack.get(self.register_base + *src as usize)
+                    if value_stack.get_deref(heap, self.register_base + *src as usize)
                         != StackValue::Primitive(Primitive::Nil)
                     {
                         self.next_instruction_index += 1;
@@ -1154,7 +1144,7 @@ impl CallContext {
                     )?;
                     let mut value = coerce_stack_value_to_integer(
                         heap,
-                        self.locals.get(*local as usize),
+                        value_stack.get(self.register_base + *local as usize),
                         || RuntimeErrorData::InitialValueMustBeNumber,
                     )?;
 
@@ -1169,8 +1159,10 @@ impl CallContext {
                     };
 
                     if !stop {
-                        self.locals
-                            .set(*local as usize, Primitive::Integer(value).into());
+                        value_stack.set(
+                            self.register_base + *local as usize,
+                            Primitive::Integer(value).into(),
+                        );
                         self.next_instruction_index += 1;
                     }
                 }
@@ -1194,6 +1186,49 @@ impl CallContext {
         Ok(CallResult::Return(0))
     }
 
+    /// Resolves stack value pointers, calls metamethods for heap values, calls coerce functions if necessary
+    fn resolve_binary_operand<T>(
+        &self,
+        (heap, value_stack): (&mut Heap, &mut ValueStack),
+        metamethod_key: StackValue,
+        metamethod_params: (Register, StackValue, StackValue),
+        value: StackValue,
+        coerce_primitive: impl Fn(Primitive) -> T,
+        coerce_heap_value: impl Fn(&mut Heap, HeapKey) -> T,
+    ) -> Result<T, CallResult> {
+        match value {
+            StackValue::Primitive(primitive) => Ok(coerce_primitive(primitive)),
+            StackValue::HeapValue(heap_key) => {
+                if let Some(call_result) = self.binary_metamethod(
+                    heap,
+                    value_stack,
+                    (heap_key, metamethod_key),
+                    metamethod_params,
+                ) {
+                    return Err(call_result);
+                }
+
+                Ok(coerce_heap_value(heap, heap_key))
+            }
+            StackValue::Pointer(heap_key) => {
+                let HeapValue::StackValue(value) = heap.get(heap_key).unwrap() else {
+                    unreachable!()
+                };
+
+                let value = *value;
+
+                self.resolve_binary_operand(
+                    (heap, value_stack),
+                    metamethod_key,
+                    metamethod_params,
+                    value,
+                    coerce_primitive,
+                    coerce_heap_value,
+                )
+            }
+        }
+    }
+
     /// Converts integers to floats if any operand is a float, preserves type otherwise
     fn binary_number_operation(
         &self,
@@ -1206,36 +1241,28 @@ impl CallContext {
         let value_a = value_stack.get(self.register_base + a as usize);
         let value_b = value_stack.get(self.register_base + b as usize);
 
-        let primitive_a = match value_a {
-            StackValue::Primitive(primitive) => primitive,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_number(heap, heap_key)
-            }
+        let primitive_a = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_a,
+            |primitive| primitive,
+            |heap, heap_key| heap_value_as_number(heap, heap_key),
+        ) {
+            Ok(primitive) => primitive,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
-        let primitive_b = match value_b {
-            StackValue::Primitive(primitive) => primitive,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_number(heap, heap_key)
-            }
+        let primitive_b = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_b,
+            |primitive| primitive,
+            |heap, heap_key| heap_value_as_number(heap, heap_key),
+        ) {
+            Ok(primitive) => primitive,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
         let value = match (primitive_a, primitive_b) {
@@ -1269,39 +1296,32 @@ impl CallContext {
         metamethod_key: StackValue,
         operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        // using get since we resolve pointers in self.resolve_binary_operand()
         let value_a = value_stack.get(self.register_base + a as usize);
         let value_b = value_stack.get(self.register_base + b as usize);
 
-        let float_a = match value_a {
-            StackValue::Primitive(primitive) => arithmetic_cast_float(primitive)?,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_float(heap, heap_key)?
-            }
+        let float_a = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_a,
+            arithmetic_cast_float,
+            heap_value_as_float,
+        ) {
+            Ok(result) => result?,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
-        let float_b = match value_b {
-            StackValue::Primitive(primitive) => arithmetic_cast_float(primitive)?,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_float(heap, heap_key)?
-            }
+        let float_b = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_b,
+            arithmetic_cast_float,
+            heap_value_as_float,
+        ) {
+            Ok(result) => result?,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
         value_stack.set(
@@ -1320,39 +1340,32 @@ impl CallContext {
         metamethod_key: StackValue,
         operation: impl Fn(i64, i64) -> i64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        // using get since we resolve pointers in self.resolve_binary_operand()
         let value_a = value_stack.get(self.register_base + a as usize);
         let value_b = value_stack.get(self.register_base + b as usize);
 
-        let int_a = match value_a {
-            StackValue::Primitive(primitive) => arithmetic_cast_integer(primitive)?,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_integer(heap, heap_key)?
-            }
+        let int_a = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_a,
+            arithmetic_cast_integer,
+            heap_value_as_integer,
+        ) {
+            Ok(result) => result?,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
-        let int_b = match value_b {
-            StackValue::Primitive(primitive) => arithmetic_cast_integer(primitive)?,
-            StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    (dest, value_a, value_b),
-                ) {
-                    return Ok(Some(call_result));
-                }
-
-                heap_value_as_integer(heap, heap_key)?
-            }
+        let int_b = match self.resolve_binary_operand(
+            (heap, value_stack),
+            metamethod_key,
+            (dest, value_a, value_b),
+            value_b,
+            arithmetic_cast_integer,
+            heap_value_as_integer,
+        ) {
+            Ok(result) => result?,
+            Err(call_result) => return Ok(Some(call_result)),
         };
 
         value_stack.set(
@@ -1372,8 +1385,8 @@ impl CallContext {
         float_comparison: impl Fn(f64, f64) -> bool,
         heap_comparison: impl Fn(&mut Heap, HeapKey, HeapKey) -> Result<bool, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        let value_a = value_stack.get(self.register_base + a as usize);
-        let value_b = value_stack.get(self.register_base + b as usize);
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
         if let Some(call_result) = self.try_binary_metamethods(
             (heap, value_stack),
@@ -1477,7 +1490,8 @@ impl CallContext {
         generate_error: impl Fn() -> RuntimeErrorData,
         operation: impl Fn(Primitive) -> Result<Primitive, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        let value_a = value_stack.get(self.register_base + a as usize);
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+
         let primitive = match value_a {
             StackValue::Primitive(primitive) => operation(primitive)?,
             StackValue::HeapValue(heap_key) => {
@@ -1491,6 +1505,8 @@ impl CallContext {
                     .ok_or_else(generate_error)?,
                 ));
             }
+            // already resolved the pointer
+            StackValue::Pointer(_) => unreachable!(),
         };
 
         value_stack.set(self.register_base + dest as usize, primitive.into());
@@ -1608,8 +1624,8 @@ impl CallContext {
 
         let metamethod_key = vm.metatable_keys().newindex.0.key().into();
 
-        let src_value = value_stack.get(self.register_base + src as usize);
         let heap = vm.heap_mut();
+        let src_value = value_stack.get_deref(heap, self.register_base + src as usize);
 
         if let Some(function_key) = heap.get_metamethod(heap_key, metamethod_key) {
             let function_index = value_stack.len() - self.register_base;
@@ -1648,6 +1664,13 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
             Primitive::Float(f) => return Some(format!("{f:?}").into_bytes().into()),
             _ => return None,
         },
+        StackValue::Pointer(key) => {
+            let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
+                unreachable!();
+            };
+
+            return stringify(heap, value);
+        }
     };
 
     let HeapValue::Bytes(bytes) = heap.get(heap_key).unwrap() else {
@@ -1689,6 +1712,13 @@ fn coerce_stack_value_to_integer(
     match value {
         StackValue::Primitive(primitive) => cast_integer(primitive, generate_err),
         StackValue::HeapValue(key) => cast_integer(heap_value_as_number(heap, key), generate_err),
+        StackValue::Pointer(key) => {
+            let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
+                unreachable!();
+            };
+
+            coerce_stack_value_to_integer(heap, value, generate_err)
+        }
     }
 }
 

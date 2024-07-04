@@ -19,14 +19,16 @@ const ENV_NAME: &str = "_ENV";
 
 #[derive(Clone, Copy)]
 enum VariablePath<'source> {
-    /// Local register
-    Local(Register),
+    /// Stack register
+    Stack(Register),
+    // Up value
+    UpValue(Register),
     /// Two stack registers: table and key
     TableValue(LuaToken<'source>, Register, Register),
     /// Two stack registers: table and key
     TableField(LuaToken<'source>, Register, ConstantIndex),
-    /// stack register
-    Collapsed(Register),
+    /// Stack register
+    Result(Register),
 }
 
 #[derive(Default)]
@@ -61,15 +63,19 @@ type CompilationOutput<'source> = Module<LuaByteStrings<'source>>;
 
 #[derive(Default)]
 struct Scope<'source> {
-    first_local: Register,
+    first_register: Register,
     locals: FastHashMap<&'source str, Register>,
+}
+
+enum UpValueOrStack {
+    UpValue(Register),
+    Stack(Register),
 }
 
 struct Capture<'source> {
     token: LuaToken<'source>,
     parent: usize,
-    parent_local: Register,
-    local: Register,
+    parent_variable: UpValueOrStack,
 }
 
 #[derive(Default)]
@@ -85,20 +91,19 @@ struct FunctionContext<'source> {
     source_map: Vec<SourceMapping>,
     accept_variadic: bool,
     named_param_count: Register,
-    next_local: Register,
-    next_capture_local: Register,
+    next_register: Register,
 }
 
 impl<'source> FunctionContext<'source> {
     fn push_scope(&mut self) {
         let old_scope = std::mem::take(&mut self.top_scope);
-        self.top_scope.first_local = self.next_local;
+        self.top_scope.first_register = self.next_register;
         self.scopes.push(old_scope);
     }
 
     fn pop_scope(&mut self) {
-        // recycle locals
-        self.next_local = self.top_scope.first_local;
+        // recycle registers
+        self.next_register = self.top_scope.first_register;
         self.top_scope = self.scopes.pop().unwrap();
     }
 
@@ -124,70 +129,50 @@ impl<'source> FunctionContext<'source> {
         Ok(index as _)
     }
 
-    fn register_capture(
+    fn register_up_value(
         &mut self,
         source: &'source str,
         token: LuaToken<'source>,
         parent: usize,
-        parent_local: Register,
+        parent_variable: UpValueOrStack,
     ) -> Result<Register, LuaCompilationError> {
-        let index = self.next_capture_local;
-
-        if index > MAX_LOCALS {
-            return Err(LuaCompilationError::new_too_many_locals(
+        if self.captures.len() > Register::MAX as usize {
+            return Err(LuaCompilationError::new_reached_capture_limit(
                 source,
                 token.offset,
             ));
         }
 
-        self.next_capture_local += 1;
-
+        let register = self.captures.len() as _;
         self.captures.push(Capture {
             token,
             parent,
-            parent_local,
-            local: index,
+            parent_variable,
         });
 
-        // store on the root scope as well
-        if let Some(scope) = self.scopes.first_mut() {
-            scope.locals.insert(token.content, index);
-        }
-
-        self.top_scope.locals.insert(token.content, index);
-        Ok(index)
+        Ok(register)
     }
 
+    /// Registers a local on the stack, increments next_register
     fn register_local(
         &mut self,
         source: &'source str,
         token: LuaToken<'source>,
     ) -> Result<Register, LuaCompilationError> {
-        // make sure we don't overlap with a capture
-        for capture in &self.captures {
-            if capture.local == self.next_local {
-                self.next_local += 1;
-            }
-        }
-
-        if self.next_local > MAX_LOCALS {
+        if self.next_register >= MAX_LOCALS {
             return Err(LuaCompilationError::new_too_many_locals(
                 source,
                 token.offset,
             ));
         }
 
-        if self.next_local == self.next_capture_local {
-            self.next_capture_local += 1;
-        }
-
-        let index = self.next_local;
+        let index = self.next_register;
         self.top_scope.locals.insert(token.content, index);
-        self.next_local += 1;
+        self.next_register += 1;
         Ok(index)
     }
 
-    fn local_index(&self, name: &'source str) -> Option<Register> {
+    fn registered_local(&self, name: &'source str) -> Option<Register> {
         if let Some(index) = self.top_scope.locals.get(name) {
             return Some(*index as _);
         }
@@ -264,12 +249,20 @@ where
     }
 
     fn compile(mut self) -> Result<CompilationOutput<'source>, LuaCompilationError> {
+        // receive args at top level through variadic
         self.top_function.accept_variadic = true;
-        self.top_function.top_scope.locals.insert(ENV_NAME, 0);
-        self.top_function.next_local = 1;
-        self.top_function.next_capture_local = 1;
+        // register the _ENV auto capture
+        self.top_function.captures.push(Capture {
+            token: LuaToken {
+                label: LuaTokenLabel::Name,
+                content: ENV_NAME,
+                offset: 0,
+            },
+            parent: 1,
+            parent_variable: UpValueOrStack::UpValue(0),
+        });
 
-        self.resolve_block(0)?;
+        self.resolve_block()?;
 
         // catch unexpected breaks
         if let Some((token, _)) = self.unresolved_breaks.first() {
@@ -315,9 +308,9 @@ where
 
             match token.label {
                 LuaTokenLabel::Name => {
-                    let local_index = self.top_function.register_local(self.source, token)?;
+                    let local = self.top_function.register_local(self.source, token)?;
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::CopyArgToLocal(local_index, named_count));
+                    instructions.push(Instruction::CopyArg(local, named_count));
 
                     named_count += 1;
                 }
@@ -343,7 +336,7 @@ where
         Ok(())
     }
 
-    fn resolve_block(&mut self, top_register: Register) -> Result<(), LuaCompilationError> {
+    fn resolve_block(&mut self) -> Result<(), LuaCompilationError> {
         while let Some(res) = self.token_iter.peek().cloned() {
             let token = res?;
 
@@ -357,7 +350,7 @@ where
                     self.token_iter.next();
 
                     self.top_function.push_scope();
-                    self.resolve_block(top_register)?;
+                    self.resolve_block()?;
                     self.top_function.pop_scope();
 
                     self.expect(LuaTokenLabel::End)?;
@@ -370,16 +363,18 @@ where
                     let mut end_jumps = Vec::new();
 
                     loop {
-                        self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+                        let top_register = self.top_function.next_register;
+                        let condition_register =
+                            self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
                         self.expect(LuaTokenLabel::Then)?;
 
                         let instructions = &mut self.top_function.instructions;
-                        instructions.push(Instruction::TestTruthy(false, top_register));
+                        instructions.push(Instruction::TestTruthy(false, condition_register));
                         let branch_index = instructions.len();
                         instructions.push(Instruction::Jump(0.into()));
 
                         self.top_function.push_scope();
-                        self.resolve_block(top_register)?;
+                        self.resolve_block()?;
                         self.top_function.pop_scope();
 
                         // insert + track end jump
@@ -396,7 +391,7 @@ where
                             LuaTokenLabel::ElseIf => {}
                             LuaTokenLabel::Else => {
                                 self.top_function.push_scope();
-                                self.resolve_block(top_register)?;
+                                self.resolve_block()?;
                                 self.top_function.pop_scope();
                                 self.expect(LuaTokenLabel::End)?;
                                 break;
@@ -426,16 +421,18 @@ where
                     let instructions = &mut self.top_function.instructions;
                     let start_index = instructions.len();
 
-                    self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+                    let top_register = self.top_function.next_register;
+                    let condition_register =
+                        self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
                     self.expect(LuaTokenLabel::Do)?;
 
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::TestTruthy(false, top_register));
+                    instructions.push(Instruction::TestTruthy(false, condition_register));
                     let branch_index = instructions.len();
                     instructions.push(Instruction::Jump(0.into()));
 
                     self.top_function.push_scope();
-                    self.resolve_block(top_register)?;
+                    self.resolve_block()?;
                     self.top_function.pop_scope();
                     self.expect(LuaTokenLabel::End)?;
 
@@ -459,14 +456,16 @@ where
                     let start_index = instructions.len();
 
                     self.top_function.push_scope();
-                    self.resolve_block(top_register)?;
+                    self.resolve_block()?;
                     self.expect(LuaTokenLabel::Until)?;
                     // we'll pop scope later
 
                     // test to see if we need to jump back to the start
-                    self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+                    let top_register = self.top_function.next_register;
+                    let condition_register =
+                        self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::TestTruthy(false, top_register));
+                    instructions.push(Instruction::TestTruthy(false, condition_register));
                     instructions.push(Instruction::Jump(start_index.into()));
 
                     // resolve break jumps
@@ -488,42 +487,27 @@ where
                     let name_token = self.expect(LuaTokenLabel::Name)?;
                     let next_token = self.expect_any()?;
 
-                    let mut block_register = top_register;
-                    let start_index;
-                    let branch_index;
-
                     let mut use_for_jump = false;
 
-                    match next_token.label {
+                    let (start_index, branch_index) = match next_token.label {
                         LuaTokenLabel::Assign => {
-                            (start_index, branch_index) =
-                                self.resolve_numeric_for_params(top_register, name_token)?;
-
                             use_for_jump = true;
-
-                            block_register += 2;
+                            self.resolve_numeric_for_params(name_token)?
                         }
                         LuaTokenLabel::Comma | LuaTokenLabel::In => {
-                            (start_index, branch_index) = self.resolve_generic_for_params(
-                                top_register,
-                                name_token,
-                                next_token,
-                            )?;
-
-                            // avoid overwriting values needed for the next call
-                            block_register += 4;
+                            self.resolve_generic_for_params(name_token, next_token)?
                         }
                         _ => {
                             return Err(
                                 SyntaxError::new_unexpected_token(self.source, next_token).into()
                             )
                         }
-                    }
+                    };
 
-                    self.test_register_limit(token, block_register)?;
+                    self.test_register_limit(token, self.top_function.next_register)?;
 
                     self.expect(LuaTokenLabel::Do)?;
-                    self.resolve_block(block_register)?;
+                    self.resolve_block()?;
                     self.top_function.pop_scope();
                     self.expect(LuaTokenLabel::End)?;
 
@@ -559,6 +543,7 @@ where
                     // consume token
                     self.token_iter.next();
 
+                    let top_register = self.top_function.next_register;
                     self.resolve_exp_list(token, top_register)?;
 
                     let instructions = &mut self.top_function.instructions;
@@ -592,6 +577,8 @@ where
                     // consume token
                     self.token_iter.next();
 
+                    let top_register = self.top_function.next_register;
+
                     let mut name_token = self.expect(LuaTokenLabel::Name)?;
                     let mut path = self.resolve_funcname_path(top_register, name_token)?;
 
@@ -623,10 +610,15 @@ where
                     }
 
                     match path {
-                        VariablePath::Local(local) => {
+                        VariablePath::Stack(dest) => {
                             self.resolve_function_body(top_register, is_method)?;
                             let instructions = &mut self.top_function.instructions;
-                            instructions.push(Instruction::CopyToLocalDeref(local, top_register));
+                            instructions.push(Instruction::CopyToDeref(dest, top_register));
+                        }
+                        VariablePath::UpValue(dest) => {
+                            self.resolve_function_body(top_register, is_method)?;
+                            let instructions = &mut self.top_function.instructions;
+                            instructions.push(Instruction::CopyToUpValueDeref(dest, top_register));
                         }
                         VariablePath::TableValue(token, table_index, key_index) => {
                             self.resolve_function_body(top_register + 2, is_method)?;
@@ -654,7 +646,7 @@ where
                                 top_register + 1,
                             ));
                         }
-                        VariablePath::Collapsed(_) => unreachable!(),
+                        VariablePath::Result(_) => unreachable!(),
                     }
                 }
                 LuaTokenLabel::Local => {
@@ -668,17 +660,16 @@ where
                         self.token_iter.next();
 
                         let name_token = self.expect(LuaTokenLabel::Name)?;
-                        let local_index =
-                            self.top_function.register_local(self.source, name_token)?;
+                        let local = self.top_function.register_local(self.source, name_token)?;
 
                         // store nil since the function may try to refer to itself and we don't want it promoting + using an old value
                         let instructions = &mut self.top_function.instructions;
-                        instructions.push(Instruction::ClearLocal(local_index));
+                        instructions.push(Instruction::SetNil(local));
 
+                        let top_register = self.top_function.next_register;
                         self.resolve_function_body(top_register, false)?;
 
-                        let instructions = &mut self.top_function.instructions;
-                        instructions.push(Instruction::CopyToLocalDeref(local_index, top_register));
+                        self.copy_stack_value(local, top_register);
                     } else {
                         let name_token = self.expect(LuaTokenLabel::Name)?;
                         let first_lhs_index =
@@ -704,38 +695,34 @@ where
                             self.token_iter.next();
 
                             let name_token = self.expect(LuaTokenLabel::Name)?;
-                            let local_index =
+                            let local =
                                 self.top_function.register_local(self.source, name_token)?;
-                            lhs_list.push(local_index);
+                            lhs_list.push(local);
                         }
 
                         if peeked_token.is_some_and(|token| token.label == LuaTokenLabel::Assign) {
                             // consume token
                             self.token_iter.next();
 
-                            let mut next_register = top_register;
+                            let mut next_register = self.top_function.next_register;
 
                             self.resolve_exp_list(token, next_register)?;
 
                             // increment to skip the len
                             next_register += 1;
-                            let instructions = &mut self.top_function.instructions;
 
-                            instructions
-                                .push(Instruction::CopyToLocal(first_lhs_index, next_register));
-
-                            let instructions = &mut self.top_function.instructions;
+                            self.copy_stack_value(first_lhs_index, next_register);
 
                             for index in lhs_list {
                                 next_register += 1;
-                                instructions.push(Instruction::CopyToLocal(index, next_register));
+                                self.copy_stack_value(index, next_register);
                             }
                         } else {
                             let instructions = &mut self.top_function.instructions;
-                            instructions.push(Instruction::ClearLocal(first_lhs_index));
+                            instructions.push(Instruction::SetNil(first_lhs_index));
 
                             for index in lhs_list {
-                                instructions.push(Instruction::ClearLocal(index));
+                                instructions.push(Instruction::SetNil(index));
                             }
                         }
                     }
@@ -744,20 +731,20 @@ where
                     // consume token
                     self.token_iter.next();
 
+                    let top_register = self.top_function.next_register;
                     let path =
                         self.resolve_variable_path(top_register, token, ReturnMode::Static(0))?;
 
-                    if matches!(path, VariablePath::Collapsed(_)) {
+                    if matches!(path, VariablePath::Result(_)) {
                         continue;
                     }
-
                     let next_token = self.expect_any()?;
 
                     if next_token.label == LuaTokenLabel::Comma {
                         // todo: maybe recycle this?
                         let mut lhs_list = vec![path];
 
-                        let mut next_register = top_register;
+                        let mut next_register = self.top_function.next_register;
 
                         match path {
                             VariablePath::TableValue(..) => next_register += 2,
@@ -773,7 +760,7 @@ where
                                 ReturnMode::Static(0),
                             )?;
 
-                            if matches!(path, VariablePath::Collapsed(_)) {
+                            if matches!(path, VariablePath::Result(_)) {
                                 // we need to be able to write to the variable
                                 return Err(SyntaxError::new_unexpected_token(
                                     self.source,
@@ -811,8 +798,11 @@ where
                             next_register += 1;
 
                             let instruction = match path {
-                                VariablePath::Local(local) => {
-                                    Instruction::CopyToLocalDeref(local, next_register)
+                                VariablePath::Stack(dest) => {
+                                    Instruction::CopyToDeref(dest, next_register)
+                                }
+                                VariablePath::UpValue(dest) => {
+                                    Instruction::CopyToUpValueDeref(dest, next_register)
                                 }
                                 VariablePath::TableValue(token, table_index, key_index) => {
                                     self.top_function
@@ -834,16 +824,28 @@ where
                                         next_register,
                                     )
                                 }
-                                VariablePath::Collapsed(_) => unreachable!(),
+                                VariablePath::Result(_) => unreachable!(),
                             };
 
                             let instructions = &mut self.top_function.instructions;
                             instructions.push(instruction);
                         }
                     } else if next_token.label == LuaTokenLabel::Assign {
+                        let top_register = self.top_function.next_register;
+
                         match path {
-                            VariablePath::Local(local) => {
-                                self.resolve_expression(
+                            VariablePath::Stack(dest) => {
+                                let value_register = self.resolve_expression(
+                                    top_register + 1,
+                                    ReturnMode::Static(1),
+                                    0,
+                                )?;
+
+                                let instructions = &mut self.top_function.instructions;
+                                instructions.push(Instruction::CopyToDeref(dest, value_register));
+                            }
+                            VariablePath::UpValue(dest) => {
+                                let value_register = self.resolve_expression(
                                     top_register + 1,
                                     ReturnMode::Static(1),
                                     0,
@@ -851,10 +853,10 @@ where
 
                                 let instructions = &mut self.top_function.instructions;
                                 instructions
-                                    .push(Instruction::CopyToLocalDeref(local, top_register + 1));
+                                    .push(Instruction::CopyToUpValueDeref(dest, value_register));
                             }
                             VariablePath::TableValue(_, table_index, key_index) => {
-                                self.resolve_expression(
+                                let value_register = self.resolve_expression(
                                     top_register + 2,
                                     ReturnMode::Static(1),
                                     0,
@@ -864,11 +866,11 @@ where
                                 instructions.push(Instruction::CopyToTableValue(
                                     table_index,
                                     key_index,
-                                    top_register + 2,
+                                    value_register,
                                 ));
                             }
                             VariablePath::TableField(token, table_index, string_index) => {
-                                self.resolve_expression(
+                                let value_register = self.resolve_expression(
                                     top_register + 1,
                                     ReturnMode::Static(1),
                                     0,
@@ -881,16 +883,18 @@ where
                                 instructions.push(Instruction::CopyToTableField(
                                     table_index,
                                     string_index,
-                                    top_register + 1,
+                                    value_register,
                                 ));
                             }
-                            VariablePath::Collapsed(_) => unreachable!(),
+                            VariablePath::Result(_) => unreachable!(),
                         }
 
                         if let Some(token) = self.token_iter.peek().cloned().transpose()? {
                             if token.label == LuaTokenLabel::Comma {
                                 // consume token
                                 self.token_iter.next();
+
+                                let top_register = self.top_function.next_register;
                                 self.resolve_exp_list(token, top_register)?;
                             }
                         }
@@ -938,7 +942,7 @@ where
     /// return_mode_hint is a hint since it's only used if the last piece of the variable is a function call
     /// in all other cases it's ReturnMode::Static(1)
     ///
-    /// if the final path is VariablePath::Collapsed, assume it's a function call
+    /// if the final path is VariablePath::Result, assume it's a function call
     fn resolve_variable_path(
         &mut self,
         top_register: Register,
@@ -948,10 +952,10 @@ where
         let mut path = match token.label {
             LuaTokenLabel::Name => self.resolve_name_path(top_register, token)?,
             LuaTokenLabel::OpenParen => {
-                self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+                let register = self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
                 self.expect(LuaTokenLabel::CloseParen)?;
 
-                VariablePath::Collapsed(top_register)
+                VariablePath::Result(register)
             }
             _ => return Err(SyntaxError::new_unexpected_token(self.source, token).into()),
         };
@@ -979,12 +983,12 @@ where
                     // consume bracket
                     self.token_iter.next();
 
-                    self.resolve_expression(top_register + 1, ReturnMode::Static(1), 0)?;
+                    let key_register =
+                        self.resolve_expression(top_register + 1, ReturnMode::Static(1), 0)?;
 
                     self.expect(LuaTokenLabel::CloseBracket)?;
 
-                    let key_index = top_register + 1;
-                    path = VariablePath::TableValue(token, top_register, key_index);
+                    path = VariablePath::TableValue(token, top_register, key_register);
                 }
                 _ if starts_function_call(token.label) => {
                     self.copy_variable(top_register, path);
@@ -994,7 +998,7 @@ where
 
                     self.resolve_function_call(token, top_register, return_mode_hint)?;
 
-                    path = VariablePath::Collapsed(top_register);
+                    path = VariablePath::Result(top_register);
                 }
                 _ => break,
             }
@@ -1036,36 +1040,38 @@ where
     }
 
     /// expects the token to be a name token
-    /// never returns VariablePath::Collapsed
+    /// never returns VariablePath::Result
     fn resolve_name_path(
         &mut self,
         top_register: Register,
         token: LuaToken<'source>,
     ) -> Result<VariablePath<'source>, LuaCompilationError> {
-        let path = if let Some(index) = self.top_function.local_index(token.content) {
-            VariablePath::Local(index)
+        let path = if let Some(index) = self.top_function.registered_local(token.content) {
+            VariablePath::Stack(index)
         } else if let Some(index) = self.try_capture(token)? {
             // capture
-            VariablePath::Local(index)
+            VariablePath::UpValue(index)
         } else {
-            // treat as environment variable
-            let env_index = if let Some(index) = self.top_function.local_index(ENV_NAME) {
-                index
-            } else {
-                self.try_capture(LuaToken {
-                    label: LuaTokenLabel::Name,
-                    content: ENV_NAME,
-                    offset: token.offset,
-                })?
-                .unwrap()
-            };
-
             let string_index = self.top_function.intern_string(self.source, token)?;
 
-            let instructions = &mut self.top_function.instructions;
-            instructions.push(Instruction::CopyLocal(top_register, env_index));
+            if let Some(local) = self.top_function.registered_local(ENV_NAME) {
+                // treat as environment local
+                VariablePath::TableField(token, local, string_index)
+            } else {
+                // capture environment
+                let up_value_index = self
+                    .try_capture(LuaToken {
+                        label: LuaTokenLabel::Name,
+                        content: ENV_NAME,
+                        offset: token.offset,
+                    })?
+                    .unwrap();
 
-            VariablePath::TableField(token, top_register, string_index)
+                let instructions = &mut self.top_function.instructions;
+                instructions.push(Instruction::CopyUpValue(top_register, up_value_index));
+
+                VariablePath::TableField(token, top_register, string_index)
+            }
         };
 
         Ok(path)
@@ -1075,23 +1081,41 @@ where
         &mut self,
         token: LuaToken<'source>,
     ) -> Result<Option<Register>, LuaCompilationError> {
+        // not expecting many captures, so just iterating
+        for (i, capture) in self.top_function.captures.iter().enumerate() {
+            if capture.token.content == token.content {
+                return Ok(Some(i as _));
+            }
+        }
+
         for (i, function) in self.function_stack.iter().rev().enumerate() {
-            if let Some(index) = function.top_scope.locals.get(token.content) {
-                return Ok(Some(self.top_function.register_capture(
+            if let Some(&register) = function.top_scope.locals.get(token.content) {
+                return Ok(Some(self.top_function.register_up_value(
                     self.source,
                     token,
                     i,
-                    *index,
+                    UpValueOrStack::Stack(register),
                 )?));
             }
 
             for scope in &function.scopes {
-                if let Some(index) = scope.locals.get(token.content) {
-                    return Ok(Some(self.top_function.register_capture(
+                if let Some(&register) = scope.locals.get(token.content) {
+                    return Ok(Some(self.top_function.register_up_value(
                         self.source,
                         token,
                         i,
-                        *index,
+                        UpValueOrStack::Stack(register),
+                    )?));
+                }
+            }
+
+            for (j, capture) in function.captures.iter().enumerate() {
+                if capture.token.content == token.content {
+                    return Ok(Some(self.top_function.register_up_value(
+                        self.source,
+                        token,
+                        i,
+                        UpValueOrStack::UpValue(j as _),
                     )?));
                 }
             }
@@ -1100,41 +1124,40 @@ where
         Ok(None)
     }
 
-    fn copy_variable(&mut self, dest_index: Register, path: VariablePath) {
+    fn copy_variable(&mut self, dest: Register, path: VariablePath) {
         match path {
-            VariablePath::Local(local) => {
+            VariablePath::Stack(src) => {
+                self.copy_stack_value(dest, src);
+            }
+            VariablePath::UpValue(src) => {
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::CopyLocal(dest_index, local));
+                instructions.push(Instruction::CopyUpValue(dest, src));
             }
             VariablePath::TableValue(token, table_index, key_index) => {
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::CopyTableValue(
-                    dest_index,
-                    table_index,
-                    key_index,
-                ));
+                instructions.push(Instruction::CopyTableValue(dest, table_index, key_index));
             }
             VariablePath::TableField(token, table_index, string_index) => {
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::CopyTableField(
-                    dest_index,
-                    table_index,
-                    string_index,
-                ));
+                instructions.push(Instruction::CopyTableField(dest, table_index, string_index));
             }
-            VariablePath::Collapsed(register) => {
-                if dest_index != register {
-                    let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::Copy(dest_index, register));
-                }
+            VariablePath::Result(src) => {
+                self.copy_stack_value(dest, src);
             }
         };
+    }
+
+    fn copy_stack_value(&mut self, dest: Register, src: Register) {
+        if dest != src {
+            let instructions = &mut self.top_function.instructions;
+            instructions.push(Instruction::CopyToDeref(dest, src));
+        }
     }
 
     fn resolve_function_body(
@@ -1149,7 +1172,7 @@ where
         let mut implicit_param_count = 0;
 
         if register_self {
-            let local_index = self
+            let local = self
                 .top_function
                 .register_local(
                     self.source,
@@ -1162,13 +1185,13 @@ where
                 .expect("this should be the second local, and we should have room for more");
 
             let instructions = &mut self.top_function.instructions;
-            instructions.push(Instruction::CopyArgToLocal(local_index, 0));
+            instructions.push(Instruction::CopyArg(local, 0));
 
             implicit_param_count = 1;
         }
 
         self.resolve_parameters(implicit_param_count)?;
-        self.resolve_block(0)?;
+        self.resolve_block()?;
         let token = self.expect(LuaTokenLabel::End)?;
 
         // catch number limit
@@ -1192,20 +1215,24 @@ where
         std::mem::swap(&mut function, &mut self.top_function);
 
         // resolve captures
-        for capture in function.captures {
-            let local_index = if capture.parent == 0 {
-                capture.parent_local
+        for (dest, capture) in function.captures.into_iter().enumerate() {
+            let up_value_or_stack = if capture.parent == 0 {
+                capture.parent_variable
             } else {
-                self.top_function.register_capture(
+                UpValueOrStack::UpValue(self.top_function.register_up_value(
                     self.source,
                     capture.token,
                     capture.parent - 1,
-                    capture.parent_local,
-                )?
+                    capture.parent_variable,
+                )?)
             };
 
             let instructions = &mut self.top_function.instructions;
-            instructions.push(Instruction::Capture(capture.local, local_index));
+            let instruction = match up_value_or_stack {
+                UpValueOrStack::UpValue(src) => Instruction::CaptureUpValue(dest as _, src),
+                UpValueOrStack::Stack(src) => Instruction::Capture(dest as _, src),
+            };
+            instructions.push(instruction);
         }
 
         // store our processed function in the module
@@ -1410,7 +1437,8 @@ where
         let mut last_expression_start = instructions.len();
 
         // resolve the first expression
-        self.resolve_expression(top_register + 1, ReturnMode::Extend(top_register), 0)?;
+        let r = self.resolve_expression(top_register + 1, ReturnMode::Extend(top_register), 0)?;
+        self.copy_stack_value(top_register + 1, r);
         total += 1;
 
         // resolve the rest
@@ -1425,11 +1453,9 @@ where
             let instructions = &mut self.top_function.instructions;
             last_expression_start = instructions.len();
 
-            self.resolve_expression(
-                top_register + 1 + total,
-                ReturnMode::Extend(top_register),
-                0,
-            )?;
+            let dest = top_register + 1 + total;
+            let r = self.resolve_expression(dest, ReturnMode::Extend(top_register), 0)?;
+            self.copy_stack_value(dest, r);
             total += 1;
         }
 
@@ -1478,12 +1504,14 @@ where
         }
     }
 
+    /// Returns the register that stores the result
+    /// Differs from top_register if the expression resolves to a variable
     fn resolve_expression(
         &mut self,
         top_register: Register,
         return_mode: ReturnMode,
         operation_priority: u8,
-    ) -> Result<(), LuaCompilationError> {
+    ) -> Result<Register, LuaCompilationError> {
         let token = self.expect_any()?;
         self.resolve_partially_consumed_expression(
             top_register,
@@ -1493,30 +1521,35 @@ where
         )
     }
 
+    /// Returns the register that stores the result
+    /// Differs from top_register if the expression resolves to a variable
     fn resolve_partially_consumed_expression(
         &mut self,
         top_register: Register,
         return_mode: ReturnMode,
         token: LuaToken<'source>,
         operation_priority: u8,
-    ) -> Result<(), LuaCompilationError> {
+    ) -> Result<Register, LuaCompilationError> {
         self.test_register_limit(token, top_register)?;
+
+        let mut result_register = top_register;
+        let result_register = &mut result_register;
 
         match token.label {
             LuaTokenLabel::Nil => {
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::SetNil(top_register));
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::True => {
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::SetBool(top_register, true));
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::False => {
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::SetBool(top_register, false));
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Numeral => {
                 let instruction = match parse_unsigned_number(token.content) {
@@ -1538,76 +1571,83 @@ where
                 };
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(instruction);
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::StringLiteral => {
                 let string_index = self.top_function.intern_string(self.source, token)?;
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::LoadBytes(top_register, string_index));
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::OpenCurly => {
                 self.resolve_table(top_register)?;
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Hash => {
                 // len
-                self.resolve_expression(top_register, return_mode, unary_priority())?;
+                let register =
+                    self.resolve_expression(top_register, return_mode, unary_priority())?;
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Len(top_register, top_register));
+                instructions.push(Instruction::Len(top_register, register));
 
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Minus => {
                 // unary minus
-                self.resolve_expression(top_register, return_mode, unary_priority())?;
-                while self.resolve_operation(top_register, unary_priority())? {}
-                while self.resolve_operation(top_register, operation_priority)? {}
+                *result_register =
+                    self.resolve_expression(top_register, return_mode, unary_priority())?;
+                while self.resolve_operation(top_register, result_register, unary_priority())? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::UnaryMinus(top_register, top_register));
+                *result_register = top_register;
             }
             LuaTokenLabel::Not => {
                 // not
-                self.resolve_expression(top_register, return_mode, unary_priority())?;
-                while self.resolve_operation(top_register, unary_priority())? {}
-                while self.resolve_operation(top_register, operation_priority)? {}
+                *result_register =
+                    self.resolve_expression(top_register, return_mode, unary_priority())?;
+                while self.resolve_operation(top_register, result_register, unary_priority())? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Not(top_register, top_register));
+                instructions.push(Instruction::Not(top_register, *result_register));
+                *result_register = top_register;
             }
             LuaTokenLabel::Tilde => {
                 // bitwise not
-                self.resolve_expression(top_register, return_mode, unary_priority())?;
-                while self.resolve_operation(top_register, unary_priority())? {}
-                while self.resolve_operation(top_register, operation_priority)? {}
+                *result_register =
+                    self.resolve_expression(top_register, return_mode, unary_priority())?;
+                while self.resolve_operation(top_register, result_register, unary_priority())? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitwiseNot(top_register, top_register));
+                instructions.push(Instruction::BitwiseNot(top_register, *result_register));
+                *result_register = top_register;
             }
             LuaTokenLabel::OpenParen | LuaTokenLabel::Name => {
                 // variable or function
                 let path = self.resolve_variable_path(top_register, token, return_mode)?;
                 self.copy_variable(top_register, path);
 
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Function => {
                 self.resolve_function_body(top_register, false)?;
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::TripleDot => {
                 // variadic
@@ -1643,19 +1683,19 @@ where
                     }
                 }
 
-                while self.resolve_operation(top_register, operation_priority)? {}
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
-            _ => {
-                return Err(SyntaxError::new_unexpected_token(self.source, token).into());
-            }
+            _ => return Err(SyntaxError::new_unexpected_token(self.source, token).into()),
         }
 
-        Ok(())
+        Ok(*result_register)
     }
 
+    /// Updates src_register to top_register if an operation was applied
     fn resolve_operation(
         &mut self,
         top_register: Register,
+        src_register: &mut Register,
         priority: u8,
     ) -> Result<bool, LuaCompilationError> {
         let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
@@ -1675,145 +1715,148 @@ where
         // consume token
         self.token_iter.next();
 
-        let a = top_register;
-        let b = top_register + 1;
+        let dest = top_register;
+        let a = *src_register;
+        let mut b = top_register + 1;
         // operations on function results will only use the first value
         let return_mode = ReturnMode::Static(1);
 
+        *src_register = dest;
+
         match next_token.label {
             LuaTokenLabel::Plus => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Add(a, a, b));
+                instructions.push(Instruction::Add(dest, a, b));
             }
             LuaTokenLabel::Minus => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Subtract(a, a, b));
+                instructions.push(Instruction::Subtract(dest, a, b));
             }
             LuaTokenLabel::Star => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Multiply(a, a, b));
+                instructions.push(Instruction::Multiply(dest, a, b));
             }
             LuaTokenLabel::Slash => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Division(a, a, b));
+                instructions.push(Instruction::Division(dest, a, b));
             }
             LuaTokenLabel::DoubleSlash => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::IntegerDivision(a, a, b));
+                instructions.push(Instruction::IntegerDivision(dest, a, b));
             }
             LuaTokenLabel::Percent => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Modulus(a, a, b));
+                instructions.push(Instruction::Modulus(dest, a, b));
             }
             LuaTokenLabel::Caret => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Power(a, a, b));
+                instructions.push(Instruction::Power(dest, a, b));
             }
             LuaTokenLabel::Ampersand => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitwiseAnd(a, a, b));
+                instructions.push(Instruction::BitwiseAnd(dest, a, b));
             }
             LuaTokenLabel::Pipe => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitwiseOr(a, a, b));
+                instructions.push(Instruction::BitwiseOr(dest, a, b));
             }
             LuaTokenLabel::Tilde => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitwiseXor(a, a, b));
+                instructions.push(Instruction::BitwiseXor(dest, a, b));
             }
             LuaTokenLabel::BitShiftLeft => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitShiftLeft(a, a, b));
+                instructions.push(Instruction::BitShiftLeft(dest, a, b));
             }
             LuaTokenLabel::BitShiftRight => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::BitShiftRight(a, a, b));
+                instructions.push(Instruction::BitShiftRight(dest, a, b));
             }
             LuaTokenLabel::DoubleDot => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Concat(a, a, b));
+                instructions.push(Instruction::Concat(dest, a, b));
             }
             LuaTokenLabel::CmpLessThan => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::LessThan(a, a, b));
+                instructions.push(Instruction::LessThan(dest, a, b));
             }
             LuaTokenLabel::CmpLessThanEqual => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::LessThanEqual(a, a, b));
+                instructions.push(Instruction::LessThanEqual(dest, a, b));
             }
             LuaTokenLabel::CmpEqual => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Equal(a, a, b));
+                instructions.push(Instruction::Equal(dest, a, b));
             }
             LuaTokenLabel::CmpNotEqual => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::Equal(a, a, b));
-                instructions.push(Instruction::Not(a, a));
+                instructions.push(Instruction::Equal(dest, a, b));
+                instructions.push(Instruction::Not(dest, dest));
             }
             LuaTokenLabel::CmpGreaterThan => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::LessThan(a, b, a));
+                instructions.push(Instruction::LessThan(dest, b, a));
             }
             LuaTokenLabel::CmpGreaterThanEqual => {
-                self.resolve_expression(b, return_mode, next_priority)?;
+                b = self.resolve_expression(b, return_mode, next_priority)?;
                 self.top_function
                     .map_following_instructions(self.source, next_token.offset);
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::LessThanEqual(a, b, a));
+                instructions.push(Instruction::LessThanEqual(dest, b, a));
             }
             LuaTokenLabel::And => {
                 // jump / skip calculating `b`` if `a` is falsey (fail the chain)
@@ -1823,8 +1866,9 @@ where
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
 
-                // calculate b, store directly in a
-                self.resolve_expression(a, return_mode, next_priority)?;
+                // calculate b, store directly in a's register
+                b = self.resolve_expression(a, return_mode, next_priority)?;
+                self.copy_stack_value(a, b);
 
                 let instructions = &mut self.top_function.instructions;
 
@@ -1845,8 +1889,9 @@ where
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
 
-                // calculate b in a as we want to swap it anyway
-                self.resolve_expression(a, return_mode, next_priority)?;
+                // calculate b in a's register as we want to swap it anyway
+                b = self.resolve_expression(a, return_mode, next_priority)?;
+                self.copy_stack_value(a, b);
 
                 let instructions = &mut self.top_function.instructions;
 
@@ -1913,18 +1958,20 @@ where
             match token.label {
                 // `[exp] = exp`
                 LuaTokenLabel::OpenBracket => {
-                    self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
+                    let key_register =
+                        self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
 
                     self.expect(LuaTokenLabel::CloseBracket)?;
                     self.expect(LuaTokenLabel::Assign)?;
 
-                    self.resolve_expression(next_register + 1, ReturnMode::Static(1), 0)?;
+                    let value_register =
+                        self.resolve_expression(next_register + 1, ReturnMode::Static(1), 0)?;
 
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyToTableValue(
                         top_register,
-                        next_register,
-                        next_register + 1,
+                        key_register,
+                        value_register,
                     ));
                 }
 
@@ -1942,13 +1989,14 @@ where
 
                     let string_index = self.top_function.intern_string(self.source, token)?;
 
-                    self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
+                    let value_register =
+                        self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
 
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyToTableField(
                         top_register,
                         string_index,
-                        next_register,
+                        value_register,
                     ));
                 }
                 _ => {
@@ -2041,20 +2089,20 @@ where
     /// Returns the loop start instruction index and the jump to end index
     fn resolve_numeric_for_params(
         &mut self,
-        top_register: Register,
         name_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
-        let local_index = self.top_function.register_local(self.source, name_token)?;
+        let local = self.top_function.register_local(self.source, name_token)?;
+
+        let top_register = self.top_function.next_register;
 
         // resolve initial value
-        self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
-
-        let instructions = &mut self.top_function.instructions;
-        instructions.push(Instruction::CopyToLocal(local_index, top_register));
+        let register = self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+        self.copy_stack_value(local, register);
 
         // resolve limit
         self.expect(LuaTokenLabel::Comma)?;
-        self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+        let register = self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
+        self.copy_stack_value(top_register, register);
 
         // resolve step
         let next_token = self.token_iter.peek().cloned().transpose()?;
@@ -2062,7 +2110,8 @@ where
         if next_token.is_some_and(|token| token.label == LuaTokenLabel::Comma) {
             // consume token
             self.token_iter.next();
-            self.resolve_expression(top_register + 1, ReturnMode::Static(1), 0)?;
+            let register = self.resolve_expression(top_register + 1, ReturnMode::Static(1), 0)?;
+            self.copy_stack_value(top_register + 1, register);
         } else {
             // step by 1
             let count_constant = self
@@ -2079,9 +2128,12 @@ where
 
         let instructions = &mut self.top_function.instructions;
         let start_index = instructions.len();
-        instructions.push(Instruction::NumericFor(top_register, local_index));
+        instructions.push(Instruction::NumericFor(top_register, local));
         let jump_index = instructions.len();
         instructions.push(Instruction::Jump(0.into()));
+
+        // consume registers for the limit and step
+        self.top_function.next_register += 2;
 
         Ok((start_index, jump_index))
     }
@@ -2091,7 +2143,6 @@ where
     /// Returns the loop start instruction index and the jump to end index
     fn resolve_generic_for_params(
         &mut self,
-        top_register: Register,
         name_token: LuaToken<'source>,
         next_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
@@ -2120,6 +2171,7 @@ where
         // resolve an expression and store the first result at the top register
         // swap it with a two for the function call later
         // the data after represents the invariant state and the control variable
+        let top_register = self.top_function.next_register;
         self.resolve_exp_list(next_token, top_register)?;
 
         self.top_function
@@ -2145,12 +2197,13 @@ where
         instructions.push(Instruction::Jump(0.into()));
 
         // assign locals
-        for (i, local) in locals.into_iter().enumerate() {
-            instructions.push(Instruction::CopyToLocal(
-                local,
-                control_register + i as Register,
-            ));
+        for (i, dest) in locals.into_iter().enumerate() {
+            let src = control_register + i as Register;
+            self.copy_stack_value(dest, src);
         }
+
+        // avoid overwriting control registers
+        self.top_function.next_register += 4;
 
         Ok((start_index, jump_index))
     }
