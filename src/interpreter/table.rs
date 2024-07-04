@@ -59,25 +59,23 @@ impl Table {
         self.list.splice(range, iter);
     }
 
-    fn remap_key(key: StackValue) -> StackValue {
-        if let StackValue::Primitive(Primitive::Float(float)) = key {
-            if float.fract() == 0.0 {
-                return Primitive::Integer(float as _).into();
-            }
-        }
-
-        key
-    }
-
-    pub(crate) fn get(&self, mut key: StackValue) -> StackValue {
-        key = Self::remap_key(key);
-
-        if let StackValue::Primitive(Primitive::Integer(index)) = key {
-            if index > 0 {
-                if let Some(value) = self.list.get(index as usize - 1) {
-                    return *value;
+    pub(crate) fn get(&self, key: StackValue) -> StackValue {
+        match key {
+            StackValue::Primitive(Primitive::Integer(index)) => {
+                if index > 0 {
+                    if let Some(value) = self.list.get(index as usize - 1) {
+                        return *value;
+                    }
                 }
             }
+            StackValue::Primitive(Primitive::Float(float)) => {
+                if float.fract() == 0.0 {
+                    if let Some(value) = self.list.get(float as usize - 1) {
+                        return *value;
+                    }
+                }
+            }
+            _ => {}
         }
 
         self.map
@@ -86,10 +84,20 @@ impl Table {
             .unwrap_or(StackValue::Primitive(Primitive::Nil))
     }
 
-    pub(crate) fn set(&mut self, mut key: StackValue, value: StackValue) {
-        key = Self::remap_key(key);
+    pub(crate) fn set(&mut self, key: StackValue, value: StackValue) {
+        let used_list = match key {
+            StackValue::Primitive(Primitive::Integer(index)) if index > 0 => {
+                self.set_in_list(index as usize - 1, value)
+            }
+            StackValue::Primitive(Primitive::Float(float))
+                if float.fract() == 0.0 && float as usize > 0 =>
+            {
+                self.set_in_list(float as usize - 1, value)
+            }
+            _ => false,
+        };
 
-        if self.set_in_list(key, value) {
+        if used_list {
             return;
         }
 
@@ -101,17 +109,7 @@ impl Table {
         self.map.insert(key, value);
     }
 
-    fn set_in_list(&mut self, remapped_key: StackValue, value: StackValue) -> bool {
-        let StackValue::Primitive(Primitive::Integer(index)) = remapped_key else {
-            return false;
-        };
-
-        if index <= 0 {
-            return false;
-        }
-
-        let index = index as usize - 1;
-
+    fn set_in_list(&mut self, index: usize, value: StackValue) -> bool {
         if self.list.get(index).is_some() {
             if value == Primitive::Nil.into() && index + 1 == self.list.len() {
                 // shrink the list
