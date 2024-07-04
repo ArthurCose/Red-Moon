@@ -136,7 +136,7 @@ impl ValueStack {
             return;
         }
 
-        self.values.splice(start..end, std::iter::empty());
+        self.values.drain(start..end);
 
         debug_assert_eq!(self.len(), start + keep)
     }
