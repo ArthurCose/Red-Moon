@@ -377,26 +377,42 @@ where
                         self.resolve_block()?;
                         self.top_function.pop_scope();
 
-                        // insert + track end jump
-                        let instructions = &mut self.top_function.instructions;
-                        end_jumps.push(instructions.len());
-                        instructions.push(Instruction::Jump(0.into()));
-
-                        // update branch jump
-                        instructions[branch_index] = Instruction::Jump(instructions.len().into());
-
                         let end_token = self.expect_any()?;
 
                         match end_token.label {
-                            LuaTokenLabel::ElseIf => {}
+                            LuaTokenLabel::ElseIf => {
+                                // insert + track end jump
+                                let instructions = &mut self.top_function.instructions;
+                                end_jumps.push(instructions.len());
+                                instructions.push(Instruction::Jump(0.into()));
+
+                                // update branch jump
+                                let instruction_index = instructions.len().into();
+                                instructions[branch_index] = Instruction::Jump(instruction_index);
+                            }
                             LuaTokenLabel::Else => {
+                                // insert + track end jump
+                                let instructions = &mut self.top_function.instructions;
+                                end_jumps.push(instructions.len());
+                                instructions.push(Instruction::Jump(0.into()));
+
+                                // update branch jump
+                                let instruction_index = instructions.len().into();
+                                instructions[branch_index] = Instruction::Jump(instruction_index);
+
                                 self.top_function.push_scope();
                                 self.resolve_block()?;
                                 self.top_function.pop_scope();
                                 self.expect(LuaTokenLabel::End)?;
                                 break;
                             }
-                            LuaTokenLabel::End => break,
+                            LuaTokenLabel::End => {
+                                // update branch jump
+                                let instructions = &mut self.top_function.instructions;
+                                let instruction_index = instructions.len().into();
+                                instructions[branch_index] = Instruction::Jump(instruction_index);
+                                break;
+                            }
                             _ => {
                                 return Err(SyntaxError::new_unexpected_token(
                                     self.source,
