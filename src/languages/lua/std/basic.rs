@@ -77,6 +77,15 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
         let table: TableRef = args.unpack_args(vm)?;
         let metatable = table.metatable(vm)?;
 
+        if let Some(metatable) = table.metatable(vm)? {
+            let metatable_key = vm.metatable_keys().metatable.clone();
+            let metatable_value = metatable.raw_get::<_, Option<Value>>(metatable_key, vm)?;
+
+            if let Some(metatable_value) = metatable_value {
+                return MultiValue::pack(metatable_value, vm);
+            }
+        }
+
         MultiValue::pack(metatable, vm)
     });
     env.set("getmetatable", getmetatable, vm)?;
