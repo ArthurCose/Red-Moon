@@ -1261,6 +1261,7 @@ impl CallContext {
         integer_operation: impl Fn(i64, i64) -> i64,
         float_operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        // using get since we resolve pointers in self.resolve_binary_operand()
         let value_a = value_stack.get(self.register_base + a as usize);
         let value_b = value_stack.get(self.register_base + b as usize);
 
