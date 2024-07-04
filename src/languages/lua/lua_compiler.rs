@@ -855,12 +855,15 @@ where
                                 instructions
                                     .push(Instruction::CopyToUpValueDeref(dest, value_register));
                             }
-                            VariablePath::TableValue(_, table_index, key_index) => {
+                            VariablePath::TableValue(token, table_index, key_index) => {
                                 let value_register = self.resolve_expression(
                                     top_register + 2,
                                     ReturnMode::Static(1),
                                     0,
                                 )?;
+
+                                self.top_function
+                                    .map_following_instructions(self.source, token.offset);
 
                                 let instructions = &mut self.top_function.instructions;
                                 instructions.push(Instruction::CopyToTableValue(
@@ -2003,6 +2006,9 @@ where
                     let value_register =
                         self.resolve_expression(next_register + 1, ReturnMode::Static(1), 0)?;
 
+                    self.top_function
+                        .map_following_instructions(self.source, token.offset);
+
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyToTableValue(
                         top_register,
@@ -2021,12 +2027,15 @@ where
                         .is_some_and(|peeked| peeked.label == LuaTokenLabel::Assign) =>
                 {
                     // consume assignment token
-                    self.token_iter.next();
+                    let name_token = self.expect_any()?;
 
                     let string_index = self.top_function.intern_string(self.source, token)?;
 
                     let value_register =
                         self.resolve_expression(next_register, ReturnMode::Static(1), 0)?;
+
+                    self.top_function
+                        .map_following_instructions(self.source, name_token.offset);
 
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyToTableField(
