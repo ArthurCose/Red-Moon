@@ -42,7 +42,8 @@ fn instructions_print() {
                 // Copy `_ENV` into the first stack register
                 Instruction::CopyUpValue(0, 0),
                 // replace with `_ENV.print`
-                Instruction::CopyTableField(0, 0, 0),
+                Instruction::CopyTableField(0, 0),
+                Instruction::Constant(0),
                 // "!" ("hello world !" in reverse)
                 Instruction::LoadBytes(4, 3),
                 // "world"

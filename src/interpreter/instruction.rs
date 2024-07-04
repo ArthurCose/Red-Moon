@@ -55,6 +55,11 @@ pub enum ReturnMode {
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
+    /// Data carrying instruction that's interpreted by the previous instruction
+    ///
+    /// Errors when unused by the previous instruction
+    Constant(ConstantIndex),
+
     /// Stores nil in a register
     ///
     /// (dest)
@@ -108,13 +113,17 @@ pub enum Instruction {
 
     /// Copies a value from a table onto the stack
     ///
-    /// (dest, table, key)
-    CopyTableField(Register, Register, ConstantIndex),
+    /// Expects the next instruction to be Instruction::Constant for the field string
+    ///
+    /// (dest, table)
+    CopyTableField(Register, Register),
 
     /// Copies a value from the stack to a table
     ///
-    /// (dest, table, key)
-    CopyToTableField(Register, ConstantIndex, Register),
+    /// Expects the next instruction to be Instruction::Constant for the field string
+    ///
+    /// (table, src)
+    CopyToTableField(Register, Register),
 
     /// Copies a value from a table onto the stack
     ///

@@ -640,11 +640,9 @@ where
                                 .map_following_instructions(self.source, token.offset);
 
                             let instructions = &mut self.top_function.instructions;
-                            instructions.push(Instruction::CopyToTableField(
-                                table_index,
-                                string_index,
-                                top_register + 1,
-                            ));
+                            instructions
+                                .push(Instruction::CopyToTableField(table_index, top_register + 1));
+                            instructions.push(Instruction::Constant(string_index));
                         }
                         VariablePath::Result(_) => unreachable!(),
                     }
@@ -797,38 +795,41 @@ where
                             // start with increment to skip the len
                             next_register += 1;
 
-                            let instruction = match path {
+                            match path {
                                 VariablePath::Stack(dest) => {
-                                    Instruction::CopyToDeref(dest, next_register)
+                                    let instructions = &mut self.top_function.instructions;
+                                    instructions
+                                        .push(Instruction::CopyToDeref(dest, next_register));
                                 }
                                 VariablePath::UpValue(dest) => {
-                                    Instruction::CopyToUpValueDeref(dest, next_register)
+                                    let instructions = &mut self.top_function.instructions;
+                                    instructions
+                                        .push(Instruction::CopyToUpValueDeref(dest, next_register));
                                 }
                                 VariablePath::TableValue(token, table_index, key_index) => {
                                     self.top_function
                                         .map_following_instructions(self.source, token.offset);
 
-                                    Instruction::CopyToTableValue(
+                                    let instructions = &mut self.top_function.instructions;
+                                    instructions.push(Instruction::CopyToTableValue(
                                         table_index,
                                         key_index,
                                         next_register,
-                                    )
+                                    ));
                                 }
                                 VariablePath::TableField(token, table_index, string_index) => {
                                     self.top_function
                                         .map_following_instructions(self.source, token.offset);
 
-                                    Instruction::CopyToTableField(
+                                    let instructions = &mut self.top_function.instructions;
+                                    instructions.push(Instruction::CopyToTableField(
                                         table_index,
-                                        string_index,
                                         next_register,
-                                    )
+                                    ));
+                                    instructions.push(Instruction::Constant(string_index));
                                 }
                                 VariablePath::Result(_) => unreachable!(),
-                            };
-
-                            let instructions = &mut self.top_function.instructions;
-                            instructions.push(instruction);
+                            }
                         }
                     } else if next_token.label == LuaTokenLabel::Assign {
                         let top_register = self.top_function.next_register;
@@ -885,9 +886,9 @@ where
                                 let instructions = &mut self.top_function.instructions;
                                 instructions.push(Instruction::CopyToTableField(
                                     table_index,
-                                    string_index,
                                     value_register,
                                 ));
+                                instructions.push(Instruction::Constant(string_index));
                             }
                             VariablePath::Result(_) => unreachable!(),
                         }
@@ -1148,7 +1149,8 @@ where
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::CopyTableField(dest, table_index, string_index));
+                instructions.push(Instruction::CopyTableField(dest, table_index));
+                instructions.push(Instruction::Constant(string_index));
             }
             VariablePath::Result(src) => {
                 self.copy_stack_value(dest, src);
@@ -1181,11 +1183,8 @@ where
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::CopyTableField(
-                    temp_register,
-                    table_index,
-                    string_index,
-                ));
+                instructions.push(Instruction::CopyTableField(temp_register, table_index));
+                instructions.push(Instruction::Constant(string_index));
                 temp_register
             }
             VariablePath::Result(src) => src,
@@ -1414,11 +1413,8 @@ where
 
                 let instructions = &mut self.top_function.instructions;
                 // load function
-                instructions.push(Instruction::CopyTableField(
-                    top_register,
-                    top_register + 2,
-                    string_index,
-                ));
+                instructions.push(Instruction::CopyTableField(top_register, top_register + 2));
+                instructions.push(Instruction::Constant(string_index));
                 // call function
                 call_instruction_index = instructions.len();
                 instructions.push(Instruction::Call(top_register, return_mode));
@@ -2038,11 +2034,8 @@ where
                         .map_following_instructions(self.source, name_token.offset);
 
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::CopyToTableField(
-                        top_register,
-                        string_index,
-                        value_register,
-                    ));
+                    instructions.push(Instruction::CopyToTableField(top_register, value_register));
+                    instructions.push(Instruction::Constant(string_index));
                 }
                 _ => {
                     let instruction_start = self.top_function.instructions.len();

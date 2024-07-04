@@ -5,8 +5,10 @@ pub enum IllegalInstruction {
     MissingReturnCount,
     MissingArgCount,
     MissingVariadicCount,
+    ExpectingConstant,
     MissingByteStringConstant(ConstantIndex),
     MissingNumberConstant(ConstantIndex),
     MissingFunctionConstant(ConstantIndex),
     InvalidHeapKey,
+    UnexpectedConstant,
 }

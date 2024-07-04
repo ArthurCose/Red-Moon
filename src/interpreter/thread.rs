@@ -500,6 +500,9 @@ impl CallContext {
             self.next_instruction_index += 1;
 
             match instruction {
+                Instruction::Constant(_) => {
+                    return Err(IllegalInstruction::UnexpectedConstant.into())
+                }
                 Instruction::SetNil(dest) => {
                     value_stack.set(self.register_base + *dest as usize, Primitive::Nil.into());
                 }
@@ -603,14 +606,24 @@ impl CallContext {
                     table.flush(self.table_flush_count, value_stack.get_slice(start..end));
                     self.table_flush_count += end - start;
                 }
-                Instruction::CopyTableField(dest, table_index, bytes_index) => {
-                    let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                Instruction::CopyTableField(dest, table_index) => {
+                    // resolve field key
+                    let Some(Instruction::Constant(bytes_index)) =
+                        definition.instructions.get(self.next_instruction_index)
+                    else {
+                        return Err(IllegalInstruction::ExpectingConstant.into());
+                    };
+                    self.next_instruction_index += 1;
+
                     let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
                         );
                     };
+
+                    // table
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
 
                     if let Some(call_result) =
                         self.copy_from_table(vm, value_stack, *dest, base, heap_key.into())?
@@ -618,14 +631,24 @@ impl CallContext {
                         return Ok(call_result);
                     }
                 }
-                Instruction::CopyToTableField(table_index, bytes_index, src) => {
-                    let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                Instruction::CopyToTableField(table_index, src) => {
+                    // resolve field key
+                    let Some(Instruction::Constant(bytes_index)) =
+                        definition.instructions.get(self.next_instruction_index)
+                    else {
+                        return Err(IllegalInstruction::ExpectingConstant.into());
+                    };
+                    self.next_instruction_index += 1;
+
                     let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
                         );
                     };
+
+                    // table
+                    let base =
+                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
 
                     if let Some(call_result) =
                         self.copy_to_table(vm, value_stack, base, heap_key.into(), *src)?
