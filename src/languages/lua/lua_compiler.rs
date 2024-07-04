@@ -967,7 +967,7 @@ where
 
             match token.label {
                 LuaTokenLabel::Dot => {
-                    self.copy_variable(top_register, path);
+                    let table_register = self.collapse_variable(top_register, path);
 
                     // consume dot
                     self.token_iter.next();
@@ -975,10 +975,10 @@ where
                     let token = self.expect(LuaTokenLabel::Name)?;
 
                     let string_index = self.top_function.intern_string(self.source, token)?;
-                    path = VariablePath::TableField(token, top_register, string_index);
+                    path = VariablePath::TableField(token, table_register, string_index);
                 }
                 LuaTokenLabel::OpenBracket => {
-                    self.copy_variable(top_register, path);
+                    let table_register = self.collapse_variable(top_register, path);
 
                     // consume bracket
                     self.token_iter.next();
@@ -988,7 +988,7 @@ where
 
                     self.expect(LuaTokenLabel::CloseBracket)?;
 
-                    path = VariablePath::TableValue(token, top_register, key_register);
+                    path = VariablePath::TableValue(token, table_register, key_register);
                 }
                 _ if starts_function_call(token.label) => {
                     self.copy_variable(top_register, path);
@@ -1151,6 +1151,42 @@ where
                 self.copy_stack_value(dest, src);
             }
         };
+    }
+
+    fn collapse_variable(&mut self, temp_register: Register, path: VariablePath) -> Register {
+        match path {
+            VariablePath::Stack(src) => src,
+            VariablePath::UpValue(src) => {
+                let instructions = &mut self.top_function.instructions;
+                instructions.push(Instruction::CopyUpValue(temp_register, src));
+                temp_register
+            }
+            VariablePath::TableValue(token, table_index, key_index) => {
+                self.top_function
+                    .map_following_instructions(self.source, token.offset);
+
+                let instructions = &mut self.top_function.instructions;
+                instructions.push(Instruction::CopyTableValue(
+                    temp_register,
+                    table_index,
+                    key_index,
+                ));
+                temp_register
+            }
+            VariablePath::TableField(token, table_index, string_index) => {
+                self.top_function
+                    .map_following_instructions(self.source, token.offset);
+
+                let instructions = &mut self.top_function.instructions;
+                instructions.push(Instruction::CopyTableField(
+                    temp_register,
+                    table_index,
+                    string_index,
+                ));
+                temp_register
+            }
+            VariablePath::Result(src) => src,
+        }
     }
 
     fn copy_stack_value(&mut self, dest: Register, src: Register) {
@@ -1607,7 +1643,7 @@ where
                     .map_following_instructions(self.source, token.offset);
 
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::UnaryMinus(top_register, top_register));
+                instructions.push(Instruction::UnaryMinus(top_register, *result_register));
                 *result_register = top_register;
             }
             LuaTokenLabel::Not => {
@@ -1641,7 +1677,7 @@ where
             LuaTokenLabel::OpenParen | LuaTokenLabel::Name => {
                 // variable or function
                 let path = self.resolve_variable_path(top_register, token, return_mode)?;
-                self.copy_variable(top_register, path);
+                *result_register = self.collapse_variable(top_register, path);
 
                 while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
