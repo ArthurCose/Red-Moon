@@ -85,10 +85,10 @@ pub enum Instruction {
     /// (dest, index)
     LoadBytes(Register, ConstantIndex),
 
-    /// Clears values past the destination
+    /// Clears values at and past the destination
     ///
     /// (dest)
-    ClearAfter(Register),
+    ClearFrom(Register),
 
     /// Loads an integer from the numbers list and stores it in a register
     ///

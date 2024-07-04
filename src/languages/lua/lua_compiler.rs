@@ -1525,7 +1525,7 @@ where
         top_register: Register,
     ) -> Result<(), LuaCompilationError> {
         let instructions = &mut self.top_function.instructions;
-        instructions.push(Instruction::ClearAfter(top_register));
+        instructions.push(Instruction::ClearFrom(top_register));
 
         let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
             return Ok(());

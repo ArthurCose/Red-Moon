@@ -531,9 +531,9 @@ impl CallContext {
 
                     value_stack.set(self.register_base + *dest as usize, heap_key.into());
                 }
-                Instruction::ClearAfter(dest) => {
+                Instruction::ClearFrom(dest) => {
                     let dest_index = self.register_base + *dest as usize;
-                    value_stack.chip(dest_index + 1, 0);
+                    value_stack.chip(dest_index, 0);
                 }
                 Instruction::PrepMulti(dest, index) => {
                     let Some(number) = definition.numbers.get(*index as usize) else {
