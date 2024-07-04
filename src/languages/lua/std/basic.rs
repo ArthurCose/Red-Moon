@@ -10,12 +10,14 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // assert
     let assert = vm.create_native_function(|args, vm| {
-        let (passed, message): (bool, Option<String>) = args.unpack_args(vm)?;
+        let (passed, message): (bool, Option<ByteString>) = args.unpack_args(vm)?;
 
         if !passed {
-            return Err(RuntimeError::new_string(
-                message.unwrap_or_else(|| String::from("assertion failed!")),
-            ));
+            if let Some(s) = message {
+                return Err(RuntimeError::new_string(s.to_string()));
+            } else {
+                return Err(RuntimeError::new_static_string("assertion failed!"));
+            }
         }
 
         MultiValue::pack((), vm)
@@ -27,14 +29,14 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
         // todo: level
         let message: Value = args.unpack_args(vm)?;
 
-        let message = match message {
-            Value::Primitive(Primitive::Integer(i)) => i.to_string(),
-            Value::Primitive(Primitive::Float(f)) => f.to_string(),
-            Value::String(s) => s.fetch(vm)?.to_string_lossy().to_string(),
-            _ => format!("(error is a {} value)", message.type_name()),
+        let err = match message {
+            Value::Primitive(Primitive::Integer(i)) => RuntimeError::new_string(i.to_string()),
+            Value::Primitive(Primitive::Float(f)) => RuntimeError::new_string(f.to_string()),
+            Value::String(s) => RuntimeError::new_byte_string(s.fetch(vm)?.clone()),
+            _ => RuntimeError::new_string(format!("(error is a {} value)", message.type_name())),
         };
 
-        Err(RuntimeError::new_string(message))
+        Err(err)
     });
     env.set("error", error, vm)?;
 

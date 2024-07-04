@@ -1,5 +1,6 @@
 use super::stack_trace::StackTrace;
 use super::RuntimeErrorData;
+use crate::interpreter::ByteString;
 use std::borrow::Cow;
 
 #[derive(Debug)]
@@ -24,6 +25,10 @@ impl RuntimeError {
 
     pub fn new_static_string(message: &'static str) -> Self {
         RuntimeError::from(RuntimeErrorData::String(Cow::Borrowed(message)))
+    }
+
+    pub fn new_byte_string(message: ByteString) -> RuntimeError {
+        RuntimeError::from(RuntimeErrorData::ByteString(message))
     }
 }
 

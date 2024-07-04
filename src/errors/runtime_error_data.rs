@@ -1,4 +1,5 @@
 use super::{IllegalInstruction, NativeError};
+use crate::interpreter::ByteString;
 use std::{borrow::Cow, rc::Rc};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -39,6 +40,7 @@ pub enum RuntimeErrorData {
     },
     NativeError(NativeError),
     String(Cow<'static, str>),
+    ByteString(ByteString),
 }
 
 impl From<IllegalInstruction> for RuntimeErrorData {
