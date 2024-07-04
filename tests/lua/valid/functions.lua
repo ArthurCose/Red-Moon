@@ -59,13 +59,16 @@ print(i)
 
 print("\nconditions:")
 local function foo(a)
+  local result
   if a == 0 then
-    return "a"
+    result = "a"
   elseif a == 1 then
-    return "b"
+    result = "b"
   else
-    return "c"
+    result = "c"
   end
+
+  return result
 end
 print(foo(0))
 print(foo(1))
