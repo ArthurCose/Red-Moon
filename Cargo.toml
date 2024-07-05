@@ -17,6 +17,6 @@ rustc-hash = "2"
 [dev-dependencies]
 pretty_assertions = "1"
 
-# for flamegraphs
-[profile.release]
+[profile.profiling]
+inherits = "release"
 debug = true
