@@ -2333,9 +2333,8 @@ where
             next_token = self.expect_any()?;
         }
 
-        // resolve an expression and store the first result at the top register
-        // swap it with a two for the function call later
-        // the data after represents the invariant state and the control variable
+        // resolve the initial expression
+        // we expect it to return an iterator, invariant state, and control variable
         let top_register = self.top_function.next_register;
         self.resolve_exp_list(next_token, top_register)?;
 
@@ -2346,7 +2345,9 @@ where
             .top_function
             .register_number(self.source, next_token, 2)?;
         let instructions = &mut self.top_function.instructions;
+        // copy the iterator function into the top register
         instructions.push(Instruction::Copy(top_register, top_register + 1));
+        // arg count
         instructions.push(Instruction::LoadInt(top_register + 1, count_constant));
 
         // loop start, call the function and store the results over the control variable
@@ -2368,7 +2369,7 @@ where
         }
 
         // avoid overwriting control registers
-        self.top_function.next_register += 4;
+        self.top_function.next_register += control_register + 1;
 
         Ok((start_index, jump_index))
     }
