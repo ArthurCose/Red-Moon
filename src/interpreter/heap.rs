@@ -6,6 +6,7 @@ use super::value_stack::StackValue;
 use super::Primitive;
 use crate::FastHashMap;
 use indexmap::IndexMap;
+use rustc_hash::FxBuildHasher;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -75,7 +76,7 @@ struct HeapRecord {
 pub(crate) struct Heap {
     storage: slotmap::SlotMap<HeapKey, HeapRecord>,
     byte_strings: FastHashMap<ByteString, HeapKey>,
-    ref_roots: IndexMap<HeapKey, RefCounter>,
+    ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
     recycled_tables: Rc<Cell<Vec<Table>>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef,
