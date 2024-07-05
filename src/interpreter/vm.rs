@@ -54,6 +54,7 @@ pub struct Vm {
     metatable_keys: Rc<MetatableKeys>,
     recycled_multivalues: Rc<Cell<Vec<MultiValue>>>,
     recycled_value_stacks: Rc<Cell<Vec<ValueStack>>>,
+    recycled_short_value_stacks: Rc<Cell<Vec<ValueStack>>>,
     tracked_stack_size: usize,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
 }
@@ -67,6 +68,7 @@ impl Clone for Vm {
             metatable_keys: self.metatable_keys.clone(),
             recycled_multivalues: self.recycled_multivalues.clone(),
             recycled_value_stacks: self.recycled_value_stacks.clone(),
+            recycled_short_value_stacks: self.recycled_short_value_stacks.clone(),
             // reset to 0, since there's no active call on the new vm
             tracked_stack_size: 0,
             app_data: self.app_data.clone(),
@@ -90,6 +92,7 @@ impl Vm {
             metatable_keys: Rc::new(metatable_keys),
             recycled_multivalues: Default::default(),
             recycled_value_stacks: Default::default(),
+            recycled_short_value_stacks: Default::default(),
             tracked_stack_size: 0,
             app_data: Default::default(),
         }
@@ -176,6 +179,25 @@ impl Vm {
         }
 
         self.recycled_value_stacks.set(list);
+    }
+
+    pub(crate) fn create_short_value_stack(&mut self) -> ValueStack {
+        let mut list = self.recycled_short_value_stacks.take();
+        let value_stack = list.pop().unwrap_or_default();
+        self.recycled_short_value_stacks.set(list);
+
+        value_stack
+    }
+
+    pub(crate) fn store_short_value_stack(&mut self, mut value_stack: ValueStack) {
+        let mut list = self.recycled_short_value_stacks.take();
+
+        if list.len() < RECYCLE_LIMIT {
+            value_stack.clear();
+            list.push(value_stack);
+        }
+
+        self.recycled_short_value_stacks.set(list);
     }
 
     pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {

@@ -154,8 +154,8 @@ impl Thread {
 
                                 // remove caller and recycle value stacks
                                 let call = self.call_stack.pop().unwrap();
-                                vm.store_value_stack(call.pending_captures);
-                                vm.store_value_stack(call.up_values);
+                                vm.store_short_value_stack(call.pending_captures);
+                                vm.store_short_value_stack(call.up_values);
 
                                 // adopt caller's return mode and stack placement
                                 return_mode = call.return_mode;
@@ -265,8 +265,8 @@ impl Thread {
                             if return_mode == ReturnMode::TailCall {
                                 // remove the caller and recycle value stacks
                                 let call = self.call_stack.pop().unwrap();
-                                vm.store_value_stack(call.pending_captures);
-                                vm.store_value_stack(call.up_values);
+                                vm.store_short_value_stack(call.pending_captures);
+                                vm.store_short_value_stack(call.up_values);
                                 self.value_stack
                                     .chip(call.stack_start, self.value_stack.len() - stack_start);
 
@@ -317,8 +317,8 @@ impl Thread {
                     };
 
                     // recycle value stacks
-                    vm.store_value_stack(context.pending_captures);
-                    vm.store_value_stack(context.up_values);
+                    vm.store_short_value_stack(context.pending_captures);
+                    vm.store_short_value_stack(context.up_values);
 
                     let mut return_count = return_count as usize;
 
@@ -443,8 +443,8 @@ impl Thread {
             let frame = definition.create_stack_trace_frame(instruction_index);
             err.trace.push_frame(frame);
 
-            vm.store_value_stack(call.pending_captures);
-            vm.store_value_stack(call.up_values);
+            vm.store_short_value_stack(call.pending_captures);
+            vm.store_short_value_stack(call.up_values);
         }
 
         err
@@ -464,11 +464,12 @@ struct CallContext {
 
 impl CallContext {
     fn new(function: Function, stack_start: usize, register_base: usize, vm: &mut Vm) -> Self {
-        let up_values = (*function.up_values).clone();
+        let mut up_values = vm.create_short_value_stack();
+        up_values.clone_from(&*function.up_values);
 
         Self {
             function,
-            pending_captures: vm.create_value_stack(),
+            pending_captures: vm.create_short_value_stack(),
             next_instruction_index: 0,
             stack_start,
             register_base,
