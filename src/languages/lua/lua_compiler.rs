@@ -1364,21 +1364,29 @@ where
 
                 match next_token.label {
                     LuaTokenLabel::OpenParen => {
-                        self.resolve_exp_list(next_token, top_register + 2)?;
-
-                        let count_constant =
-                            self.top_function
-                                .register_number(self.source, next_token, 1)?;
                         let instructions = &mut self.top_function.instructions;
-                        // increment the arg count and move it down
-                        instructions.push(Instruction::LoadInt(top_register + 1, count_constant));
-                        instructions.push(Instruction::Add(
-                            top_register + 1,
-                            top_register + 1,
-                            top_register + 2,
-                        ));
+                        let prep_index = instructions.len();
+                        // init prep multi, dummy value for count constant
+                        instructions.push(Instruction::PrepMulti(top_register + 1, 0));
+
                         // copy the table into args
                         instructions.push(Instruction::Copy(top_register + 2, top_register));
+
+                        // resolve the remaining args
+                        let total = self.resolve_partially_consumed_exp_list(
+                            top_register + 1,
+                            top_register + 3,
+                        )? + 1;
+
+                        // update prep multi with the true count constant
+                        let count_constant = self.top_function.register_number(
+                            self.source,
+                            next_token,
+                            total.into(),
+                        )?;
+                        let instructions = &mut self.top_function.instructions;
+                        instructions[prep_index] =
+                            Instruction::PrepMulti(top_register + 1, count_constant);
 
                         self.expect(LuaTokenLabel::CloseParen)?;
                     }
@@ -1517,6 +1525,60 @@ where
         self.variadic_to_single_static(top_register, first_expression_start..last_expression_start);
 
         Ok(())
+    }
+
+    fn resolve_partially_consumed_exp_list(
+        &mut self,
+        count_register: Register,
+        top_register: Register,
+    ) -> Result<Register, LuaCompilationError> {
+        let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
+            return Ok(0);
+        };
+
+        if !starts_expression(next_token.label) {
+            return Ok(0);
+        }
+
+        // track the start of the first and last expression for updating function return modes to variadic
+        let instructions = &mut self.top_function.instructions;
+        let first_expression_start = instructions.len();
+        let mut last_expression_start = instructions.len();
+
+        // resolve the first expression
+        let r = self.resolve_expression(top_register, ReturnMode::Extend(count_register), 0)?;
+        self.copy_stack_value(top_register, r);
+        let mut total = 1;
+
+        // resolve the rest
+        while let Some(next_token) = self.token_iter.peek().cloned().transpose()? {
+            if next_token.label != LuaTokenLabel::Comma {
+                break;
+            }
+
+            // consume comma
+            self.token_iter.next();
+
+            let instructions = &mut self.top_function.instructions;
+            last_expression_start = instructions.len();
+
+            let dest = top_register + total;
+            let r = self.resolve_expression(dest, ReturnMode::Extend(count_register), 0)?;
+            self.copy_stack_value(dest, r);
+            total += 1;
+        }
+
+        // update the count
+        let instructions = &mut self.top_function.instructions;
+
+        if matches!(instructions.last(), Some(Instruction::CopyVariadic(..))) {
+            // let the variadic update this
+            total -= 1;
+        }
+
+        self.variadic_to_single_static(top_register, first_expression_start..last_expression_start);
+
+        Ok(total)
     }
 
     /// Adds expression results to the stack without a count
