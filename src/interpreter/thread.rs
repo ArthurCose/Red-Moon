@@ -1820,14 +1820,16 @@ fn resolve_call(
             return Err(RuntimeErrorData::NotAFunction);
         };
 
-        match heap_value {
-            HeapValue::Function(_) | HeapValue::NativeFunction(_) => break Ok(heap_key),
-            _ => {
-                let next_value = heap.get_metavalue(heap_key, call_key);
-                prepend_arg(heap, value)?;
-                value = next_value;
-            }
+        if matches!(
+            heap_value,
+            HeapValue::Function(_) | HeapValue::NativeFunction(_)
+        ) {
+            break Ok(heap_key);
         }
+
+        let next_value = heap.get_metavalue(heap_key, call_key);
+        prepend_arg(heap, value)?;
+        value = next_value;
 
         chain_depth += 1;
 
