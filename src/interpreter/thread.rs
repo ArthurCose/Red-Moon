@@ -192,15 +192,10 @@ impl Thread {
                                     self.value_stack.chip(stack_start, 0);
 
                                     self.value_stack.extend(
-                                        std::iter::from_fn(|| {
-                                            Some(
-                                                return_values
-                                                    .pop_front()
-                                                    .map(|v| v.to_stack_value())
-                                                    .unwrap_or_default(),
-                                            )
-                                        })
-                                        .take(return_count as usize),
+                                        std::iter::from_fn(|| return_values.pop_front())
+                                            .map(|v| v.to_stack_value())
+                                            .chain(std::iter::repeat(StackValue::default()))
+                                            .take(return_count as usize),
                                     );
                                 }
                                 ReturnMode::Destination(dest) => {
