@@ -16,7 +16,7 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         if !passed {
             if let Some(s) = message.into_arg(vm)? {
-                return Err(RuntimeError::new_string(s.to_string()));
+                return Err(RuntimeError::new_byte_string(s));
             } else {
                 return Err(RuntimeError::new_static_string("assertion failed!"));
             }
