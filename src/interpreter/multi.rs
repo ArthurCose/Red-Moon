@@ -18,19 +18,19 @@ impl MultiValue {
         T::from_multi(self, vm)
     }
 
-    pub fn unpack_args<T: FromMulti>(self, vm: &mut Vm) -> Result<T, RuntimeError> {
-        T::from_multi_args(self, 1, vm)
+    pub fn unpack_args<T: FromArgs>(self, vm: &mut Vm) -> Result<T, RuntimeError> {
+        T::from_args(self, 1, vm)
     }
 
     /// `position` is the argument position of the first value, starts at 1
     ///
     /// `position` should be incremented for every value taken from the multivalue before calling this function
-    pub fn unpack_modified_args<T: FromMulti>(
+    pub fn unpack_modified_args<T: FromArgs>(
         self,
         vm: &mut Vm,
         position: usize,
     ) -> Result<T, RuntimeError> {
-        T::from_multi_args(self, position, vm)
+        T::from_args(self, position, vm)
     }
 
     #[inline]
@@ -168,15 +168,6 @@ impl_into_multi! { A B C D E F G H I J K L }
 
 pub trait FromMulti: Sized {
     fn from_multi(multi: MultiValue, vm: &mut Vm) -> Result<Self, RuntimeError>;
-
-    /// `position` is the argument position of the first value, starts at 1
-    ///
-    /// `position` should be incremented for every value taken from the multivalue before calling this function
-    fn from_multi_args(
-        multi: MultiValue,
-        position: usize,
-        vm: &mut Vm,
-    ) -> Result<Self, RuntimeError>;
 }
 
 impl FromMulti for MultiValue {
@@ -184,22 +175,11 @@ impl FromMulti for MultiValue {
     fn from_multi(multi: MultiValue, _: &mut Vm) -> Result<Self, RuntimeError> {
         Ok(multi)
     }
-
-    #[inline]
-    fn from_multi_args(multi: MultiValue, _: usize, _: &mut Vm) -> Result<Self, RuntimeError> {
-        Ok(multi)
-    }
 }
 
 impl FromMulti for () {
     #[inline]
     fn from_multi(multi: MultiValue, vm: &mut Vm) -> Result<Self, RuntimeError> {
-        vm.store_multi(multi);
-        Ok(())
-    }
-
-    #[inline]
-    fn from_multi_args(multi: MultiValue, _: usize, vm: &mut Vm) -> Result<Self, RuntimeError> {
         vm.store_multi(multi);
         Ok(())
     }
@@ -212,52 +192,16 @@ impl<T: FromValue> FromMulti for T {
         vm.store_multi(multi);
         result
     }
-
-    #[inline]
-    fn from_multi_args(
-        mut multi: MultiValue,
-        position: usize,
-        vm: &mut Vm,
-    ) -> Result<Self, RuntimeError> {
-        let result = T::from_value(multi.pop_front().unwrap_or(Primitive::Nil.into()), vm)
-            .map_err(|err| RuntimeError::new_bad_argument(position, err));
-
-        vm.store_multi(multi);
-        result
-    }
 }
 
 macro_rules! impl_from_multi {
     ($last:ident $($name:ident)+) => (
-        impl<$($name: FromValue,)* $last: FromMulti> FromMulti for ($($name,)* $last,)
-        {
+        impl<$($name: FromValue,)* $last: FromMulti> FromMulti for ($($name,)* $last,) {
             #[allow(non_snake_case)]
             #[inline]
             fn from_multi(mut multi: MultiValue, vm: &mut Vm) -> Result<Self, RuntimeError> {
                 $(let $name = $name::from_value(multi.pop_front().unwrap_or(Primitive::Nil.into()), vm)?;)*
                 let $last = $last::from_multi( multi,vm)?;
-                Ok(($($name,)* $last,))
-            }
-
-            #[allow(non_snake_case)]
-            #[inline]
-            fn from_multi_args(
-                mut multi: MultiValue,
-                mut position: usize,
-                vm: &mut Vm,
-            ) -> Result<Self, RuntimeError> {
-                $(let $name =
-                    match $name::from_value(multi.pop_front().unwrap_or(Primitive::Nil.into()), vm) {
-                        Ok(value) => value,
-                        Err(err) => {
-                            vm.store_multi(multi);
-                            return Err(RuntimeError::new_bad_argument(position, err))
-                        }
-                    };
-                position += 1;)*
-
-                let $last = $last::from_multi_args(multi, position, vm)?;
-
                 Ok(($($name,)* $last,))
             }
         }
@@ -275,3 +219,96 @@ impl_from_multi! { A B C D E F G H I }
 impl_from_multi! { A B C D E F G H I J }
 impl_from_multi! { A B C D E F G H I J K }
 impl_from_multi! { A B C D E F G H I J K L }
+
+pub trait FromArg: Sized {
+    /// `position` is the argument position, starts at 1
+    fn from_arg(value: Value, position: usize, vm: &mut Vm) -> Result<Self, RuntimeError>;
+}
+
+impl<T: FromValue> FromArg for T {
+    #[inline]
+    fn from_arg(value: Value, position: usize, vm: &mut Vm) -> Result<Self, RuntimeError> {
+        let _ = position;
+        Self::from_value(value, vm).map_err(|err| RuntimeError::new_bad_argument(position, err))
+    }
+}
+
+pub trait FromArgs: Sized {
+    /// `position` is the argument position of the first value, starts at 1
+    ///
+    /// `position` should be incremented for every value taken from the multivalue before calling this function
+    fn from_args(args: MultiValue, position: usize, vm: &mut Vm) -> Result<Self, RuntimeError>;
+}
+
+impl FromArgs for MultiValue {
+    #[inline]
+    fn from_args(args: MultiValue, _: usize, _: &mut Vm) -> Result<Self, RuntimeError> {
+        Ok(args)
+    }
+}
+
+impl FromArgs for () {
+    #[inline]
+    fn from_args(args: MultiValue, _: usize, vm: &mut Vm) -> Result<Self, RuntimeError> {
+        vm.store_multi(args);
+        Ok(())
+    }
+}
+
+impl<T: FromArg> FromArgs for T {
+    #[inline]
+    fn from_args(
+        mut multi: MultiValue,
+        position: usize,
+        vm: &mut Vm,
+    ) -> Result<Self, RuntimeError> {
+        let result = T::from_arg(
+            multi.pop_front().unwrap_or(Primitive::Nil.into()),
+            position,
+            vm,
+        );
+
+        vm.store_multi(multi);
+        result
+    }
+}
+
+macro_rules! impl_from_args {
+    ($last:ident $($name:ident)+) => (
+        impl<$($name: FromArg,)* $last: FromArgs> FromArgs for ($($name,)* $last,) {
+            #[allow(non_snake_case)]
+            #[inline]
+            fn from_args(
+                mut multi: MultiValue,
+                mut position: usize,
+                vm: &mut Vm,
+            ) -> Result<Self, RuntimeError> {
+                $(let $name =
+                    match $name::from_arg(multi.pop_front().unwrap_or(Primitive::Nil.into()), position, vm) {
+                        Ok(value) => value,
+                        Err(err) => {
+                            vm.store_multi(multi);
+                            return Err(err);
+                        }
+                    };
+                position += 1;)*
+
+                let $last = $last::from_args(multi, position, vm)?;
+
+                Ok(($($name,)* $last,))
+            }
+        }
+    );
+}
+
+impl_from_args! { A B }
+impl_from_args! { A B C }
+impl_from_args! { A B C D }
+impl_from_args! { A B C D E }
+impl_from_args! { A B C D E F }
+impl_from_args! { A B C D E F G }
+impl_from_args! { A B C D E F G H }
+impl_from_args! { A B C D E F G H I }
+impl_from_args! { A B C D E F G H I J }
+impl_from_args! { A B C D E F G H I J K }
+impl_from_args! { A B C D E F G H I J K L }

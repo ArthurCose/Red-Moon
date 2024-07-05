@@ -1,5 +1,7 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{ByteString, FromValue, MultiValue, Primitive, TableRef, Value, Vm};
+use crate::interpreter::{
+    ByteString, FromValue, LazyArg, MultiValue, Primitive, TableRef, Value, Vm,
+};
 use crate::languages::lua::parse_number;
 
 pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
@@ -10,10 +12,10 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // assert
     let assert = vm.create_native_function(|args, vm| {
-        let (passed, message): (bool, Option<ByteString>) = args.unpack_args(vm)?;
+        let (passed, message): (bool, LazyArg<Option<ByteString>>) = args.unpack_args(vm)?;
 
         if !passed {
-            if let Some(s) = message {
+            if let Some(s) = message.into_arg(vm)? {
                 return Err(RuntimeError::new_string(s.to_string()));
             } else {
                 return Err(RuntimeError::new_static_string("assertion failed!"));
