@@ -690,6 +690,9 @@ impl CallContext {
                         value_stack.set(dest_index, value);
                     }
                 }
+                Instruction::CopyArgs(dest, count) => {
+                    self.copy_args(heap, value_stack, *dest, *count);
+                }
                 Instruction::CopyVariadic(dest, count_register, skip) => {
                     let dest_index = self.register_base + *dest as usize;
                     let arg_index = self.stack_start + 2 + *skip as usize;
@@ -1700,6 +1703,41 @@ impl CallContext {
             table.set(key, src_value);
 
             Ok(None)
+        }
+    }
+
+    fn copy_args(
+        &self,
+        heap: &mut Heap,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        count: Register,
+    ) {
+        let dest_start = self.register_base + dest as usize;
+        let count = count as usize;
+
+        let arg_start_index = self.stack_start + 2;
+        let arg_end_index = arg_start_index + count;
+
+        // dest will always be greater than the arg source
+        // since args are stored before the register base, and dest is stored after
+        let end = self.register_base + dest_start + count;
+        let slice = value_stack.get_slice_mut(0..end);
+
+        for arg_index in arg_start_index..arg_end_index {
+            let dest_index = dest_start + arg_index - arg_start_index;
+
+            let value = if arg_index >= self.register_base {
+                StackValue::default()
+            } else {
+                slice[arg_index]
+            };
+
+            if let StackValue::Pointer(heap_key) = slice[dest_index] {
+                heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+            } else {
+                slice[dest_index] = value;
+            }
         }
     }
 

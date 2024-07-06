@@ -145,6 +145,11 @@ pub enum Instruction {
     /// (dest, arg)
     CopyArg(Register, Register),
 
+    /// Copies values from args to the destination
+    ///
+    /// (dest, count)
+    CopyArgs(Register, Register),
+
     /// Copies args to the destination and increments the value at count_dest for each copied arg
     ///
     /// (dest, count_dest, skip)

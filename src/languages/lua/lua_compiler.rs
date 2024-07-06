@@ -312,10 +312,7 @@ where
 
             match token.label {
                 LuaTokenLabel::Name => {
-                    let local = self.top_function.register_local(self.source, token)?;
-                    let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::CopyArg(local, named_count));
-
+                    self.top_function.register_local(self.source, token)?;
                     named_count += 1;
                 }
                 LuaTokenLabel::TripleDot => {
@@ -1216,11 +1213,12 @@ where
         let old_top_function = std::mem::take(&mut self.top_function);
         self.function_stack.push(old_top_function);
 
+        // resolve parameters
+        let args_start = self.top_function.next_register;
         let mut implicit_param_count = 0;
 
         if register_self {
-            let local = self
-                .top_function
+            self.top_function
                 .register_local(
                     self.source,
                     LuaToken {
@@ -1231,13 +1229,21 @@ where
                 )
                 .expect("this should be the second local, and we should have room for more");
 
-            let instructions = &mut self.top_function.instructions;
-            instructions.push(Instruction::CopyArg(local, 0));
-
             implicit_param_count = 1;
         }
 
         self.resolve_parameters(implicit_param_count)?;
+
+        // copy args
+        if self.top_function.named_param_count > 0 {
+            let instructions = &mut self.top_function.instructions;
+            instructions.push(Instruction::CopyArgs(
+                args_start,
+                self.top_function.named_param_count,
+            ));
+        }
+
+        // resolve instructions
         self.resolve_block()?;
         let token = self.expect(LuaTokenLabel::End)?;
 
