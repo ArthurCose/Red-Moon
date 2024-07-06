@@ -1715,7 +1715,7 @@ impl CallContext {
         let dest_start = self.register_base + dest as usize;
         let count = count as usize;
 
-        let end = self.register_base + src_start.max(dest_start) + count;
+        let end = src_start.max(dest_start) + count;
         let slice = value_stack.get_slice_mut(0..end);
 
         for i in 0..count {
