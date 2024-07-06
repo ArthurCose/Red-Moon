@@ -14,7 +14,7 @@ use std::rc::Rc;
 pub(crate) enum HeapValue {
     StackValue(StackValue),
     Bytes(ByteString),
-    Table(Table),
+    Table(Box<Table>),
     NativeFunction(NativeFunction),
     Function(Function),
 }
@@ -77,7 +77,8 @@ pub(crate) struct Heap {
     storage: slotmap::SlotMap<HeapKey, HeapRecord>,
     byte_strings: FastHashMap<ByteString, HeapKey>,
     ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
-    recycled_tables: Rc<Cell<Vec<Table>>>,
+    #[allow(clippy::vec_box)]
+    recycled_tables: Rc<Cell<Vec<Box<Table>>>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef,
 }

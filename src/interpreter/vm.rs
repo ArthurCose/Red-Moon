@@ -1,6 +1,5 @@
 use super::heap::{Heap, HeapKey, HeapRef, HeapValue};
 use super::metatable_keys::MetatableKeys;
-use super::table::Table;
 use super::thread::Thread;
 use super::value_stack::ValueStack;
 use super::{FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef, TableRef};
@@ -80,7 +79,7 @@ impl Vm {
     pub fn new() -> Self {
         let mut heap = Heap::default();
 
-        let default_environment = heap.create(HeapValue::Table(Table::default()));
+        let default_environment = heap.create(HeapValue::Table(Default::default()));
         let default_environment = heap.create_ref(default_environment).unwrap();
 
         let metatable_keys = MetatableKeys::new(&mut heap);
