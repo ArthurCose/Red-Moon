@@ -207,6 +207,15 @@ pub enum Instruction {
     /// (dest, src)
     CopyToDeref(Register, Register),
 
+    /// Copies a range of values
+    ///
+    /// If a value points to another value, the pointed to value will be updated instead (used for closures)
+    ///
+    /// Does not account for `src` < `dest`
+    ///
+    /// (dest, src, count)
+    CopyRangeToDeref(Register, Register, Register),
+
     /// (dest, src)
     Len(Register, Register),
 

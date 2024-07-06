@@ -820,6 +820,9 @@ impl CallContext {
                         value_stack.set(dest_index, value);
                     }
                 }
+                Instruction::CopyRangeToDeref(dest, src, count) => {
+                    self.copy_range_to_deref(heap, value_stack, *dest, *src, *count);
+                }
                 Instruction::Not(dest, src) => {
                     let value = !value_stack.is_truthy(self.register_base + *src as usize);
                     value_stack.set(
@@ -1697,6 +1700,35 @@ impl CallContext {
             table.set(key, src_value);
 
             Ok(None)
+        }
+    }
+
+    fn copy_range_to_deref(
+        &self,
+        heap: &mut Heap,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        src: Register,
+        count: Register,
+    ) {
+        let src_start = self.register_base + src as usize;
+        let dest_start = self.register_base + dest as usize;
+        let count = count as usize;
+
+        let end = self.register_base + src_start.max(dest_start) + count;
+        let slice = value_stack.get_slice_mut(0..end);
+
+        for i in 0..count {
+            let dest_index = dest_start + i;
+            let src_index = src_start + i;
+
+            let value = slice[src_index].get_deref(heap);
+
+            if let StackValue::Pointer(heap_key) = slice[dest_index] {
+                heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+            } else {
+                slice[dest_index] = value;
+            }
         }
     }
 }

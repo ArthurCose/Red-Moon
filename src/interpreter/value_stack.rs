@@ -50,6 +50,21 @@ impl From<HeapKey> for StackValue {
     }
 }
 
+impl StackValue {
+    #[inline]
+    pub(crate) fn get_deref(self, heap: &Heap) -> Self {
+        let StackValue::Pointer(key) = self else {
+            return self;
+        };
+
+        let HeapValue::StackValue(value) = heap.get(key).unwrap() else {
+            unreachable!();
+        };
+
+        *value
+    }
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct ValueStack {
     values: Vec<StackValue>,
@@ -77,27 +92,23 @@ impl ValueStack {
     }
 
     pub(crate) fn get_deref(&self, heap: &Heap, index: usize) -> StackValue {
-        let Some(value) = self.values.get(index) else {
-            return StackValue::Primitive(Primitive::Nil);
-        };
-
-        if let StackValue::Pointer(key) = value {
-            let HeapValue::StackValue(value) = heap.get(*key).unwrap() else {
-                unreachable!();
-            };
-
-            return *value;
-        }
-
-        *value
+        self.get(index).get_deref(heap)
     }
 
-    pub(crate) fn get_slice(&self, mut range: Range<usize>) -> &[StackValue] {
+    pub(crate) fn get_slice(&mut self, range: Range<usize>) -> &[StackValue] {
         if range.end > self.values.len() {
-            range.end = self.values.len();
+            self.values.resize_with(range.end, Default::default);
         }
 
         &self.values[range]
+    }
+
+    pub(crate) fn get_slice_mut(&mut self, range: Range<usize>) -> &mut [StackValue] {
+        if range.end > self.values.len() {
+            self.values.resize_with(range.end, Default::default);
+        }
+
+        &mut self.values[range]
     }
 
     pub(crate) fn is_truthy(&self, index: usize) -> bool {

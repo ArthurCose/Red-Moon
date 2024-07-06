@@ -2310,7 +2310,8 @@ where
         name_token: LuaToken<'source>,
         next_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
-        let mut locals = vec![self.top_function.register_local(self.source, name_token)?];
+        let first_local = self.top_function.register_local(self.source, name_token)?;
+        let mut total_locals = 1;
         let mut name_token;
         let mut next_token = next_token;
 
@@ -2322,8 +2323,8 @@ where
             }
 
             name_token = self.expect(LuaTokenLabel::Name)?;
-            let local = self.top_function.register_local(self.source, name_token)?;
-            locals.push(local);
+            self.top_function.register_local(self.source, name_token)?;
+            total_locals += 1;
 
             if next_token.label == LuaTokenLabel::In {
                 break;
@@ -2362,10 +2363,11 @@ where
         instructions.push(Instruction::Jump(0.into()));
 
         // assign locals
-        for (i, dest) in locals.into_iter().enumerate() {
-            let src = control_register + i as Register;
-            self.copy_stack_value(dest, src);
-        }
+        instructions.push(Instruction::CopyRangeToDeref(
+            first_local,
+            control_register,
+            total_locals,
+        ));
 
         // avoid overwriting control registers
         self.top_function.next_register += control_register + 1;
