@@ -183,7 +183,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
         Ok(Function {
             lua: self.lua,
-            function_ref: vm.load_function(self.name.as_str(), environment, module),
+            function_ref: vm.load_function(self.name.as_str(), environment, module)?,
         })
     }
 
@@ -201,7 +201,7 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
 
         Ok(Function {
             lua: self.lua,
-            function_ref: vm.load_function(self.name.as_str(), environment, module),
+            function_ref: vm.load_function(self.name.as_str(), environment, module)?,
         })
     }
 

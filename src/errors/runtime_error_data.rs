@@ -5,6 +5,7 @@ use std::{borrow::Cow, rc::Rc};
 #[derive(Debug, PartialEq, Clone)]
 pub enum RuntimeErrorData {
     IllegalInstruction(IllegalInstruction),
+    MissingMain,
     StackOverflow,
     NotAFunction,
     MetatableChainTooLong,

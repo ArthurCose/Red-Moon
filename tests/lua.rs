@@ -72,7 +72,7 @@ fn valid() {
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         let module = compiler.compile(&source).expect(path);
-        let function_ref = vm.load_function(path, None, module);
+        let function_ref = vm.load_function(path, None, module).unwrap();
 
         if let Err(err) = function_ref.call::<_, ()>((), &mut vm) {
             panic!(
@@ -191,7 +191,7 @@ fn runtime_error() {
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         let module = compiler.compile(&source).unwrap();
-        let function_ref = vm.load_function(path, None, module);
+        let function_ref = vm.load_function(path, None, module).unwrap();
 
         assert_eq!(
             function_ref

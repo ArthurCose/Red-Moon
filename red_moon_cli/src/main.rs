@@ -110,7 +110,7 @@ fn execute_source(
         }
     };
 
-    let function_ref = vm.load_function(label, None, module);
+    let function_ref = vm.load_function(label, None, module).unwrap();
 
     // translate args
     let mut args_multi = vm.create_multi();
@@ -186,7 +186,7 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
         // store the original input in the history
         let _ = rl.add_history_entry(&input_buffer);
 
-        let function = vm.load_function("stdin", None, module);
+        let function = vm.load_function("stdin", None, module).unwrap();
 
         match function.call::<_, MultiValue>((), vm) {
             Err(err) => println!("{err}"),

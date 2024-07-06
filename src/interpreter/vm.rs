@@ -252,7 +252,7 @@ impl Vm {
         label: Label,
         environment: Option<TableRef>,
         module: Module<ByteStrings>,
-    ) -> FunctionRef
+    ) -> Result<FunctionRef, RuntimeError>
     where
         Label: Into<Rc<str>>,
         B: AsRef<[u8]> + 'a,
@@ -266,7 +266,7 @@ impl Vm {
 
         let mut keys = Vec::with_capacity(module.chunks.len());
 
-        for block in module.chunks {
+        for (i, block) in module.chunks.into_iter().enumerate() {
             let byte_strings = block
                 .byte_strings
                 .into_iter()
@@ -279,10 +279,16 @@ impl Vm {
                 .map(|index| keys[index])
                 .collect();
 
+            let mut up_values = ValueStack::default();
+
+            if i == module.main {
+                up_values.push(environment);
+            }
+
             let key = self.heap.create_with_key(|key| {
                 HeapValue::Function(Function {
                     key,
-                    up_values: Default::default(),
+                    up_values: up_values.into(),
                     definition: Rc::new(FunctionDefinition {
                         label: label.clone(),
                         byte_strings,
@@ -297,33 +303,10 @@ impl Vm {
             keys.push(key);
         }
 
-        let byte_strings = module
-            .byte_strings
-            .into_iter()
-            .map(|bytes| self.heap.intern_bytes(bytes.as_ref()))
-            .collect();
+        let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
+        let heap_ref = self.heap.create_ref(*key).unwrap();
 
-        let mut captures = ValueStack::default();
-        captures.push(environment);
-
-        let key = self.heap.create_with_key(|key| {
-            HeapValue::Function(Function {
-                key,
-                up_values: captures.into(),
-                definition: Rc::new(FunctionDefinition {
-                    label,
-                    byte_strings,
-                    numbers: module.numbers,
-                    functions: keys,
-                    instructions: module.instructions,
-                    source_map: module.source_map,
-                }),
-            })
-        });
-
-        let heap_ref = self.heap.create_ref(key).unwrap();
-
-        FunctionRef(heap_ref)
+        Ok(FunctionRef(heap_ref))
     }
 
     pub fn create_native_function(

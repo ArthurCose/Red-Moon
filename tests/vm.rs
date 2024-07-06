@@ -1,4 +1,6 @@
-use red_moon::interpreter::{Instruction, Module, MultiValue, Primitive, ReturnMode, Value, Vm};
+use red_moon::interpreter::{
+    Chunk, Instruction, Module, MultiValue, Primitive, ReturnMode, Value, Vm,
+};
 
 #[test]
 fn instructions_print() {
@@ -32,33 +34,38 @@ fn instructions_print() {
 
     let byte_strings: Vec<&[u8]> = vec![b"print", b"hello", b"world", b"!"];
 
-    let function_ref = vm.load_function(
-        "",
-        None,
-        Module {
-            byte_strings,
-            numbers: vec![3],
-            instructions: vec![
-                // Copy `_ENV` into the first stack register
-                Instruction::CopyUpValue(0, 0),
-                // replace with `_ENV.print`
-                Instruction::CopyTableField(0, 0),
-                Instruction::Constant(0),
-                // "!" ("hello world !" in reverse)
-                Instruction::LoadBytes(4, 3),
-                // "world"
-                Instruction::LoadBytes(3, 2),
-                // "hello"
-                Instruction::LoadBytes(2, 1),
-                // load arg count (3)
-                Instruction::LoadInt(1, 0),
-                // call `_ENV.print`
-                Instruction::Call(0, ReturnMode::Multi),
-            ],
-            chunks: Default::default(),
-            source_map: Default::default(),
-        },
-    );
+    let function_ref = vm
+        .load_function(
+            "",
+            None,
+            Module {
+                chunks: vec![Chunk {
+                    dependencies: Default::default(),
+                    byte_strings,
+                    numbers: vec![3],
+                    instructions: vec![
+                        // Copy `_ENV` into the first stack register
+                        Instruction::CopyUpValue(0, 0),
+                        // replace with `_ENV.print`
+                        Instruction::CopyTableField(0, 0),
+                        Instruction::Constant(0),
+                        // "!" ("hello world !" in reverse)
+                        Instruction::LoadBytes(4, 3),
+                        // "world"
+                        Instruction::LoadBytes(3, 2),
+                        // "hello"
+                        Instruction::LoadBytes(2, 1),
+                        // load arg count (3)
+                        Instruction::LoadInt(1, 0),
+                        // call `_ENV.print`
+                        Instruction::Call(0, ReturnMode::Multi),
+                    ],
+                    source_map: Default::default(),
+                }],
+                main: 0,
+            },
+        )
+        .unwrap();
 
     function_ref.call::<_, ()>((), &mut vm).unwrap();
 }

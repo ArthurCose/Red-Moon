@@ -285,15 +285,19 @@ where
             ));
         }
 
-        self.module.byte_strings = self.top_function.strings;
-        self.module.numbers = self.top_function.numbers;
-        self.module.instructions = self.top_function.instructions;
-        self.module.source_map = self.top_function.source_map;
-
         // catch number limit
         if self.module.chunks.len() > ConstantIndex::MAX as usize {
             return Err(LuaCompilationError::ReachedFunctionLimit);
         }
+
+        self.module.main = self.module.chunks.len();
+        self.module.chunks.push(Chunk {
+            dependencies: self.top_function.dependencies,
+            byte_strings: self.top_function.strings,
+            numbers: self.top_function.numbers,
+            instructions: self.top_function.instructions,
+            source_map: self.top_function.source_map,
+        });
 
         Ok(self.module)
     }
@@ -1289,13 +1293,8 @@ where
         });
 
         // track dependency
-        let function_index = if self.function_stack.is_empty() {
-            // separate mode for the root function as it has no dependencies list and implicitly depends on every function
-            chunk_index
-        } else {
-            self.top_function.dependencies.push(chunk_index);
-            self.top_function.dependencies.len() - 1
-        };
+        let function_index = self.top_function.dependencies.len();
+        self.top_function.dependencies.push(chunk_index);
 
         // create closure
         let instructions = &mut self.top_function.instructions;

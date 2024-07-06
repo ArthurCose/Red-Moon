@@ -30,9 +30,6 @@ pub struct Chunk<ByteStrings> {
 
 #[derive(Default)]
 pub struct Module<ByteStrings> {
-    pub byte_strings: ByteStrings,
-    pub numbers: Vec<i64>,
-    pub instructions: Vec<Instruction>,
-    pub source_map: Vec<SourceMapping>,
     pub chunks: Vec<Chunk<ByteStrings>>,
+    pub main: usize,
 }
