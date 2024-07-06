@@ -377,16 +377,18 @@ impl Thread {
                             self.value_stack.set(len_register, count_value);
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
-                            let mut values = vec![];
+                            let mut values = vm.create_short_value_stack();
 
                             let start = stack_index + 1;
-                            for i in start..start + return_count {
-                                values.push(self.value_stack.get(i));
+                            for value in self.value_stack.get_slice(start..start + return_count) {
+                                values.push(*value);
                             }
 
                             let dest_index = parent_base + dest as usize;
                             self.value_stack.chip(dest_index, 0);
-                            self.value_stack.extend(values.into_iter());
+                            self.value_stack
+                                .extend(values.get_slice(0..return_count).iter().cloned());
+                            vm.store_short_value_stack(values);
                         }
                         ReturnMode::TailCall => unreachable!(),
                     }
