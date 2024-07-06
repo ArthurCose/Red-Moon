@@ -124,16 +124,7 @@ impl Heap {
     }
 
     pub(crate) fn create(&mut self, value: HeapValue) -> HeapKey {
-        self.create_with_key(|_| value)
-    }
-
-    pub(crate) fn create_with_key(
-        &mut self,
-        callback: impl FnOnce(HeapKey) -> HeapValue,
-    ) -> HeapKey {
-        self.storage.insert_with_key(|key| HeapRecord {
-            value: callback(key),
-        })
+        self.storage.insert(HeapRecord { value })
     }
 
     pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> Option<HeapRef> {

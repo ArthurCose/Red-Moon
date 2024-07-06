@@ -21,10 +21,15 @@ pub(crate) struct Thread {
 }
 
 impl Thread {
-    pub(crate) fn new_function_call(function: Function, args: MultiValue, vm: &mut Vm) -> Self {
+    pub(crate) fn new_function_call(
+        function_key: HeapKey,
+        function: Function,
+        args: MultiValue,
+        vm: &mut Vm,
+    ) -> Self {
         let mut value_stack = vm.create_value_stack();
 
-        value_stack.push(function.key.into());
+        value_stack.push(function_key.into());
         args.push_stack_multi(&mut value_stack);
         vm.store_multi(args);
 

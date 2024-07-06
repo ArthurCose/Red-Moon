@@ -285,20 +285,17 @@ impl Vm {
                 up_values.push(environment);
             }
 
-            let key = self.heap.create_with_key(|key| {
-                HeapValue::Function(Function {
-                    key,
-                    up_values: up_values.into(),
-                    definition: Rc::new(FunctionDefinition {
-                        label: label.clone(),
-                        byte_strings,
-                        numbers: block.numbers,
-                        functions,
-                        instructions: block.instructions,
-                        source_map: block.source_map,
-                    }),
-                })
-            });
+            let key = self.heap.create(HeapValue::Function(Function {
+                up_values: up_values.into(),
+                definition: Rc::new(FunctionDefinition {
+                    label: label.clone(),
+                    byte_strings,
+                    numbers: block.numbers,
+                    functions,
+                    instructions: block.instructions,
+                    source_map: block.source_map,
+                }),
+            }));
 
             keys.push(key);
         }
@@ -341,7 +338,7 @@ impl Vm {
         let result = match value {
             HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
             HeapValue::Function(func) => {
-                let thread = Thread::new_function_call(func.clone(), args, self);
+                let thread = Thread::new_function_call(function_key, func.clone(), args, self);
                 thread.resume(self)
             }
             _ => Thread::new_value_call(function_key.into(), args, self)

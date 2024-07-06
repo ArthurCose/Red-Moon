@@ -45,7 +45,6 @@ impl FunctionDefinition {
 
 #[derive(Clone)]
 pub(crate) struct Function {
-    pub(crate) key: HeapKey,
     pub(crate) up_values: Rc<ValueStack>,
     pub(crate) definition: Rc<FunctionDefinition>,
 }
