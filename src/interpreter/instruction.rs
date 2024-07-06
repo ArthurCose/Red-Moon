@@ -141,6 +141,7 @@ pub enum Instruction {
     CopyToTableValue(Register, Register, Register),
 
     /// Copies a value from an arg to the destination
+    ///
     /// (dest, arg)
     CopyArg(Register, Register),
 
@@ -155,6 +156,7 @@ pub enum Instruction {
     CopyUnsizedVariadic(Register, Register),
 
     /// Promotes a stack value to a heap value if it's not already
+    ///
     /// Passes as an up value to the next Closure instruction
     ///
     /// (dest, src)
@@ -187,6 +189,7 @@ pub enum Instruction {
     CopyToUpValue(Register, Register),
 
     /// Copies a value to a up value
+    ///
     /// If the value points to another value, the pointed to value will be updated instead (used for closures)
     ///
     /// (dest, src)
@@ -198,6 +201,7 @@ pub enum Instruction {
     Copy(Register, Register),
 
     /// Copies a value
+    ///
     /// If the value points to another value, the pointed to value will be updated instead (used for closures)
     ///
     /// (dest, src)
