@@ -1,6 +1,6 @@
 use super::heap::{Heap, HeapKey, HeapValue};
 use super::instruction::{Instruction, Register, ReturnMode};
-use super::interpreted_function::Function;
+use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
 use super::value_stack::{Primitive, StackValue, ValueStack};
 use super::vm::Vm;
@@ -398,7 +398,7 @@ impl Thread {
                         ReturnMode::TailCall => unreachable!(),
                     }
 
-                    last_definition = Some(context.function.definition);
+                    last_definition = Some(context.function_definition);
                 }
             }
         }
@@ -446,7 +446,7 @@ impl Thread {
         // recycle value stacks
         for call in self.call_stack.into_iter().rev() {
             let instruction_index = call.next_instruction_index.saturating_sub(1);
-            let definition = call.function.definition;
+            let definition = call.function_definition;
             let frame = definition.create_stack_trace_frame(instruction_index);
             err.trace.push_frame(frame);
 
@@ -459,7 +459,7 @@ impl Thread {
 }
 
 struct CallContext {
-    function: Function,
+    function_definition: Rc<FunctionDefinition>,
     pending_captures: ValueStack,
     next_instruction_index: usize,
     stack_start: usize,
@@ -475,7 +475,7 @@ impl CallContext {
         up_values.clone_from(&*function.up_values);
 
         Self {
-            function,
+            function_definition: function.definition,
             pending_captures: vm.create_short_value_stack(),
             next_instruction_index: 0,
             stack_start,
@@ -491,7 +491,7 @@ impl CallContext {
         value_stack: &mut ValueStack,
         vm: &mut Vm,
     ) -> Result<CallResult, RuntimeErrorData> {
-        let definition = &self.function.definition;
+        let definition = &self.function_definition;
         let mut for_loop_jump = false;
 
         while let Some(instruction) = definition.instructions.get(self.next_instruction_index) {
