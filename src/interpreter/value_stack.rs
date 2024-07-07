@@ -65,9 +65,21 @@ impl StackValue {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub(crate) struct ValueStack {
     values: Vec<StackValue>,
+}
+
+impl Clone for ValueStack {
+    fn clone(&self) -> Self {
+        Self {
+            values: self.values.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.values.clone_from(&source.values);
+    }
 }
 
 impl ValueStack {
