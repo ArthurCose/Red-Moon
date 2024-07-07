@@ -255,14 +255,14 @@ impl Value {
                 };
 
                 match value {
-                    HeapValue::StackValue(v) => Value::from_stack_value(heap, *v)?,
                     HeapValue::Bytes(_) => Value::String(StringRef(heap.create_ref(key).unwrap())),
                     HeapValue::Table(_) => Value::Table(TableRef(heap.create_ref(key).unwrap())),
-                    HeapValue::NativeFunction(_) => {
+                    HeapValue::Function(_) | HeapValue::NativeFunction(_) => {
                         Value::Function(FunctionRef(heap.create_ref(key).unwrap()))
                     }
-                    HeapValue::Function(_) => {
-                        Value::Function(FunctionRef(heap.create_ref(key).unwrap()))
+                    HeapValue::StackValue(_) => {
+                        // only StackValue::Pointer should point to StackValues
+                        unreachable!()
                     }
                 }
             }
