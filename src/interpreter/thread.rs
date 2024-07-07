@@ -459,14 +459,14 @@ impl Thread {
 }
 
 struct CallContext {
-    function_definition: Rc<FunctionDefinition>,
+    up_values: ValueStack,
     pending_captures: ValueStack,
+    function_definition: Rc<FunctionDefinition>,
     next_instruction_index: usize,
     stack_start: usize,
     register_base: usize,
     table_flush_count: usize,
     return_mode: ReturnMode,
-    up_values: ValueStack,
 }
 
 impl CallContext {
@@ -475,14 +475,14 @@ impl CallContext {
         up_values.clone_from(&*function.up_values);
 
         Self {
-            function_definition: function.definition,
+            up_values,
             pending_captures: vm.create_short_value_stack(),
+            function_definition: function.definition,
             next_instruction_index: 0,
             stack_start,
             register_base,
             table_flush_count: 0,
             return_mode: ReturnMode::Multi,
-            up_values,
         }
     }
 
