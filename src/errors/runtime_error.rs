@@ -5,8 +5,8 @@ use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct RuntimeError {
-    pub data: RuntimeErrorData,
     pub trace: StackTrace,
+    pub data: RuntimeErrorData,
 }
 
 impl RuntimeError {
