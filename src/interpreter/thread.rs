@@ -788,8 +788,12 @@ impl CallContext {
 
                         // copy the function to pass captures
                         let mut func = func.clone();
-                        func.up_values = Rc::new(std::mem::take(&mut self.pending_captures));
 
+                        let mut up_values = vm.create_short_value_stack();
+                        std::mem::swap(&mut up_values, &mut self.pending_captures);
+                        func.up_values = Rc::new(up_values);
+
+                        let heap = vm.heap_mut();
                         let heap_key = heap.create(HeapValue::Function(func));
 
                         value_stack.set(self.register_base + *dest as usize, heap_key.into());
