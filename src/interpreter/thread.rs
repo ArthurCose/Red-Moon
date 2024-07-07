@@ -1621,10 +1621,6 @@ impl CallContext {
             let mut next_index_base = index_base;
 
             while next_index_base != StackValue::Primitive(Primitive::Nil) {
-                if chain_depth > max_chain_depth {
-                    return Err(RuntimeErrorData::MetatableChainTooLong);
-                }
-
                 index_base = next_index_base;
 
                 let StackValue::HeapValue(heap_key) = index_base else {
@@ -1660,6 +1656,10 @@ impl CallContext {
 
                 next_index_base = heap.get_metavalue(heap_key, metamethod_key);
                 chain_depth += 1;
+
+                if chain_depth > max_chain_depth {
+                    return Err(RuntimeErrorData::MetatableChainTooLong);
+                }
             }
         }
 
