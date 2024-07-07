@@ -125,6 +125,9 @@ fn execute_source(
         return Err(());
     }
 
+    #[cfg(feature = "instruction_exec_counts")]
+    print_instruction_exec_counts(vm);
+
     Ok(())
 }
 
@@ -199,6 +202,9 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
             }
         }
 
+        #[cfg(feature = "instruction_exec_counts")]
+        print_instruction_exec_counts(vm);
+
         input_buffer.clear();
     }
 }
@@ -244,4 +250,31 @@ fn impl_rewind(vm: &mut Vm) -> Result<(), RuntimeError> {
     env.set("rewind", rewind, vm)?;
 
     Ok(())
+}
+
+#[cfg(feature = "instruction_exec_counts")]
+pub(crate) fn print_instruction_exec_counts(vm: &mut Vm) {
+    let results = vm.instruction_exec_counts();
+    vm.clear_instruction_exec_counts();
+
+    // collect data for formatting
+    let mut label_max_len = 0;
+    let mut count_max_len = 0;
+    let mut total_instructions = 0;
+
+    for (label, count) in &results {
+        label_max_len = label.len().max(label_max_len);
+        count_max_len = count_max_len.max(count.ilog10() + 1);
+        total_instructions += count;
+    }
+
+    for (label, count) in results {
+        let percent = count as f32 / total_instructions as f32 * 100.0;
+
+        println!(
+            "{percent:>6.2}% | {label:<label_max_len$} | {count:>count_max_len$}",
+            label_max_len = label_max_len,
+            count_max_len = count_max_len as usize
+        );
+    }
 }

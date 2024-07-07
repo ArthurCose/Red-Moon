@@ -312,3 +312,92 @@ pub enum Instruction {
     /// (register)
     Return(Register),
 }
+
+impl Instruction {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Instruction::Constant(_) => "Constant",
+            Instruction::SetNil(_) => "SetNil",
+            Instruction::SetBool(_, _) => "SetBool",
+            Instruction::LoadInt(_, _) => "LoadInt",
+            Instruction::LoadFloat(_, _) => "LoadFloat",
+            Instruction::LoadBytes(_, _) => "LoadBytes",
+            Instruction::ClearFrom(_) => "ClearFrom",
+            Instruction::PrepMulti(_, _) => "PrepMulti",
+            Instruction::CreateTable(_, _) => "CreateTable",
+            Instruction::FlushToTable(_, _, _) => "FlushToTable",
+            Instruction::VariadicToTable(_, _, _) => "VariadicToTable",
+            Instruction::CopyTableField(_, _) => "CopyTableField",
+            Instruction::CopyToTableField(_, _) => "CopyToTableField",
+            Instruction::CopyTableValue(_, _, _) => "CopyTableValue",
+            Instruction::CopyToTableValue(_, _, _) => "CopyToTableValue",
+            Instruction::CopyArg(_, _) => "CopyArg",
+            Instruction::CopyArgs(_, _) => "CopyArgs",
+            Instruction::CopyVariadic(_, _, _) => "CopyVariadic",
+            Instruction::CopyUnsizedVariadic(_, _) => "CopyUnsizedVariadic",
+            Instruction::Capture(_, _) => "Capture",
+            Instruction::CaptureUpValue(_, _) => "CaptureUpValue",
+            Instruction::Closure(_, _) => "Closure",
+            Instruction::ClearUpValue(_) => "ClearUpValue",
+            Instruction::CopyUpValue(_, _) => "CopyUpValue",
+            Instruction::CopyToUpValue(_, _) => "CopyToUpValue",
+            Instruction::CopyToUpValueDeref(_, _) => "CopyToUpValueDeref",
+            Instruction::Copy(_, _) => "Copy",
+            Instruction::CopyToDeref(_, _) => "CopyToDeref",
+            Instruction::CopyRangeToDeref(_, _, _) => "CopyRangeToDeref",
+            Instruction::Len(_, _) => "Len",
+            Instruction::Not(_, _) => "Not",
+            Instruction::UnaryMinus(_, _) => "UnaryMinus",
+            Instruction::BitwiseNot(_, _) => "BitwiseNot",
+            Instruction::Add(_, _, _) => "Add",
+            Instruction::Subtract(_, _, _) => "Subtract",
+            Instruction::Multiply(_, _, _) => "Multiply",
+            Instruction::Division(_, _, _) => "Division",
+            Instruction::IntegerDivision(_, _, _) => "IntegerDivision",
+            Instruction::Modulus(_, _, _) => "Modulus",
+            Instruction::Power(_, _, _) => "Power",
+            Instruction::BitwiseAnd(_, _, _) => "BitwiseAnd",
+            Instruction::BitwiseOr(_, _, _) => "BitwiseOr",
+            Instruction::BitwiseXor(_, _, _) => "BitwiseXor",
+            Instruction::BitShiftLeft(_, _, _) => "BitShiftLeft",
+            Instruction::BitShiftRight(_, _, _) => "BitShiftRight",
+            Instruction::Equal(_, _, _) => "Equal",
+            Instruction::LessThan(_, _, _) => "LessThan",
+            Instruction::LessThanEqual(_, _, _) => "LessThanEqual",
+            Instruction::Concat(_, _, _) => "Concat",
+            Instruction::TestTruthy(_, _) => "TestTruthy",
+            Instruction::TestNil(_) => "TestNil",
+            Instruction::NumericFor(_, _) => "NumericFor",
+            Instruction::JumpToForLoop(_) => "JumpToForLoop",
+            Instruction::Jump(_) => "Jump",
+            Instruction::Call(_, _) => "Call",
+            Instruction::Return(_) => "Return",
+        }
+    }
+}
+
+#[cfg(feature = "instruction_exec_counts")]
+#[derive(Default)]
+pub(crate) struct InstructionCounter {
+    map: crate::FastHashMap<std::mem::Discriminant<Instruction>, (Instruction, usize)>,
+}
+
+#[cfg(feature = "instruction_exec_counts")]
+impl InstructionCounter {
+    pub(crate) fn clear(&mut self) {
+        self.map.clear();
+    }
+
+    pub(crate) fn track(&mut self, instruction: Instruction) {
+        self.map
+            .entry(std::mem::discriminant(&instruction))
+            .and_modify(|(_, count)| *count += 1)
+            .or_insert((instruction, 1));
+    }
+
+    pub(crate) fn data(&self) -> impl Iterator<Item = (&'static str, usize)> + '_ {
+        self.map
+            .values()
+            .map(|(instruction, count)| (instruction.name(), *count))
+    }
+}

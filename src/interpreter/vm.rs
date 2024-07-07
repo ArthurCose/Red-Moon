@@ -11,6 +11,9 @@ use std::any::TypeId;
 use std::cell::Cell;
 use std::rc::Rc;
 
+#[cfg(feature = "instruction_exec_counts")]
+use super::instruction::{Instruction, InstructionCounter};
+
 const RECYCLE_LIMIT: usize = 64;
 
 #[derive(Clone)]
@@ -56,6 +59,8 @@ pub struct Vm {
     recycled_short_value_stacks: Rc<Cell<Vec<ValueStack>>>,
     tracked_stack_size: usize,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
+    #[cfg(feature = "instruction_exec_counts")]
+    instruction_counter: Rc<Cell<InstructionCounter>>,
 }
 
 impl Clone for Vm {
@@ -71,6 +76,8 @@ impl Clone for Vm {
             // reset to 0, since there's no active call on the new vm
             tracked_stack_size: 0,
             app_data: self.app_data.clone(),
+            #[cfg(feature = "instruction_exec_counts")]
+            instruction_counter: self.instruction_counter.clone(),
         }
     }
 }
@@ -94,6 +101,8 @@ impl Vm {
             recycled_short_value_stacks: Default::default(),
             tracked_stack_size: 0,
             app_data: Default::default(),
+            #[cfg(feature = "instruction_exec_counts")]
+            instruction_counter: Default::default(),
         }
     }
 
@@ -111,6 +120,31 @@ impl Vm {
 
     pub(crate) fn update_stack_size(&mut self, stack_size: usize) {
         self.tracked_stack_size = stack_size;
+    }
+
+    #[cfg(feature = "instruction_exec_counts")]
+    pub(crate) fn track_instruction(&mut self, instruction: Instruction) {
+        let mut instruction_counter = self.instruction_counter.take();
+        instruction_counter.track(instruction);
+        self.instruction_counter.set(instruction_counter);
+    }
+
+    #[cfg(feature = "instruction_exec_counts")]
+    pub fn instruction_exec_counts(&mut self) -> Vec<(&'static str, usize)> {
+        let instruction_counter = self.instruction_counter.take();
+        let mut results = instruction_counter.data().collect::<Vec<_>>();
+        self.instruction_counter.set(instruction_counter);
+
+        // sort by count reversed
+        results.sort_by_key(|(_, count)| usize::MAX - count);
+        results
+    }
+
+    #[cfg(feature = "instruction_exec_counts")]
+    pub fn clear_instruction_exec_counts(&mut self) {
+        let mut instruction_counter = self.instruction_counter.take();
+        instruction_counter.clear();
+        self.instruction_counter.set(instruction_counter);
     }
 
     #[inline]

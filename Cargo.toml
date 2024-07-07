@@ -20,3 +20,7 @@ pretty_assertions = "1"
 [profile.profiling]
 inherits = "release"
 debug = "limited"
+
+[features]
+# separate feature as it slows down the interpreter
+instruction_exec_counts = []

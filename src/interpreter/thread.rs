@@ -499,6 +499,9 @@ impl CallContext {
                 return Err(RuntimeErrorData::StackOverflow);
             }
 
+            #[cfg(feature = "instruction_exec_counts")]
+            vm.track_instruction(instruction);
+
             let heap = vm.heap_mut();
             self.next_instruction_index += 1;
 

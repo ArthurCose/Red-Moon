@@ -8,3 +8,8 @@ edition = "2021"
 red_moon = { path = "../" }
 clap = { version = "4", features = ["derive"] }
 rustyline = { version = "14", default-features = false }
+
+[features]
+# separate feature as it slows down the interpreter
+instruction_exec_counts = ["red_moon/instruction_exec_counts"]
+default = []
