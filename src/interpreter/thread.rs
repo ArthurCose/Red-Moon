@@ -494,7 +494,7 @@ impl CallContext {
         let definition = &self.function_definition;
         let mut for_loop_jump = false;
 
-        while let Some(instruction) = definition.instructions.get(self.next_instruction_index) {
+        while let Some(&instruction) = definition.instructions.get(self.next_instruction_index) {
             if vm.tracked_stack_size() + value_stack.len() > vm.limits().stack_size {
                 return Err(RuntimeErrorData::StackOverflow);
             }
@@ -507,62 +507,62 @@ impl CallContext {
                     return Err(IllegalInstruction::UnexpectedConstant.into())
                 }
                 Instruction::SetNil(dest) => {
-                    value_stack.set(self.register_base + *dest as usize, Primitive::Nil.into());
+                    value_stack.set(self.register_base + dest as usize, Primitive::Nil.into());
                 }
                 Instruction::SetBool(dest, b) => {
-                    let value = Primitive::Bool(*b).into();
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    let value = Primitive::Bool(b).into();
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadInt(dest, index) => {
-                    let Some(number) = definition.numbers.get(*index as usize) else {
-                        return Err(IllegalInstruction::MissingNumberConstant(*index).into());
+                    let Some(number) = definition.numbers.get(index as usize) else {
+                        return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
                     let value = Primitive::Integer(*number).into();
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadFloat(dest, index) => {
-                    let Some(number) = definition.numbers.get(*index as usize) else {
-                        return Err(IllegalInstruction::MissingNumberConstant(*index).into());
+                    let Some(number) = definition.numbers.get(index as usize) else {
+                        return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
                     let value = Primitive::Float(f64::from_bits(*number as u64)).into();
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadBytes(dest, index) => {
-                    let Some(&heap_key) = definition.byte_strings.get(*index as usize) else {
-                        return Err(IllegalInstruction::MissingByteStringConstant(*index).into());
+                    let Some(&heap_key) = definition.byte_strings.get(index as usize) else {
+                        return Err(IllegalInstruction::MissingByteStringConstant(index).into());
                     };
 
-                    value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                    value_stack.set(self.register_base + dest as usize, heap_key.into());
                 }
                 Instruction::ClearFrom(dest) => {
-                    let dest_index = self.register_base + *dest as usize;
+                    let dest_index = self.register_base + dest as usize;
                     value_stack.chip(dest_index, 0);
                 }
                 Instruction::PrepMulti(dest, index) => {
-                    let Some(number) = definition.numbers.get(*index as usize) else {
-                        return Err(IllegalInstruction::MissingNumberConstant(*index).into());
+                    let Some(number) = definition.numbers.get(index as usize) else {
+                        return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
                     let value = Primitive::Integer(*number).into();
 
-                    let dest_index = self.register_base + *dest as usize;
+                    let dest_index = self.register_base + dest as usize;
                     value_stack.set(dest_index, value);
                     value_stack.chip(dest_index + 1, 0);
                 }
                 Instruction::CreateTable(dest, len_index) => {
-                    let Some(&len) = definition.numbers.get(*len_index as usize) else {
-                        return Err(IllegalInstruction::MissingNumberConstant(*len_index).into());
+                    let Some(&len) = definition.numbers.get(len_index as usize) else {
+                        return Err(IllegalInstruction::MissingNumberConstant(len_index).into());
                     };
 
                     let heap_key = heap.create_table(len as _, 0);
 
-                    value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                    value_stack.set(self.register_base + dest as usize, heap_key.into());
                     self.table_flush_count = 0;
                 }
                 Instruction::FlushToTable(dest, src_start, src_end) => {
                     let err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
 
                     let StackValue::HeapValue(heap_key) =
-                        value_stack.get(self.register_base + *dest as usize)
+                        value_stack.get(self.register_base + dest as usize)
                     else {
                         return Err(err.clone());
                     };
@@ -575,8 +575,8 @@ impl CallContext {
                         return Err(err.clone());
                     };
 
-                    let start = self.register_base + *src_start as usize;
-                    let end = self.register_base + *src_end as usize + 1;
+                    let start = self.register_base + src_start as usize;
+                    let end = self.register_base + src_end as usize + 1;
 
                     table.flush(self.table_flush_count, value_stack.get_slice(start..end));
                     self.table_flush_count += end - start;
@@ -586,7 +586,7 @@ impl CallContext {
 
                     // grab the table
                     let StackValue::HeapValue(heap_key) =
-                        value_stack.get(self.register_base + *dest as usize)
+                        value_stack.get(self.register_base + dest as usize)
                     else {
                         return Err(table_err.clone());
                     };
@@ -601,12 +601,12 @@ impl CallContext {
 
                     // grab the count
                     let StackValue::Primitive(Primitive::Integer(count)) =
-                        value_stack.get(self.register_base + *src_count as usize)
+                        value_stack.get(self.register_base + src_count as usize)
                     else {
                         return Err(table_err.clone());
                     };
 
-                    let start = self.register_base + *src_start as usize;
+                    let start = self.register_base + src_start as usize;
                     let end = start + count as usize;
 
                     table.reserve_list(count as usize);
@@ -630,10 +630,10 @@ impl CallContext {
 
                     // table
                     let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                        value_stack.get_deref(heap, self.register_base + table_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_from_table(vm, value_stack, *dest, base, heap_key.into())?
+                        self.copy_from_table(vm, value_stack, dest, base, heap_key.into())?
                     {
                         return Ok(call_result);
                     }
@@ -655,39 +655,39 @@ impl CallContext {
 
                     // table
                     let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
+                        value_stack.get_deref(heap, self.register_base + table_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_to_table(vm, value_stack, base, heap_key.into(), *src)?
+                        self.copy_to_table(vm, value_stack, base, heap_key.into(), src)?
                     {
                         return Ok(call_result);
                     }
                 }
                 Instruction::CopyTableValue(dest, table_index, key_index) => {
                     let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
-                    let key = value_stack.get_deref(heap, self.register_base + *key_index as usize);
+                        value_stack.get_deref(heap, self.register_base + table_index as usize);
+                    let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_from_table(vm, value_stack, *dest, base, key)?
+                        self.copy_from_table(vm, value_stack, dest, base, key)?
                     {
                         return Ok(call_result);
                     }
                 }
                 Instruction::CopyToTableValue(table_index, key_index, src) => {
                     let base =
-                        value_stack.get_deref(heap, self.register_base + *table_index as usize);
-                    let key = value_stack.get_deref(heap, self.register_base + *key_index as usize);
+                        value_stack.get_deref(heap, self.register_base + table_index as usize);
+                    let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_to_table(vm, value_stack, base, key, *src)?
+                        self.copy_to_table(vm, value_stack, base, key, src)?
                     {
                         return Ok(call_result);
                     }
                 }
                 Instruction::CopyArg(dest, index) => {
-                    let arg_index = self.stack_start + 2 + *index as usize;
-                    let dest_index = self.register_base + *dest as usize;
+                    let arg_index = self.stack_start + 2 + index as usize;
+                    let dest_index = self.register_base + dest as usize;
 
                     if arg_index >= self.register_base {
                         // out of args, set nil
@@ -698,12 +698,12 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyArgs(dest, count) => {
-                    self.copy_args(heap, value_stack, *dest, *count);
+                    self.copy_args(heap, value_stack, dest, count);
                 }
                 Instruction::CopyVariadic(dest, count_register, skip) => {
-                    let dest_index = self.register_base + *dest as usize;
-                    let arg_index = self.stack_start + 2 + *skip as usize;
-                    let count_index = self.register_base + *count_register as usize;
+                    let dest_index = self.register_base + dest as usize;
+                    let arg_index = self.stack_start + 2 + skip as usize;
+                    let count_index = self.register_base + count_register as usize;
 
                     let StackValue::Primitive(Primitive::Integer(count)) =
                         value_stack.get(count_index)
@@ -730,8 +730,8 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyUnsizedVariadic(dest, skip) => {
-                    let dest_index = self.register_base + *dest as usize;
-                    let arg_index = self.stack_start + 2 + *skip as usize;
+                    let dest_index = self.register_base + dest as usize;
+                    let arg_index = self.stack_start + 2 + skip as usize;
 
                     let total = self.register_base.saturating_sub(arg_index);
 
@@ -749,38 +749,38 @@ impl CallContext {
                     }
                 }
                 Instruction::Capture(dest, src) => {
-                    let mut value = value_stack.get(self.register_base + *src as usize);
+                    let mut value = value_stack.get(self.register_base + src as usize);
 
                     if !matches!(value, StackValue::Pointer(_)) {
                         // move the stack value to the heap
                         let heap_key = heap.create(HeapValue::StackValue(value));
                         value = StackValue::Pointer(heap_key);
-                        value_stack.set(self.register_base + *src as usize, value);
+                        value_stack.set(self.register_base + src as usize, value);
                     }
 
-                    self.pending_captures.set(*dest as usize, value);
+                    self.pending_captures.set(dest as usize, value);
                 }
                 Instruction::CaptureUpValue(dest, src) => {
-                    let mut value = self.up_values.get(*src as usize);
+                    let mut value = self.up_values.get(src as usize);
 
                     if !matches!(value, StackValue::Pointer(_)) {
                         // move the stack value to the heap
                         let heap_key = heap.create(HeapValue::StackValue(value));
                         value = StackValue::Pointer(heap_key);
-                        self.up_values.set(*src as usize, value);
+                        self.up_values.set(src as usize, value);
                     }
 
-                    self.pending_captures.set(*dest as usize, value);
+                    self.pending_captures.set(dest as usize, value);
                 }
                 Instruction::Closure(dest, function_index) => {
-                    let Some(&heap_key) = definition.functions.get(*function_index as usize) else {
+                    let Some(&heap_key) = definition.functions.get(function_index as usize) else {
                         return Err(RuntimeErrorData::IllegalInstruction(
-                            IllegalInstruction::MissingFunctionConstant(*function_index),
+                            IllegalInstruction::MissingFunctionConstant(function_index),
                         ));
                     };
 
                     if self.pending_captures.is_empty() {
-                        value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                        value_stack.set(self.register_base + dest as usize, heap_key.into());
                     } else {
                         let HeapValue::Function(func) = heap.get(heap_key).unwrap() else {
                             unreachable!()
@@ -796,37 +796,37 @@ impl CallContext {
                         let heap = vm.heap_mut();
                         let heap_key = heap.create(HeapValue::Function(func));
 
-                        value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                        value_stack.set(self.register_base + dest as usize, heap_key.into());
                     }
                 }
                 Instruction::ClearUpValue(dest) => {
-                    self.up_values.set(*dest as usize, Primitive::Nil.into());
+                    self.up_values.set(dest as usize, Primitive::Nil.into());
                 }
                 Instruction::CopyUpValue(dest, src) => {
-                    let value = self.up_values.get_deref(heap, *src as usize);
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    let value = self.up_values.get_deref(heap, src as usize);
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::CopyToUpValue(dest, src) => {
-                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
-                    self.up_values.set(*dest as usize, value);
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
+                    self.up_values.set(dest as usize, value);
                 }
                 Instruction::CopyToUpValueDeref(dest, src) => {
-                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
-                    if let StackValue::Pointer(heap_key) = self.up_values.get(*dest as usize) {
+                    if let StackValue::Pointer(heap_key) = self.up_values.get(dest as usize) {
                         // pointing to another stack value
                         heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
                     } else {
-                        self.up_values.set(*dest as usize, value);
+                        self.up_values.set(dest as usize, value);
                     }
                 }
                 Instruction::Copy(dest, src) => {
-                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::CopyToDeref(dest, src) => {
-                    let value = value_stack.get_deref(heap, self.register_base + *src as usize);
-                    let dest_index = self.register_base + *dest as usize;
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
+                    let dest_index = self.register_base + dest as usize;
 
                     if let StackValue::Pointer(heap_key) = value_stack.get(dest_index) {
                         heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
@@ -835,12 +835,12 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyRangeToDeref(dest, src, count) => {
-                    self.copy_range_to_deref(heap, value_stack, *dest, *src, *count);
+                    self.copy_range_to_deref(heap, value_stack, dest, src, count);
                 }
                 Instruction::Not(dest, src) => {
-                    let value = !value_stack.is_truthy(self.register_base + *src as usize);
+                    let value = !value_stack.is_truthy(self.register_base + src as usize);
                     value_stack.set(
-                        self.register_base + *dest as usize,
+                        self.register_base + dest as usize,
                         Primitive::Bool(value).into(),
                     );
                 }
@@ -848,7 +848,7 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().len.0.key().into();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get_deref(heap, self.register_base + *src as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
                     let StackValue::HeapValue(heap_key) = value_a else {
                         return Err(RuntimeErrorData::NoLength);
@@ -868,21 +868,21 @@ impl CallContext {
                             heap,
                             value_stack,
                             (heap_key, metamethod_key),
-                            (*dest, value_a),
+                            (dest, value_a),
                         ) {
                             return Ok(call_result);
                         }
                     }
 
                     let value = Primitive::Integer(len as i64).into();
-                    value_stack.set(self.register_base + *dest as usize, value);
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
                     let metamethod_key = vm.metatable_keys().unm.0.key().into();
 
                     if let Some(call_result) = self.unary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *src),
+                        (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
                         |primitive| match primitive {
@@ -899,7 +899,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.unary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *src),
+                        (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
                         |primitive| Ok(Primitive::Integer(-arithmetic_cast_integer(primitive)?)),
@@ -912,7 +912,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a + b,
                         |a, b| a + b,
@@ -925,7 +925,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a - b,
                         |a, b| a - b,
@@ -938,7 +938,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a * b,
                         |a, b| a * b,
@@ -951,7 +951,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_float_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a / b,
                     )? {
@@ -959,7 +959,7 @@ impl CallContext {
                     }
                 }
                 Instruction::IntegerDivision(dest, a, b) => {
-                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
                     match value_b {
                         StackValue::Primitive(Primitive::Integer(0)) => {
@@ -977,7 +977,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a / b,
                         // lua seems to preserve floats unlike bitwise operators
@@ -991,7 +991,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_number_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a % b,
                         |a, b| a % b,
@@ -1004,7 +1004,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_float_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a.powf(b),
                     )? {
@@ -1016,7 +1016,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a & b,
                     )? {
@@ -1028,7 +1028,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a | b,
                     )? {
@@ -1040,7 +1040,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a ^ b,
                     )? {
@@ -1052,7 +1052,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a << b,
                     )? {
@@ -1064,7 +1064,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (vm.heap_mut(), value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a >> b,
                     )? {
@@ -1075,13 +1075,13 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().eq.0.key().into();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get_deref(heap, self.register_base + *a as usize);
-                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
                     if let Some(call_result) = self.try_binary_metamethods(
                         (heap, value_stack),
                         metamethod_key,
-                        (*dest, value_a, value_b),
+                        (dest, value_a, value_b),
                     ) {
                         return Ok(call_result);
                     }
@@ -1099,7 +1099,7 @@ impl CallContext {
                     };
 
                     value_stack.set(
-                        self.register_base + *dest as usize,
+                        self.register_base + dest as usize,
                         Primitive::Bool(equal).into(),
                     );
                 }
@@ -1109,7 +1109,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a < b,
                         |a, b| a < b,
@@ -1132,7 +1132,7 @@ impl CallContext {
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
-                        (*dest, *a, *b),
+                        (dest, a, b),
                         metamethod_key,
                         |a, b| a <= b,
                         |a, b| a <= b,
@@ -1153,8 +1153,8 @@ impl CallContext {
                     let metamethod_key = vm.metatable_keys().concat.0.key();
                     let heap = vm.heap_mut();
 
-                    let value_a = value_stack.get_deref(heap, self.register_base + *a as usize);
-                    let value_b = value_stack.get_deref(heap, self.register_base + *b as usize);
+                    let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+                    let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
                     // default behavior
                     let string_a = stringify(heap, value_a);
@@ -1166,14 +1166,14 @@ impl CallContext {
                         bytes.extend(string_a.iter());
                         bytes.extend(string_b.iter());
                         let heap_key = heap.intern_bytes(&bytes);
-                        value_stack.set(self.register_base + *dest as usize, heap_key.into());
+                        value_stack.set(self.register_base + dest as usize, heap_key.into());
                     } else {
                         // try metamethod as a fallback using the default value
                         let call_result = self
                             .try_binary_metamethods(
                                 (heap, value_stack),
                                 metamethod_key.into(),
-                                (*dest, value_a, value_b),
+                                (dest, value_a, value_b),
                             )
                             .ok_or(RuntimeErrorData::AttemptToConcatInvalid)?;
 
@@ -1181,12 +1181,12 @@ impl CallContext {
                     }
                 }
                 Instruction::TestTruthy(expected, src) => {
-                    if value_stack.is_truthy(self.register_base + *src as usize) != *expected {
+                    if value_stack.is_truthy(self.register_base + src as usize) != expected {
                         self.next_instruction_index += 1;
                     }
                 }
                 Instruction::TestNil(src) => {
-                    if value_stack.get_deref(heap, self.register_base + *src as usize)
+                    if value_stack.get_deref(heap, self.register_base + src as usize)
                         != StackValue::Primitive(Primitive::Nil)
                     {
                         self.next_instruction_index += 1;
@@ -1195,17 +1195,17 @@ impl CallContext {
                 Instruction::NumericFor(src, local) => {
                     let limit = coerce_stack_value_to_integer(
                         heap,
-                        value_stack.get(self.register_base + *src as usize),
+                        value_stack.get(self.register_base + src as usize),
                         || RuntimeErrorData::LimitMustBeNumber,
                     )?;
                     let step = coerce_stack_value_to_integer(
                         heap,
-                        value_stack.get(self.register_base + *src as usize + 1),
+                        value_stack.get(self.register_base + src as usize + 1),
                         || RuntimeErrorData::StepMustBeNumber,
                     )?;
                     let mut value = coerce_stack_value_to_integer(
                         heap,
-                        value_stack.get(self.register_base + *local as usize),
+                        value_stack.get(self.register_base + local as usize),
                         || RuntimeErrorData::InitialValueMustBeNumber,
                     )?;
 
@@ -1221,23 +1221,23 @@ impl CallContext {
 
                     if !stop {
                         value_stack.set(
-                            self.register_base + *local as usize,
+                            self.register_base + local as usize,
                             Primitive::Integer(value).into(),
                         );
                         self.next_instruction_index += 1;
                     }
                 }
                 Instruction::JumpToForLoop(i) => {
-                    self.next_instruction_index = (*i).into();
+                    self.next_instruction_index = (i).into();
                     for_loop_jump = true;
                 }
                 Instruction::Jump(i) => {
-                    self.next_instruction_index = (*i).into();
+                    self.next_instruction_index = (i).into();
                 }
                 Instruction::Call(stack_start, return_mode) => {
-                    return Ok(CallResult::Call(*stack_start as usize, *return_mode))
+                    return Ok(CallResult::Call(stack_start as usize, return_mode))
                 }
-                Instruction::Return(register) => return Ok(CallResult::Return(*register as usize)),
+                Instruction::Return(register) => return Ok(CallResult::Return(register as usize)),
             }
         }
 

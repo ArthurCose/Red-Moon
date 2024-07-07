@@ -53,7 +53,7 @@ pub enum ReturnMode {
     TailCall,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Instruction {
     /// Data carrying instruction that's interpreted by the previous instruction
     ///
