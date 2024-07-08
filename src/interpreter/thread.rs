@@ -701,7 +701,7 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyArgs(dest, count) => {
-                    self.copy_args(heap, value_stack, dest, count);
+                    self.copy_args(value_stack, dest, count);
                 }
                 Instruction::CopyVariadic(dest, count_register, skip) => {
                     let dest_index = self.register_base + dest as usize;
@@ -1720,38 +1720,24 @@ impl CallContext {
         }
     }
 
-    fn copy_args(
-        &self,
-        heap: &mut Heap,
-        value_stack: &mut ValueStack,
-        dest: Register,
-        count: Register,
-    ) {
+    fn copy_args(&self, value_stack: &mut ValueStack, dest: Register, count: Register) {
         let dest_start = self.register_base + dest as usize;
         let count = count as usize;
 
         let arg_start_index = self.stack_start + 2;
-        let arg_end_index = arg_start_index + count;
+        let arg_end_index = self.register_base.min(arg_start_index + count);
 
         // dest will always be greater than the arg source
         // since args are stored before the register base, and dest is stored after
-        let end = self.register_base + dest_start + count;
+        let end = dest_start + count;
         let slice = value_stack.get_slice_mut(0..end);
 
-        for arg_index in arg_start_index..arg_end_index {
-            let dest_index = dest_start + arg_index - arg_start_index;
+        slice.copy_within(arg_start_index..arg_end_index, dest_start);
 
-            let value = if arg_index >= self.register_base {
-                StackValue::default()
-            } else {
-                slice[arg_index]
-            };
-
-            if let StackValue::Pointer(heap_key) = slice[dest_index] {
-                heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
-            } else {
-                slice[dest_index] = value;
-            }
+        // set nil if there isn't enough args
+        let copied = arg_end_index - arg_start_index;
+        for value in &mut slice[dest_start + copied..dest_start + count] {
+            *value = StackValue::Primitive(Primitive::Nil);
         }
     }
 
