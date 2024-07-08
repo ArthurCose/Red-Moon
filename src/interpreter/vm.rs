@@ -12,7 +12,10 @@ use std::any::TypeId;
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_exec_counts")]
-use super::instruction::{Instruction, InstructionCounter};
+use {
+    super::instruction::{Instruction, InstructionCounter},
+    std::cell::Cell,
+};
 
 const RECYCLE_LIMIT: usize = 64;
 
