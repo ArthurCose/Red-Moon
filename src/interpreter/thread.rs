@@ -1454,7 +1454,7 @@ impl CallContext {
             return Ok(Some(call_result));
         }
 
-        let less_than = match (value_a, value_b) {
+        let result = match (value_a, value_b) {
             (
                 StackValue::Primitive(Primitive::Integer(int_a)),
                 StackValue::Primitive(Primitive::Integer(int_b)),
@@ -1479,7 +1479,7 @@ impl CallContext {
 
         value_stack.set(
             self.register_base + dest as usize,
-            Primitive::Bool(less_than).into(),
+            Primitive::Bool(result).into(),
         );
 
         Ok(None)
