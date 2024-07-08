@@ -684,7 +684,7 @@ where
                         let top_register = self.top_function.next_register;
                         self.resolve_function_body(top_register, false)?;
 
-                        self.copy_stack_value(local, top_register);
+                        self.copy_stack_value_to_deref(local, top_register);
                     } else {
                         let name_token = self.expect(LuaTokenLabel::Name)?;
 
@@ -1198,6 +1198,13 @@ where
     }
 
     fn copy_stack_value(&mut self, dest: Register, src: Register) {
+        if dest != src {
+            let instructions = &mut self.top_function.instructions;
+            instructions.push(Instruction::Copy(dest, src));
+        }
+    }
+
+    fn copy_stack_value_to_deref(&mut self, dest: Register, src: Register) {
         if dest != src {
             let instructions = &mut self.top_function.instructions;
             instructions.push(Instruction::CopyToDeref(dest, src));
