@@ -1,3 +1,5 @@
+mod vec_cell;
+
 pub mod errors;
 pub mod interpreter;
 pub mod languages;

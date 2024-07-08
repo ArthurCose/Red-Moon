@@ -5,10 +5,10 @@ use super::value_stack::ValueStack;
 use super::{FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef, TableRef};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
+use crate::vec_cell::VecCell;
 use crate::FastHashMap;
 use downcast::downcast;
 use std::any::TypeId;
-use std::cell::Cell;
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_exec_counts")]
@@ -54,9 +54,9 @@ pub struct Vm {
     heap: Heap,
     default_environment: HeapRef,
     metatable_keys: Rc<MetatableKeys>,
-    recycled_multivalues: Rc<Cell<Vec<MultiValue>>>,
-    recycled_value_stacks: Rc<Cell<Vec<ValueStack>>>,
-    recycled_short_value_stacks: Rc<Cell<Vec<ValueStack>>>,
+    recycled_multivalues: Rc<VecCell<MultiValue>>,
+    recycled_value_stacks: Rc<VecCell<ValueStack>>,
+    recycled_short_value_stacks: Rc<VecCell<ValueStack>>,
     tracked_stack_size: usize,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
     #[cfg(feature = "instruction_exec_counts")]
@@ -173,64 +173,38 @@ impl Vm {
     }
 
     pub fn create_multi(&mut self) -> MultiValue {
-        let mut list = self.recycled_multivalues.take();
-
-        let multivalue = list
+        self.recycled_multivalues
             .pop()
-            .unwrap_or_else(|| MultiValue { values: Vec::new() });
-
-        self.recycled_multivalues.set(list);
-
-        multivalue
+            .unwrap_or_else(|| MultiValue { values: Vec::new() })
     }
 
     pub fn store_multi(&mut self, mut multivalue: MultiValue) {
-        let mut list = self.recycled_multivalues.take();
-
-        if list.len() < RECYCLE_LIMIT {
+        if self.recycled_multivalues.len() < RECYCLE_LIMIT {
             multivalue.clear();
-            list.push(multivalue);
+            self.recycled_multivalues.push(multivalue);
         }
-
-        self.recycled_multivalues.set(list);
     }
 
     pub(crate) fn create_value_stack(&mut self) -> ValueStack {
-        let mut list = self.recycled_value_stacks.take();
-        let value_stack = list.pop().unwrap_or_default();
-        self.recycled_value_stacks.set(list);
-
-        value_stack
+        self.recycled_value_stacks.pop().unwrap_or_default()
     }
 
     pub(crate) fn store_value_stack(&mut self, mut value_stack: ValueStack) {
-        let mut list = self.recycled_value_stacks.take();
-
-        if list.len() < RECYCLE_LIMIT {
+        if self.recycled_value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
-            list.push(value_stack);
+            self.recycled_value_stacks.push(value_stack);
         }
-
-        self.recycled_value_stacks.set(list);
     }
 
     pub(crate) fn create_short_value_stack(&mut self) -> ValueStack {
-        let mut list = self.recycled_short_value_stacks.take();
-        let value_stack = list.pop().unwrap_or_default();
-        self.recycled_short_value_stacks.set(list);
-
-        value_stack
+        self.recycled_short_value_stacks.pop().unwrap_or_default()
     }
 
     pub(crate) fn store_short_value_stack(&mut self, mut value_stack: ValueStack) {
-        let mut list = self.recycled_short_value_stacks.take();
-
-        if list.len() < RECYCLE_LIMIT {
+        if self.recycled_short_value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
-            list.push(value_stack);
+            self.recycled_short_value_stacks.push(value_stack);
         }
-
-        self.recycled_short_value_stacks.set(list);
     }
 
     pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {
