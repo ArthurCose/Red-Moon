@@ -268,22 +268,15 @@ impl Thread {
                             let func = func.clone();
 
                             if return_mode == ReturnMode::TailCall {
-                                // remove the caller and recycle value stacks
-                                let call = self.call_stack.pop().unwrap();
-                                vm.store_short_value_stack(call.pending_captures);
-                                vm.store_short_value_stack(call.up_values);
+                                // transform the caller
+                                call.up_values.clone_from(&func.up_values);
+                                call.pending_captures.clear();
+                                call.function_definition = func.definition;
+                                call.next_instruction_index = 0;
+                                call.table_flush_count = 0;
+
                                 self.value_stack
                                     .chip(call.stack_start, self.value_stack.len() - stack_start);
-
-                                // adopt the parent caller's stack_start and return mode
-                                let mut new_call = CallContext::new(
-                                    func,
-                                    call.stack_start,
-                                    call.stack_start + 2 + arg_count as usize,
-                                    vm,
-                                );
-                                new_call.return_mode = call.return_mode;
-                                self.call_stack.push(new_call);
                             } else {
                                 let mut new_call = CallContext::new(
                                     func,
