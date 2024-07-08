@@ -68,13 +68,8 @@ impl std::hash::Hash for HeapRef {
 }
 
 #[derive(Clone)]
-struct HeapRecord {
-    value: HeapValue,
-}
-
-#[derive(Clone)]
 pub(crate) struct Heap {
-    storage: slotmap::SlotMap<HeapKey, HeapRecord>,
+    storage: slotmap::SlotMap<HeapKey, HeapValue>,
     byte_strings: FastHashMap<ByteString, HeapKey>,
     ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
     #[allow(clippy::vec_box)]
@@ -88,9 +83,7 @@ impl Default for Heap {
         let mut storage: slotmap::SlotMap<_, _> = Default::default();
 
         // create string metatable
-        let string_metatable_key = storage.insert(HeapRecord {
-            value: HeapValue::Table(Default::default()),
-        });
+        let string_metatable_key = storage.insert(HeapValue::Table(Default::default()));
         let counter = RefCounter::default();
         let string_metatable_ref = HeapRef {
             key: string_metatable_key,
@@ -125,7 +118,7 @@ impl Heap {
     }
 
     pub(crate) fn create(&mut self, value: HeapValue) -> HeapKey {
-        self.storage.insert(HeapRecord { value })
+        self.storage.insert(value)
     }
 
     pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> Option<HeapRef> {
@@ -166,27 +159,26 @@ impl Heap {
     }
 
     pub(crate) fn get(&self, heap_key: HeapKey) -> Option<&HeapValue> {
-        Some(&self.storage.get(heap_key)?.value)
+        self.storage.get(heap_key)
     }
 
     pub(crate) fn get_mut(&mut self, heap_key: HeapKey) -> Option<&mut HeapValue> {
-        Some(&mut self.storage.get_mut(heap_key)?.value)
+        self.storage.get_mut(heap_key)
     }
 
     #[must_use]
-    pub(crate) fn set(&mut self, heap_key: HeapKey, mut value: HeapValue) -> Option<()> {
-        let record = self.storage.get_mut(heap_key)?;
-        std::mem::swap(&mut record.value, &mut value);
+    pub(crate) fn set(&mut self, heap_key: HeapKey, value: HeapValue) -> Option<()> {
+        *self.storage.get_mut(heap_key)? = value;
 
         Some(())
     }
 
     pub(crate) fn get_metavalue(&self, heap_key: HeapKey, name: StackValue) -> StackValue {
-        let Some(heap_record) = &self.storage.get(heap_key) else {
+        let Some(value) = self.storage.get(heap_key) else {
             return Primitive::Nil.into();
         };
 
-        let metatable_key = match &heap_record.value {
+        let metatable_key = match value {
             HeapValue::Table(table) => {
                 let Some(key) = table.metatable() else {
                     return Primitive::Nil.into();
@@ -198,11 +190,11 @@ impl Heap {
             _ => return Primitive::Nil.into(),
         };
 
-        let Some(metatable_record) = &self.storage.get(metatable_key) else {
+        let Some(metatable_value) = &self.storage.get(metatable_key) else {
             return Primitive::Nil.into();
         };
 
-        let HeapValue::Table(metatable) = &metatable_record.value else {
+        let HeapValue::Table(metatable) = &metatable_value else {
             return Primitive::Nil.into();
         };
 
@@ -215,7 +207,7 @@ impl Heap {
         };
 
         if !matches!(
-            self.storage.get(method_key)?.value,
+            self.storage.get(method_key)?,
             HeapValue::Function(_) | HeapValue::NativeFunction(_)
         ) {
             return None;
@@ -225,9 +217,9 @@ impl Heap {
     }
 
     fn delete(&mut self, key: HeapKey) {
-        let record = self.storage.remove(key).expect("should only delete once");
+        let value = self.storage.remove(key).expect("should only delete once");
 
-        match record.value {
+        match value {
             HeapValue::Bytes(bytes) => {
                 self.byte_strings.remove(&bytes);
                 println!("deleted string");
