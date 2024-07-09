@@ -255,10 +255,10 @@ impl Value {
                 };
 
                 match value {
-                    HeapValue::Bytes(_) => Value::String(StringRef(heap.create_ref(key).unwrap())),
-                    HeapValue::Table(_) => Value::Table(TableRef(heap.create_ref(key).unwrap())),
+                    HeapValue::Bytes(_) => Value::String(StringRef(heap.create_ref(key))),
+                    HeapValue::Table(_) => Value::Table(TableRef(heap.create_ref(key))),
                     HeapValue::Function(_) | HeapValue::NativeFunction(_) => {
-                        Value::Function(FunctionRef(heap.create_ref(key).unwrap()))
+                        Value::Function(FunctionRef(heap.create_ref(key)))
                     }
                     HeapValue::StackValue(_) => {
                         // only StackValue::Pointer should point to StackValues

@@ -90,7 +90,7 @@ impl Vm {
         let mut heap = Heap::default();
 
         let default_environment = heap.create(HeapValue::Table(Default::default()));
-        let default_environment = heap.create_ref(default_environment).unwrap();
+        let default_environment = heap.create_ref(default_environment);
 
         let metatable_keys = MetatableKeys::new(&mut heap);
 
@@ -236,23 +236,20 @@ impl Vm {
 
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
         let heap_key = self.heap.intern_bytes(bytes);
-        let heap_ref = self
-            .heap
-            .create_ref(heap_key)
-            .expect("just created the key");
+        let heap_ref = self.heap.create_ref(heap_key);
 
         StringRef(heap_ref)
     }
 
     pub fn create_table(&mut self) -> TableRef {
         let heap_key = self.heap.create_table(0, 0);
-        let heap_ref = self.heap.create_ref(heap_key).unwrap();
+        let heap_ref = self.heap.create_ref(heap_key);
         TableRef(heap_ref)
     }
 
     pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
         let heap_key = self.heap.create_table(list, map);
-        let heap_ref = self.heap.create_ref(heap_key).unwrap();
+        let heap_ref = self.heap.create_ref(heap_key);
         TableRef(heap_ref)
     }
 
@@ -311,7 +308,7 @@ impl Vm {
         }
 
         let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
-        let heap_ref = self.heap.create_ref(*key).unwrap();
+        let heap_ref = self.heap.create_ref(*key);
 
         Ok(FunctionRef(heap_ref))
     }
@@ -322,7 +319,7 @@ impl Vm {
     ) -> FunctionRef {
         let key = self.heap.create(HeapValue::NativeFunction(callback.into()));
 
-        let heap_ref = self.heap.create_ref(key).unwrap();
+        let heap_ref = self.heap.create_ref(key);
 
         FunctionRef(heap_ref)
     }

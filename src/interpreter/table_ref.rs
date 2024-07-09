@@ -23,7 +23,7 @@ impl TableRef {
 
         let metatable_ref = table
             .metatable()
-            .map(|key| TableRef(vm.heap_mut().create_ref(key).unwrap()));
+            .map(|key| TableRef(vm.heap_mut().create_ref(key)));
 
         Ok(metatable_ref)
     }

@@ -121,23 +121,21 @@ impl Heap {
         self.storage.insert(value)
     }
 
-    pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> Option<HeapRef> {
+    pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> HeapRef {
         let counter = match self.ref_roots.entry(heap_key) {
             indexmap::map::Entry::Occupied(entry) => entry.get().clone(),
             indexmap::map::Entry::Vacant(entry) => {
-                if !self.storage.contains_key(heap_key) {
-                    return None;
-                }
+                debug_assert!(self.storage.contains_key(heap_key));
                 let counter = RefCounter::default();
                 entry.insert(counter.clone());
                 counter
             }
         };
 
-        Some(HeapRef {
+        HeapRef {
             key: heap_key,
             ref_counter: counter.clone(),
-        })
+        }
     }
 
     /// Creates a new string in the heap if it doesn't already exist,
@@ -155,7 +153,7 @@ impl Heap {
 
     pub(crate) fn intern_bytes_to_ref(&mut self, bytes: &[u8]) -> HeapRef {
         let key = self.intern_bytes(bytes);
-        self.create_ref(key).unwrap()
+        self.create_ref(key)
     }
 
     pub(crate) fn get(&self, heap_key: HeapKey) -> Option<&HeapValue> {
