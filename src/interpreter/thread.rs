@@ -18,6 +18,7 @@ enum CallResult {
 pub(crate) struct Thread {
     call_stack: Vec<CallContext>,
     value_stack: ValueStack,
+    pending_captures: ValueStack,
 }
 
 impl Thread {
@@ -39,6 +40,7 @@ impl Thread {
         Self {
             call_stack,
             value_stack,
+            pending_captures: vm.create_short_value_stack(),
         }
     }
 
@@ -80,6 +82,7 @@ impl Thread {
         Ok(Self {
             call_stack,
             value_stack,
+            pending_captures: vm.create_short_value_stack(),
         })
     }
 
@@ -87,7 +90,7 @@ impl Thread {
         let mut last_definition = None;
 
         while let Some(call) = self.call_stack.last_mut() {
-            let result = match call.resume(&mut self.value_stack, vm) {
+            let result = match call.resume(&mut self.value_stack, &mut self.pending_captures, vm) {
                 Ok(result) => result,
                 Err(err) => return Err(self.unwind_error(vm, err)),
             };
@@ -159,7 +162,6 @@ impl Thread {
 
                                 // remove caller and recycle value stacks
                                 let call = self.call_stack.pop().unwrap();
-                                vm.store_short_value_stack(call.pending_captures);
                                 vm.store_short_value_stack(call.up_values);
 
                                 // adopt caller's return mode and stack placement
@@ -270,7 +272,6 @@ impl Thread {
                             if return_mode == ReturnMode::TailCall {
                                 // transform the caller
                                 call.up_values.clone_from(&func.up_values);
-                                call.pending_captures.clear();
                                 call.function_definition = func.definition;
                                 call.next_instruction_index = 0;
                                 call.table_flush_count = 0;
@@ -315,7 +316,6 @@ impl Thread {
                     };
 
                     // recycle value stacks
-                    vm.store_short_value_stack(context.pending_captures);
                     vm.store_short_value_stack(context.up_values);
 
                     let mut return_count = return_count as usize;
@@ -443,7 +443,6 @@ impl Thread {
             let frame = definition.create_stack_trace_frame(instruction_index);
             err.trace.push_frame(frame);
 
-            vm.store_short_value_stack(call.pending_captures);
             vm.store_short_value_stack(call.up_values);
         }
 
@@ -453,7 +452,6 @@ impl Thread {
 
 struct CallContext {
     up_values: ValueStack,
-    pending_captures: ValueStack,
     function_definition: Rc<FunctionDefinition>,
     next_instruction_index: usize,
     stack_start: usize,
@@ -469,7 +467,6 @@ impl CallContext {
 
         Self {
             up_values,
-            pending_captures: vm.create_short_value_stack(),
             function_definition: function.definition,
             next_instruction_index: 0,
             stack_start,
@@ -482,6 +479,7 @@ impl CallContext {
     fn resume(
         &mut self,
         value_stack: &mut ValueStack,
+        pending_captures: &mut ValueStack,
         vm: &mut Vm,
     ) -> Result<CallResult, RuntimeErrorData> {
         let definition = &self.function_definition;
@@ -754,7 +752,7 @@ impl CallContext {
                         value_stack.set(self.register_base + src as usize, value);
                     }
 
-                    self.pending_captures.set(dest as usize, value);
+                    pending_captures.set(dest as usize, value);
                 }
                 Instruction::CaptureUpValue(dest, src) => {
                     let mut value = self.up_values.get(src as usize);
@@ -766,7 +764,7 @@ impl CallContext {
                         self.up_values.set(src as usize, value);
                     }
 
-                    self.pending_captures.set(dest as usize, value);
+                    pending_captures.set(dest as usize, value);
                 }
                 Instruction::Closure(dest, function_index) => {
                     let Some(&heap_key) = definition.functions.get(function_index as usize) else {
@@ -775,7 +773,7 @@ impl CallContext {
                         ));
                     };
 
-                    if self.pending_captures.is_empty() {
+                    if pending_captures.is_empty() {
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
                     } else {
                         let HeapValue::Function(func) = heap.get(heap_key).unwrap() else {
@@ -786,7 +784,7 @@ impl CallContext {
                         let mut func = func.clone();
 
                         let mut up_values = vm.create_short_value_stack();
-                        std::mem::swap(&mut up_values, &mut self.pending_captures);
+                        std::mem::swap(pending_captures, &mut up_values);
                         func.up_values = Rc::new(up_values);
 
                         let heap = vm.heap_mut();
