@@ -17,6 +17,9 @@ shrinking:
 
 variadic:
 4	2
+5	1
+4	2
+5	1
 
 expresion execution order:
 1
@@ -34,6 +37,9 @@ expresion execution order:
 49 elements - late flush:
 49	1
 
-expression access
-1
+51 elements - double flush:
+51	2	1
+
+expression access:
 2
+3

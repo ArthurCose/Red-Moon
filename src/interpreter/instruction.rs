@@ -102,18 +102,22 @@ pub enum Instruction {
     /// (dest, reserve_index)
     CreateTable(Register, ConstantIndex),
 
-    /// Flushes data to a table with internal tracking for which index to write to, keeping previous flush calls in mind.
+    /// Flushes data to a table, expects the data to follow with a one register gap after the table
     ///
-    /// src_start and src_end are inclusive
+    /// index_offset is the first index we use when appending,
+    /// an Instruction::Constant can appear after this instruction to add to that index
     ///
-    /// (dest, src_start, src_end)
+    /// (dest, total, index_offset)
     FlushToTable(Register, Register, Register),
 
-    /// Flushes data to a table with internal tracking for which index to write to, keeping previous flush calls in mind.
+    /// Flushes data to a table
     ///
-    ///  src_count points to the count, src_start points to the start of the data
+    /// src_start points to the start of the data, the count should be stored in the register after the dest
     ///
-    /// (dest, src_count, src_start)
+    /// index_offset is the first index we use when appending,
+    /// an Instruction::Constant can appear after this instruction to add to that index
+    ///
+    /// (dest, src_start, index_offset)
     VariadicToTable(Register, Register, Register),
 
     /// Copies a value from a table onto the stack

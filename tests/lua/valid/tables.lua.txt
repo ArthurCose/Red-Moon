@@ -34,6 +34,14 @@ print("\nvariadic:")
 local function foo(...) return ... end
 a = { foo(1, 2, 3, 4) }
 print(#a, a[2])
+a = { foo(1, 2, 3, 4), foo(1, 2, 3, 4) }
+print(#a, a[2])
+local function foo(...) return {...} end
+a = foo(1, 2, 3, 4)
+print(#a, a[2])
+local function foo(...) return {..., ...} end
+a = foo(1, 2, 3, 4)
+print(#a, a[2])
 
 print("\nexpresion execution order:")
 a = {
@@ -72,7 +80,20 @@ a = {
 }
 print(#a, a[1])
 
-print("\nexpression access")
-a.a = 2
+
+print("\n51 elements - double flush:")
+a = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  [1] = 2,
+  1
+}
+print(#a, a[1], a[51])
+
+print("\nexpression access:")
+a.a = 3
 print((a)[1])
 print((a).a)

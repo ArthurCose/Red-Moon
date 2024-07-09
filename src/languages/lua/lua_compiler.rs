@@ -1653,21 +1653,21 @@ where
         let instructions = &mut self.top_function.instructions;
 
         for instruction in &mut instructions[range] {
-            match instruction {
-                Instruction::Call(_, mode) => {
+            match *instruction {
+                Instruction::Call(f_register, mode) => {
                     // for ReturnMode::Extend we need to test the target in case of a nested exp_list
                     // for ReturnMode::UnsizedDestinationPreserve we don't need to test the target,
                     // since it's only used in assignment, which can't be nested
-                    if *mode == ReturnMode::Extend(count_register)
+                    if mode == ReturnMode::Extend(count_register)
                         || matches!(mode, ReturnMode::UnsizedDestinationPreserve(_))
                     {
-                        *mode = ReturnMode::Static(1);
+                        *instruction = Instruction::Call(f_register, ReturnMode::Static(1));
                     }
                 }
                 Instruction::CopyVariadic(dest, count_dest, skip) => {
                     // need to test the target in case of nested exp_list
-                    if *count_dest == count_register {
-                        *instruction = Instruction::CopyArg(*dest, *skip);
+                    if count_dest == count_register {
+                        *instruction = Instruction::CopyArg(dest, skip);
                     }
                 }
                 _ => {}
@@ -1838,19 +1838,21 @@ where
                     .transpose()?
                     .is_some_and(|token| binary_operator_priority(token.label).0 > 0);
 
-                let instructions = &mut self.top_function.instructions;
-
                 if followed_by_operator {
+                    let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyArg(top_register, skip));
                 } else {
                     match return_mode {
                         ReturnMode::Static(1) => {
+                            let instructions = &mut self.top_function.instructions;
                             instructions.push(Instruction::CopyArg(top_register, skip));
                         }
                         ReturnMode::Extend(count) => {
+                            let instructions = &mut self.top_function.instructions;
                             instructions.push(Instruction::CopyVariadic(top_register, count, skip));
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
+                            let instructions = &mut self.top_function.instructions;
                             instructions.push(Instruction::CopyUnsizedVariadic(dest, skip));
                         }
                         _ => unreachable!(),
@@ -2084,20 +2086,18 @@ where
         Ok(true)
     }
 
-    fn resolve_table(&mut self, top_register: Register) -> Result<(), LuaCompilationError> {
-        let count_register = top_register + 1;
-        let list_start = top_register + 2;
-
-        let mut initial_variadic_count = 1;
-
+    fn resolve_table(&mut self, table_register: Register) -> Result<(), LuaCompilationError> {
+        let count_register = table_register + 1;
+        let list_start = table_register + 2;
         let instructions = &mut self.top_function.instructions;
         let create_table_index = instructions.len();
-        instructions.push(Instruction::CreateTable(top_register, 0));
+        instructions.push(Instruction::CreateTable(table_register, 0));
         instructions.push(Instruction::LoadInt(count_register, 0));
 
         let mut next_register = list_start;
+        let mut initial_variadic_count = 1;
         let mut last_token;
-        let mut reserve_len = 0;
+        let mut reserve_len: usize = 0;
         let mut variadic_instruction_range = None;
 
         loop {
@@ -2109,22 +2109,15 @@ where
             }
 
             // adjust last element to return a single value
-            if let Some(range) = variadic_instruction_range {
+            if let Some(range) = variadic_instruction_range.take() {
                 self.variadic_to_single_static(count_register, range);
-                variadic_instruction_range = None;
 
                 // see if we need to flush
-                if next_register >= REGISTER_LIMIT - FLUSH_TABLE_LIMIT
-                    || next_register - list_start >= FLUSH_TABLE_LIMIT
+                let count = next_register - list_start;
+                if next_register >= REGISTER_LIMIT - FLUSH_TABLE_LIMIT || count >= FLUSH_TABLE_LIMIT
                 {
-                    let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::FlushToTable(
-                        top_register,
-                        list_start,
-                        next_register - 1,
-                    ));
-                    reserve_len += next_register - list_start;
-
+                    self.flush_to_table(last_token, table_register, count, reserve_len)?;
+                    reserve_len += count as usize;
                     next_register = list_start;
                 }
             }
@@ -2146,7 +2139,7 @@ where
 
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::CopyToTableValue(
-                        top_register,
+                        table_register,
                         key_register,
                         value_register,
                     ));
@@ -2173,7 +2166,10 @@ where
                         .map_following_instructions(self.source, name_token.offset);
 
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::CopyToTableField(top_register, value_register));
+                    instructions.push(Instruction::CopyToTableField(
+                        table_register,
+                        value_register,
+                    ));
                     instructions.push(Instruction::Constant(string_index));
                 }
                 _ => {
@@ -2205,10 +2201,9 @@ where
         }
 
         if next_register > list_start {
-            let instructions = &mut self.top_function.instructions;
-
             if let Some(range) = variadic_instruction_range {
                 // handling the last element as variadic
+                let instructions = &mut self.top_function.instructions;
 
                 if matches!(
                     instructions.get(range.end - 1),
@@ -2217,30 +2212,38 @@ where
                     // let the variadic update this
                     initial_variadic_count = 0;
                 }
-
-                if next_register - 1 > list_start {
+                let count = next_register - list_start - 1;
+                if count > 0 {
                     // flush remaining single values
-                    instructions.push(Instruction::FlushToTable(
-                        top_register,
-                        list_start,
-                        next_register - 2,
-                    ));
+                    self.flush_to_table(last_token, table_register, count, reserve_len)?;
+                    reserve_len += count as usize;
                 }
 
-                reserve_len += next_register - list_start - 1;
+                // this should look similar to flush_to_table
+                let remainder = reserve_len % 256;
 
+                let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::VariadicToTable(
-                    top_register,
-                    count_register,
+                    table_register,
                     next_register - 1,
+                    remainder as _,
                 ));
+
+                if reserve_len > 255 {
+                    let index = self.top_function.register_number(
+                        self.source,
+                        last_token,
+                        (reserve_len - remainder) as _,
+                    )?;
+
+                    let instructions = &mut self.top_function.instructions;
+                    instructions.push(Instruction::Constant(index));
+                }
             } else {
                 // just flush the remaining single values
-                instructions.push(Instruction::FlushToTable(
-                    top_register,
-                    list_start,
-                    next_register - 1,
-                ));
+                let count = next_register - list_start;
+                self.flush_to_table(last_token, table_register, count, reserve_len)?;
+                reserve_len += count as usize;
             }
         }
 
@@ -2251,11 +2254,43 @@ where
         let variadic_constant =
             self.top_function
                 .register_number(self.source, last_token, initial_variadic_count)?;
-
         let instructions = &mut self.top_function.instructions;
-        instructions[create_table_index] = Instruction::CreateTable(top_register, len_index);
+        instructions[create_table_index] = Instruction::CreateTable(table_register, len_index);
         instructions[create_table_index + 1] =
             Instruction::LoadInt(count_register, variadic_constant);
+
+        Ok(())
+    }
+
+    fn flush_to_table(
+        &mut self,
+        token: LuaToken<'source>,
+        table_register: Register,
+        count: Register,
+        index_offset: usize,
+    ) -> Result<(), LuaCompilationError> {
+        println!("{count} {index_offset} {}", token.offset);
+
+        let offset_remainder = index_offset % 256;
+
+        // flush remaining single values
+        let instructions = &mut self.top_function.instructions;
+        instructions.push(Instruction::FlushToTable(
+            table_register,
+            count,
+            offset_remainder as _,
+        ));
+
+        if index_offset > 255 {
+            let index = self.top_function.register_number(
+                self.source,
+                token,
+                (index_offset - offset_remainder) as _,
+            )?;
+
+            let instructions = &mut self.top_function.instructions;
+            instructions.push(Instruction::Constant(index));
+        }
 
         Ok(())
     }

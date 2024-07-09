@@ -274,7 +274,6 @@ impl Thread {
                                 call.up_values.clone_from(&func.up_values);
                                 call.function_definition = func.definition;
                                 call.next_instruction_index = 0;
-                                call.table_flush_count = 0;
 
                                 self.value_stack
                                     .chip(call.stack_start, self.value_stack.len() - stack_start);
@@ -456,7 +455,6 @@ struct CallContext {
     next_instruction_index: usize,
     stack_start: usize,
     register_base: usize,
-    table_flush_count: usize,
     return_mode: ReturnMode,
 }
 
@@ -471,7 +469,6 @@ impl CallContext {
             next_instruction_index: 0,
             stack_start,
             register_base,
-            table_flush_count: 0,
             return_mode: ReturnMode::Multi,
         }
     }
@@ -550,14 +547,14 @@ impl CallContext {
                     let heap_key = heap.create_table(len as _, 0);
 
                     value_stack.set(self.register_base + dest as usize, heap_key.into());
-                    self.table_flush_count = 0;
                 }
-                Instruction::FlushToTable(dest, src_start, src_end) => {
+                Instruction::FlushToTable(dest, total, index_offset) => {
                     let err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
 
-                    let StackValue::HeapValue(heap_key) =
-                        value_stack.get(self.register_base + dest as usize)
-                    else {
+                    // get the table
+                    let dest_index = self.register_base + dest as usize;
+
+                    let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
                         return Err(err.clone());
                     };
 
@@ -569,19 +566,33 @@ impl CallContext {
                         return Err(err.clone());
                     };
 
-                    let start = self.register_base + src_start as usize;
-                    let end = self.register_base + src_end as usize + 1;
+                    // get the index offset
+                    let mut index_offset = index_offset as usize;
 
-                    table.flush(self.table_flush_count, value_stack.get_slice(start..end));
-                    self.table_flush_count += end - start;
+                    if let Some(&Instruction::Constant(index)) =
+                        definition.instructions.get(self.next_instruction_index)
+                    {
+                        self.next_instruction_index += 1;
+
+                        let Some(&len) = definition.numbers.get(index as usize) else {
+                            return Err(IllegalInstruction::MissingNumberConstant(index).into());
+                        };
+
+                        index_offset += len as usize;
+                    }
+
+                    let start = dest_index + 2;
+                    let end = start + total as usize;
+
+                    table.flush(index_offset, value_stack.get_slice(start..end));
                 }
-                Instruction::VariadicToTable(dest, src_count, src_start) => {
+                Instruction::VariadicToTable(dest, src_start, index_offset) => {
                     let table_err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
 
                     // grab the table
-                    let StackValue::HeapValue(heap_key) =
-                        value_stack.get(self.register_base + dest as usize)
-                    else {
+                    let dest_index = self.register_base + dest as usize;
+
+                    let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
                         return Err(table_err.clone());
                     };
 
@@ -593,9 +604,25 @@ impl CallContext {
                         return Err(table_err.clone());
                     };
 
+                    // get the index offset
+                    let mut index_offset = index_offset as usize;
+
+                    if let Some(&Instruction::Constant(index)) =
+                        definition.instructions.get(self.next_instruction_index)
+                    {
+                        self.next_instruction_index += 1;
+
+                        let Some(&len) = definition.numbers.get(index as usize) else {
+                            return Err(IllegalInstruction::MissingNumberConstant(index).into());
+                        };
+
+                        index_offset += len as usize;
+                    }
+
                     // grab the count
+                    let count_index = dest_index + 1;
                     let StackValue::Primitive(Primitive::Integer(count)) =
-                        value_stack.get(self.register_base + src_count as usize)
+                        value_stack.get(count_index)
                     else {
                         return Err(table_err.clone());
                     };
@@ -604,8 +631,7 @@ impl CallContext {
                     let end = start + count as usize;
 
                     table.reserve_list(count as usize);
-                    table.flush(self.table_flush_count, value_stack.get_slice(start..end));
-                    self.table_flush_count += end - start;
+                    table.flush(index_offset, value_stack.get_slice(start..end));
                 }
                 Instruction::CopyTableField(dest, table_index) => {
                     // resolve field key
