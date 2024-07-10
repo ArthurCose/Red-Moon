@@ -322,7 +322,7 @@ impl Thread {
                             self.value_stack
                                 .chip(context.register_base + registry_index + return_count + 1, 0);
 
-                            // chip under the return the return values and count
+                            // chip under the return values and count
                             self.value_stack.chip(context.stack_start, return_count + 1);
                         }
                         ReturnMode::Static(expected_count) => {
@@ -332,7 +332,7 @@ impl Thread {
                             self.value_stack
                                 .chip(context.register_base + registry_index + return_count + 1, 0);
 
-                            // chip under the return the return values
+                            // chip under the return values
                             self.value_stack.chip(context.stack_start, return_count);
                         }
                         ReturnMode::Destination(dest) => {
@@ -363,7 +363,7 @@ impl Thread {
                                 ));
                             };
 
-                            // chip under the return the return values
+                            // chip under the return values
                             self.value_stack.chip(context.stack_start, return_count);
                             // add the return count
                             let count = stored_return_count + return_count as i64 - 1;
@@ -1245,11 +1245,11 @@ impl CallContext {
                     }
                 }
                 Instruction::JumpToForLoop(i) => {
-                    self.next_instruction_index = (i).into();
+                    self.next_instruction_index = i.into();
                     for_loop_jump = true;
                 }
                 Instruction::Jump(i) => {
-                    self.next_instruction_index = (i).into();
+                    self.next_instruction_index = i.into();
                 }
                 Instruction::Call(stack_start, return_mode) => {
                     return Ok(CallResult::Call(stack_start as usize, return_mode))
