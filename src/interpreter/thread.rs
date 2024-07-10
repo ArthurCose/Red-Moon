@@ -50,8 +50,7 @@ impl Thread {
         vm: &mut Vm,
     ) -> Result<Self, RuntimeErrorData> {
         let function_key = resolve_call(vm, value, |heap, value| {
-            args.push_front(Value::from_stack_value(heap, value)?);
-            Ok(())
+            args.push_front(Value::from_stack_value(heap, value));
         })?;
 
         let mut call_stack = Vec::new();
@@ -125,8 +124,6 @@ impl Thread {
                         arg_count += 1;
                         self.value_stack
                             .set(stack_start + 1, Primitive::Integer(arg_count).into());
-
-                        Ok(())
                     });
 
                     let function_key = match function_key {
@@ -1886,7 +1883,7 @@ fn heap_value_as_integer(heap: &mut Heap, heap_key: HeapKey) -> Result<i64, Runt
 fn resolve_call(
     vm: &mut Vm,
     mut value: StackValue,
-    mut prepend_arg: impl FnMut(&mut Heap, StackValue) -> Result<(), RuntimeErrorData>,
+    mut prepend_arg: impl FnMut(&mut Heap, StackValue),
 ) -> Result<HeapKey, RuntimeErrorData> {
     let call_key = vm.metatable_keys().call.0.key().into();
     let max_chain_depth = vm.limits().metatable_chain_depth;
@@ -1911,7 +1908,7 @@ fn resolve_call(
         }
 
         let next_value = heap.get_metavalue(heap_key, call_key);
-        prepend_arg(heap, value)?;
+        prepend_arg(heap, value);
         value = next_value;
 
         chain_depth += 1;

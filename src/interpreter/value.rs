@@ -243,16 +243,13 @@ impl Value {
         }
     }
 
-    pub(crate) fn from_stack_value(
-        heap: &mut Heap,
-        value: StackValue,
-    ) -> Result<Self, IllegalInstruction> {
-        let value = match value {
+    /// Expects stack values to made from within the same vm as the heap
+    pub(crate) fn from_stack_value(heap: &mut Heap, value: StackValue) -> Value {
+        match value {
             StackValue::Primitive(primitive) => Value::Primitive(primitive),
             StackValue::HeapValue(key) => {
-                let Some(value) = heap.get(key) else {
-                    return Err(IllegalInstruction::InvalidHeapKey);
-                };
+                // stack values should be made from within the same vm as the heap
+                let value = heap.get(key).unwrap();
 
                 match value {
                     HeapValue::Bytes(_) => Value::String(StringRef(heap.create_ref(key))),
@@ -271,11 +268,9 @@ impl Value {
                     unreachable!()
                 };
 
-                return Self::from_stack_value(heap, *value);
+                Self::from_stack_value(heap, *value)
             }
-        };
-
-        Ok(value)
+        }
     }
 
     pub(crate) fn test_validity(&self, heap: &Heap) -> Result<(), RuntimeErrorData> {

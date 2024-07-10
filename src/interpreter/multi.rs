@@ -91,13 +91,13 @@ impl MultiValue {
         let start = len_index + 1;
         let end = start + arg_count;
 
-        self.values.reserve(arg_count);
-
-        for value in value_stack.get_slice(start..end).iter().rev() {
-            let value = Value::from_stack_value(heap, *value)?;
-
-            self.values.push(value);
-        }
+        self.values.extend(
+            value_stack
+                .get_slice(start..end)
+                .iter()
+                .rev()
+                .map(|&value| Value::from_stack_value(heap, value)),
+        );
 
         Ok(())
     }

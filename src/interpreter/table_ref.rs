@@ -71,7 +71,7 @@ impl TableRef {
         };
 
         let value = table.get(key);
-        let value = Value::from_stack_value(vm.heap_mut(), value).unwrap();
+        let value = Value::from_stack_value(vm.heap_mut(), value);
 
         V::from_value(value, vm)
     }
@@ -219,8 +219,7 @@ impl TableRef {
         let value = table.get(Primitive::Integer((index + 1) as _).into());
         table.splice(index..index, []);
 
-        let value =
-            Value::from_stack_value(vm.heap_mut(), value).map_err(RuntimeErrorData::from)?;
+        let value = Value::from_stack_value(vm.heap_mut(), value);
 
         V::from_value(value, vm)
     }
@@ -241,8 +240,8 @@ impl TableRef {
             return Ok(None);
         };
 
-        let k = Value::from_stack_value(vm.heap_mut(), k).map_err(RuntimeErrorData::from)?;
-        let v = Value::from_stack_value(vm.heap_mut(), v).map_err(RuntimeErrorData::from)?;
+        let k = Value::from_stack_value(vm.heap_mut(), k);
+        let v = Value::from_stack_value(vm.heap_mut(), v);
 
         let k = K::from_value(k, vm)?;
         let v = V::from_value(v, vm)?;
