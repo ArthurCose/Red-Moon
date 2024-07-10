@@ -5,6 +5,7 @@ mod error;
 mod function;
 mod lua;
 mod multi;
+mod stdlib;
 mod string;
 mod table;
 mod thread;
@@ -16,6 +17,7 @@ pub use crate::table::{Table, TableExt, TablePairs, TableSequence};
 pub use error::{Error, ErrorContext, ExternalError, ExternalResult, Result};
 pub use function::Function;
 pub use lua::{Lua, RegistryKey};
+pub use stdlib::StdLib;
 pub use string::String;
 pub use thread::Thread;
 pub use types::{Integer, LightUserData, Number};
@@ -39,6 +41,7 @@ pub mod prelude {
     };
     pub use crate::function::Function as LuaFunction;
     pub use crate::lua::{Lua, RegistryKey as LuaRegistryKey};
+    pub use crate::stdlib::StdLib as LuaStdLib;
     pub use crate::string::String as LuaString;
     pub use crate::table::{
         Table as LuaTable, TableExt as LuaTableExt, TablePairs as LuaTablePairs,

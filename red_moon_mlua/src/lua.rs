@@ -1,6 +1,7 @@
 use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
 use red_moon::interpreter::{ByteString, TableRef, Vm};
+use red_moon::languages::lua::std::{impl_basic, impl_math, impl_table};
 use red_moon::languages::lua::{coerce_integer, parse_number, LuaCompiler};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell, UnsafeCell};
@@ -42,6 +43,8 @@ impl Default for Lua {
         let array_metatable = vm.create_table();
         let mut registry = slotmap::SlotMap::default();
         let nil_id = registry.insert(Default::default());
+
+        impl_basic(&mut vm).unwrap();
 
         Self {
             vm: UnsafeCell::new(vm),
@@ -105,6 +108,23 @@ impl Lua {
                 std::mem::transmute::<Vec<Value<'_>>, Vec<Value<'static>>>(multivalue)
             });
         }
+    }
+
+    /// Loads the specified subset of the standard libraries into an existing Lua state.
+    ///
+    /// Use the [`StdLib`] flags to specify the libraries you want to load.
+    ///
+    /// [`StdLib`]: crate::StdLib
+    pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
+        if libs.contains(StdLib::TABLE) {
+            impl_table(unsafe { self.vm_mut() })?;
+        }
+
+        if libs.contains(StdLib::MATH) {
+            impl_math(unsafe { self.vm_mut() })?;
+        }
+
+        Ok(())
     }
 
     /// Perform a full garbage-collection cycle.
