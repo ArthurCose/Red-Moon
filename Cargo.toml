@@ -17,6 +17,15 @@ rustc-hash = "2"
 [dev-dependencies]
 pretty_assertions = "1"
 
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[profile.performance]
+inherits = "release"
+strip = true
+
 [profile.profiling]
 inherits = "release"
 debug = "limited"

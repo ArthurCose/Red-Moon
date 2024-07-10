@@ -2,9 +2,9 @@
 
 # call from workspace root
 
-cargo build -p red_moon_cli --release
+cargo build -p red_moon_cli --profile performance
 
-MEASUREMENTS=10
+MEASUREMENTS=30
 
 time_multiple ()
 {
@@ -16,5 +16,5 @@ time_multiple ()
   done
 }
 
-time_multiple "red_moon " ./target/release/red_moon_cli $@
+time_multiple "red_moon " ./target/performance/red_moon_cli $@
 time_multiple "lua      " lua $@

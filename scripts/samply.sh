@@ -1,3 +1,3 @@
 cargo build -p red_moon_cli --profile profiling
-mkdir _flamegraphs
-samply record -o _flamegraphs/profile.json ./target/profiling/red_moon_cli $*
+mkdir _profiling
+samply record -o _profiling/profile.json ./target/profiling/red_moon_cli $*
