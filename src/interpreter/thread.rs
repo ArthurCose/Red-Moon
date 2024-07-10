@@ -34,8 +34,14 @@ impl Thread {
         args.push_stack_multi(&mut value_stack);
         vm.store_multi(args);
 
-        let root_register_base = value_stack.len();
-        let call_stack = vec![CallContext::new(function, 0, root_register_base, vm)];
+        let call_stack = vec![CallContext {
+            up_values: function.up_values.clone_using(&vm.short_value_stacks),
+            function_definition: function.definition.clone(),
+            next_instruction_index: 0,
+            stack_start: 0,
+            register_base: value_stack.len(),
+            return_mode: ReturnMode::Multi,
+        }];
 
         Self {
             call_stack,
@@ -55,9 +61,8 @@ impl Thread {
 
         let mut call_stack = Vec::new();
         let mut value_stack = vm.create_value_stack();
-        let heap = vm.heap_mut();
 
-        match heap.get(function_key).unwrap() {
+        match vm.heap.get(function_key).unwrap() {
             HeapValue::NativeFunction(function) => {
                 let results = match function.shallow_clone().call(args, vm) {
                     Ok(result) => result,
@@ -66,14 +71,20 @@ impl Thread {
                 results.push_stack_multi(&mut value_stack);
             }
             HeapValue::Function(function) => {
-                let function = function.clone();
-
                 value_stack.push(value);
                 args.push_stack_multi(&mut value_stack);
-                vm.store_multi(args);
 
-                let root_register_base = value_stack.len();
-                call_stack.push(CallContext::new(function, 0, root_register_base, vm));
+                let call_context = CallContext {
+                    up_values: function.up_values.clone_using(&vm.short_value_stacks),
+                    function_definition: function.definition.clone(),
+                    next_instruction_index: 0,
+                    stack_start: 0,
+                    register_base: value_stack.len(),
+                    return_mode: ReturnMode::Multi,
+                };
+                call_stack.push(call_context);
+
+                vm.store_multi(args);
             }
             _ => unreachable!(),
         }
@@ -131,7 +142,7 @@ impl Thread {
                         Err(err) => return Err(self.unwind_error(vm, err)),
                     };
 
-                    match vm.heap_mut().get(function_key) {
+                    match vm.heap.get(function_key) {
                         Some(HeapValue::NativeFunction(callback)) => {
                             let callback = callback.shallow_clone();
 
@@ -139,7 +150,7 @@ impl Thread {
                             let mut args = vm.create_multi();
 
                             if let Err(err) = args.copy_stack_multi(
-                                vm.heap_mut(),
+                                &mut vm.heap,
                                 &mut self.value_stack,
                                 stack_start + 1,
                                 IllegalInstruction::MissingArgCount,
@@ -264,24 +275,23 @@ impl Thread {
                             vm.store_multi(return_values);
                         }
                         Some(HeapValue::Function(func)) => {
-                            let func = func.clone();
-
                             if return_mode == ReturnMode::TailCall {
                                 // transform the caller
                                 call.up_values.clone_from(&func.up_values);
-                                call.function_definition = func.definition;
+                                call.function_definition = func.definition.clone();
                                 call.next_instruction_index = 0;
 
                                 self.value_stack
                                     .chip(call.stack_start, self.value_stack.len() - stack_start);
                             } else {
-                                let mut new_call = CallContext::new(
-                                    func,
+                                let new_call = CallContext {
+                                    up_values: func.up_values.clone_using(&vm.short_value_stacks),
+                                    function_definition: func.definition.clone(),
+                                    next_instruction_index: 0,
                                     stack_start,
-                                    stack_start + 2 + arg_count as usize,
-                                    vm,
-                                );
-                                new_call.return_mode = return_mode;
+                                    register_base: stack_start + 2 + arg_count as usize,
+                                    return_mode,
+                                };
                                 self.call_stack.push(new_call);
                             }
                         }
@@ -397,7 +407,7 @@ impl Thread {
         if let Some(definition) = last_definition {
             return_values
                 .copy_stack_multi(
-                    vm.heap_mut(),
+                    &mut vm.heap,
                     &mut self.value_stack,
                     0,
                     IllegalInstruction::MissingReturnCount,
@@ -456,20 +466,6 @@ struct CallContext {
 }
 
 impl CallContext {
-    fn new(function: Function, stack_start: usize, register_base: usize, vm: &mut Vm) -> Self {
-        let mut up_values = vm.create_short_value_stack();
-        up_values.clone_from(&*function.up_values);
-
-        Self {
-            up_values,
-            function_definition: function.definition,
-            next_instruction_index: 0,
-            stack_start,
-            register_base,
-            return_mode: ReturnMode::Multi,
-        }
-    }
-
     fn resume(
         &mut self,
         value_stack: &mut ValueStack,
@@ -487,7 +483,7 @@ impl CallContext {
             #[cfg(feature = "instruction_exec_counts")]
             vm.track_instruction(instruction);
 
-            let heap = vm.heap_mut();
+            let heap = &mut vm.heap;
             self.next_instruction_index += 1;
 
             match instruction {
@@ -806,11 +802,10 @@ impl CallContext {
                         // copy the function to pass captures
                         let mut func = func.clone();
 
-                        let mut up_values = vm.create_short_value_stack();
+                        let mut up_values = vm.short_value_stacks.pop().unwrap_or_default();
                         std::mem::swap(pending_captures, &mut up_values);
                         func.up_values = Rc::new(up_values);
 
-                        let heap = vm.heap_mut();
                         let heap_key = heap.create(HeapValue::Function(func));
 
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
@@ -862,8 +857,7 @@ impl CallContext {
                     );
                 }
                 Instruction::Len(dest, src) => {
-                    let metamethod_key = vm.metatable_keys().len.0.key().into();
-                    let heap = vm.heap_mut();
+                    let metamethod_key = vm.metatable_keys.len.0.key().into();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
@@ -895,10 +889,10 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
-                    let metamethod_key = vm.metatable_keys().unm.0.key().into();
+                    let metamethod_key = vm.metatable_keys.unm.0.key().into();
 
                     if let Some(call_result) = self.unary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
@@ -912,10 +906,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseNot(dest, src) => {
-                    let metamethod_key = vm.metatable_keys().bnot.0.key().into();
+                    let metamethod_key = vm.metatable_keys.bnot.0.key().into();
 
                     if let Some(call_result) = self.unary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
@@ -925,10 +919,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Add(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().add.0.key().into();
+                    let metamethod_key = vm.metatable_keys.add.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a + b,
@@ -938,10 +932,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Subtract(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().sub.0.key().into();
+                    let metamethod_key = vm.metatable_keys.sub.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a - b,
@@ -951,10 +945,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Multiply(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().mul.0.key().into();
+                    let metamethod_key = vm.metatable_keys.mul.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a * b,
@@ -964,10 +958,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Division(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().div.0.key().into();
+                    let metamethod_key = vm.metatable_keys.div.0.key().into();
 
                     if let Some(call_result) = self.binary_float_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a / b,
@@ -990,10 +984,10 @@ impl CallContext {
                         _ => {}
                     }
 
-                    let metamethod_key = vm.metatable_keys().idiv.0.key().into();
+                    let metamethod_key = vm.metatable_keys.idiv.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a / b,
@@ -1004,10 +998,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Modulus(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().modulus.0.key().into();
+                    let metamethod_key = vm.metatable_keys.modulus.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a % b,
@@ -1017,10 +1011,10 @@ impl CallContext {
                     }
                 }
                 Instruction::Power(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().pow.0.key().into();
+                    let metamethod_key = vm.metatable_keys.pow.0.key().into();
 
                     if let Some(call_result) = self.binary_float_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a.powf(b),
@@ -1029,10 +1023,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseAnd(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().band.0.key().into();
+                    let metamethod_key = vm.metatable_keys.band.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a & b,
@@ -1041,10 +1035,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseOr(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().bor.0.key().into();
+                    let metamethod_key = vm.metatable_keys.bor.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a | b,
@@ -1053,10 +1047,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseXor(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().bxor.0.key().into();
+                    let metamethod_key = vm.metatable_keys.bxor.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a ^ b,
@@ -1065,10 +1059,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftLeft(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().shl.0.key().into();
+                    let metamethod_key = vm.metatable_keys.shl.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a << b,
@@ -1077,10 +1071,10 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftRight(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().shr.0.key().into();
+                    let metamethod_key = vm.metatable_keys.shr.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
-                        (vm.heap_mut(), value_stack),
+                        (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
                         |a, b| a >> b,
@@ -1089,8 +1083,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Equal(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().eq.0.key().into();
-                    let heap = vm.heap_mut();
+                    let metamethod_key = vm.metatable_keys.eq.0.key().into();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1121,8 +1114,7 @@ impl CallContext {
                     );
                 }
                 Instruction::LessThan(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().lt.0.key().into();
-                    let heap = vm.heap_mut();
+                    let metamethod_key = vm.metatable_keys.lt.0.key().into();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1144,8 +1136,7 @@ impl CallContext {
                     };
                 }
                 Instruction::LessThanEqual(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().le.0.key().into();
-                    let heap = vm.heap_mut();
+                    let metamethod_key = vm.metatable_keys.le.0.key().into();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1167,8 +1158,7 @@ impl CallContext {
                     };
                 }
                 Instruction::Concat(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys().concat.0.key();
-                    let heap = vm.heap_mut();
+                    let metamethod_key = vm.metatable_keys.concat.0.key();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1624,7 +1614,7 @@ impl CallContext {
             return Err(RuntimeErrorData::AttemptToIndexInvalid);
         };
 
-        let mut value = match vm.heap_mut().get(base_heap_key).unwrap() {
+        let mut value = match vm.heap.get(base_heap_key).unwrap() {
             HeapValue::Table(table) => table.get(key),
             HeapValue::Bytes(_) => StackValue::Primitive(Primitive::Nil),
             _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
@@ -1634,11 +1624,10 @@ impl CallContext {
 
         if value == StackValue::Primitive(Primitive::Nil) {
             // resolve using __index
-            let metamethod_key = vm.metatable_keys().index.0.key().into();
+            let metamethod_key = vm.metatable_keys.index.0.key().into();
             let max_chain_depth = vm.limits().metatable_chain_depth;
             let mut chain_depth = 0;
 
-            let heap = vm.heap_mut();
             let mut next_index_base = index_base;
 
             while next_index_base != StackValue::Primitive(Primitive::Nil) {
@@ -1648,7 +1637,7 @@ impl CallContext {
                     return Err(RuntimeErrorData::AttemptToIndexInvalid);
                 };
 
-                let heap_value = heap.get(heap_key).unwrap();
+                let heap_value = vm.heap.get(heap_key).unwrap();
 
                 match heap_value {
                     HeapValue::Table(table) => {
@@ -1675,7 +1664,7 @@ impl CallContext {
                     _ => {}
                 };
 
-                next_index_base = heap.get_metavalue(heap_key, metamethod_key);
+                next_index_base = vm.heap.get_metavalue(heap_key, metamethod_key);
                 chain_depth += 1;
 
                 if chain_depth > max_chain_depth {
@@ -1701,12 +1690,10 @@ impl CallContext {
             return Err(RuntimeErrorData::AttemptToIndexInvalid);
         };
 
-        let metamethod_key = vm.metatable_keys().newindex.0.key().into();
+        let metamethod_key = vm.metatable_keys.newindex.0.key().into();
+        let src_value = value_stack.get_deref(&vm.heap, self.register_base + src as usize);
 
-        let heap = vm.heap_mut();
-        let src_value = value_stack.get_deref(heap, self.register_base + src as usize);
-
-        if let Some(function_key) = heap.get_metamethod(heap_key, metamethod_key) {
+        if let Some(function_key) = vm.heap.get_metamethod(heap_key, metamethod_key) {
             let function_index = value_stack.len() - self.register_base;
 
             value_stack.extend([
@@ -1722,7 +1709,7 @@ impl CallContext {
                 ReturnMode::Static(0),
             )))
         } else {
-            let table_value = heap.get_mut(heap_key).unwrap();
+            let table_value = vm.heap.get_mut(heap_key).unwrap();
 
             let HeapValue::Table(table) = table_value else {
                 return Err(RuntimeErrorData::AttemptToIndexInvalid);
@@ -1885,18 +1872,16 @@ fn resolve_call(
     mut value: StackValue,
     mut prepend_arg: impl FnMut(&mut Heap, StackValue),
 ) -> Result<HeapKey, RuntimeErrorData> {
-    let call_key = vm.metatable_keys().call.0.key().into();
+    let call_key = vm.metatable_keys.call.0.key().into();
     let max_chain_depth = vm.limits().metatable_chain_depth;
     let mut chain_depth = 0;
-
-    let heap = vm.heap_mut();
 
     loop {
         let StackValue::HeapValue(heap_key) = value else {
             return Err(RuntimeErrorData::NotAFunction);
         };
 
-        let Some(heap_value) = heap.get_mut(heap_key) else {
+        let Some(heap_value) = vm.heap.get_mut(heap_key) else {
             return Err(RuntimeErrorData::NotAFunction);
         };
 
@@ -1907,8 +1892,8 @@ fn resolve_call(
             break Ok(heap_key);
         }
 
-        let next_value = heap.get_metavalue(heap_key, call_key);
-        prepend_arg(heap, value);
+        let next_value = vm.heap.get_metavalue(heap_key, call_key);
+        prepend_arg(&mut vm.heap, value);
         value = next_value;
 
         chain_depth += 1;

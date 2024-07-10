@@ -54,12 +54,12 @@ downcast!(dyn AppData);
 
 pub struct Vm {
     limits: VmLimits,
-    heap: Heap,
+    pub(crate) heap: Heap,
     default_environment: HeapRef,
-    metatable_keys: Rc<MetatableKeys>,
-    recycled_multivalues: Rc<VecCell<MultiValue>>,
-    recycled_value_stacks: Rc<VecCell<ValueStack>>,
-    recycled_short_value_stacks: Rc<VecCell<ValueStack>>,
+    pub(crate) metatable_keys: Rc<MetatableKeys>,
+    multivalues: Rc<VecCell<MultiValue>>,
+    value_stacks: Rc<VecCell<ValueStack>>,
+    pub(crate) short_value_stacks: Rc<VecCell<ValueStack>>,
     tracked_stack_size: usize,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
     #[cfg(feature = "instruction_exec_counts")]
@@ -73,9 +73,9 @@ impl Clone for Vm {
             heap: self.heap.clone(),
             default_environment: self.default_environment.clone(),
             metatable_keys: self.metatable_keys.clone(),
-            recycled_multivalues: self.recycled_multivalues.clone(),
-            recycled_value_stacks: self.recycled_value_stacks.clone(),
-            recycled_short_value_stacks: self.recycled_short_value_stacks.clone(),
+            multivalues: self.multivalues.clone(),
+            value_stacks: self.value_stacks.clone(),
+            short_value_stacks: self.short_value_stacks.clone(),
             // reset to 0, since there's no active call on the new vm
             tracked_stack_size: 0,
             app_data: self.app_data.clone(),
@@ -99,22 +99,14 @@ impl Vm {
             heap,
             default_environment,
             metatable_keys: Rc::new(metatable_keys),
-            recycled_multivalues: Default::default(),
-            recycled_value_stacks: Default::default(),
-            recycled_short_value_stacks: Default::default(),
+            multivalues: Default::default(),
+            value_stacks: Default::default(),
+            short_value_stacks: Default::default(),
             tracked_stack_size: 0,
             app_data: Default::default(),
             #[cfg(feature = "instruction_exec_counts")]
             instruction_counter: Default::default(),
         }
-    }
-
-    pub(crate) fn heap(&self) -> &Heap {
-        &self.heap
-    }
-
-    pub(crate) fn heap_mut(&mut self) -> &mut Heap {
-        &mut self.heap
     }
 
     pub(crate) fn tracked_stack_size(&self) -> usize {
@@ -176,37 +168,37 @@ impl Vm {
     }
 
     pub fn create_multi(&mut self) -> MultiValue {
-        self.recycled_multivalues
+        self.multivalues
             .pop()
             .unwrap_or_else(|| MultiValue { values: Vec::new() })
     }
 
     pub fn store_multi(&mut self, mut multivalue: MultiValue) {
-        if self.recycled_multivalues.len() < RECYCLE_LIMIT {
+        if self.multivalues.len() < RECYCLE_LIMIT {
             multivalue.clear();
-            self.recycled_multivalues.push(multivalue);
+            self.multivalues.push(multivalue);
         }
     }
 
     pub(crate) fn create_value_stack(&mut self) -> ValueStack {
-        self.recycled_value_stacks.pop().unwrap_or_default()
+        self.value_stacks.pop().unwrap_or_default()
     }
 
     pub(crate) fn store_value_stack(&mut self, mut value_stack: ValueStack) {
-        if self.recycled_value_stacks.len() < RECYCLE_LIMIT {
+        if self.value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
-            self.recycled_value_stacks.push(value_stack);
+            self.value_stacks.push(value_stack);
         }
     }
 
     pub(crate) fn create_short_value_stack(&mut self) -> ValueStack {
-        self.recycled_short_value_stacks.pop().unwrap_or_default()
+        self.short_value_stacks.pop().unwrap_or_default()
     }
 
     pub(crate) fn store_short_value_stack(&mut self, mut value_stack: ValueStack) {
-        if self.recycled_short_value_stacks.len() < RECYCLE_LIMIT {
+        if self.short_value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
-            self.recycled_short_value_stacks.push(value_stack);
+            self.short_value_stacks.push(value_stack);
         }
     }
 

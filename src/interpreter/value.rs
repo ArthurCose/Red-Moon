@@ -88,7 +88,7 @@ impl Value {
 
         // must test validity of every arg, since invalid keys in the vm will cause a panic
         for value in &args.values {
-            value.test_validity(vm.heap())?;
+            value.test_validity(&vm.heap)?;
         }
 
         let result = match Thread::new_value_call(self.to_stack_value(), args, vm) {
@@ -216,17 +216,16 @@ impl Value {
         method_name: HeapKey,
         vm: &mut Vm,
     ) -> Option<Result<T, RuntimeError>> {
-        let heap = vm.heap_mut();
         let method_name = method_name.into();
 
         if let Some(key) = self.heap_key() {
-            if let Some(key) = heap.get_metamethod(key, method_name) {
+            if let Some(key) = vm.heap.get_metamethod(key, method_name) {
                 return Some(vm.call_function_key(key, (self.clone(), other.clone())));
             }
         }
 
         if let Some(key) = other.heap_key() {
-            if let Some(key) = heap.get_metamethod(key, method_name) {
+            if let Some(key) = vm.heap.get_metamethod(key, method_name) {
                 return Some(vm.call_function_key(key, (self.clone(), other.clone())));
             }
         }

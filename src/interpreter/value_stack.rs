@@ -1,4 +1,5 @@
 use super::heap::{Heap, HeapKey, HeapValue};
+use crate::vec_cell::VecCell;
 use std::ops::Range;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -83,6 +84,12 @@ impl Clone for ValueStack {
 }
 
 impl ValueStack {
+    pub(crate) fn clone_using(&self, short_value_stacks: &VecCell<ValueStack>) -> ValueStack {
+        let mut up_values = short_value_stacks.pop().unwrap_or_default();
+        up_values.clone_from(self);
+        up_values
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
