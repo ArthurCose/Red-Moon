@@ -323,6 +323,36 @@ impl Lua {
         }
     }
 
+    /// Calls the given function with a `Scope` parameter, giving the function the ability to create
+    /// userdata and callbacks from rust types that are !Send or non-'static.
+    ///
+    /// The lifetime of any function or userdata created through `Scope` lasts only until the
+    /// completion of this method call, on completion all such created values are automatically
+    /// dropped and Lua references to them are invalidated. If a script accesses a value created
+    /// through `Scope` outside of this method, a Lua error will result. Since we can ensure the
+    /// lifetime of values created through `Scope`, and we know that `Lua` cannot be sent to another
+    /// thread while `Scope` is live, it is safe to allow !Send datatypes and whose lifetimes only
+    /// outlive the scope lifetime.
+    ///
+    /// Inside the scope callback, all handles created through Scope will share the same unique 'lua
+    /// lifetime of the parent `Lua`. This allows scoped and non-scoped values to be mixed in
+    /// API calls, which is very useful (e.g. passing a scoped userdata to a non-scoped function).
+    /// However, this also enables handles to scoped values to be trivially leaked from the given
+    /// callback. This is not dangerous, though!  After the callback returns, all scoped values are
+    /// invalidated, which means that though references may exist, the Rust types backing them have
+    /// dropped. `Function` types will error when called, and `AnyUserData` will be typeless. It
+    /// would be impossible to prevent handles to scoped values from escaping anyway, since you
+    /// would always be able to smuggle them through Lua state.
+    pub fn scope<'lua, 'scope, R>(
+        &'lua self,
+        f: impl FnOnce(&Scope<'lua, 'scope>) -> Result<R>,
+    ) -> Result<R>
+    where
+        'lua: 'scope,
+    {
+        f(&Scope::new(self))
+    }
+
     /// Attempts to coerce a Lua value into a String in a manner consistent with Lua's internal
     /// behavior.
     ///
