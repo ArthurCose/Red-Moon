@@ -548,11 +548,10 @@ impl FromValue for ByteString {
 impl FromValue for bool {
     #[inline]
     fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
-        if let Value::Primitive(Primitive::Bool(b)) = value {
-            Ok(b)
-        } else {
-            Ok(true)
-        }
+        Ok(!matches!(
+            value,
+            Value::Primitive(Primitive::Nil | Primitive::Bool(false))
+        ))
     }
 }
 
