@@ -113,7 +113,7 @@ impl TableRef {
     /// Gets a value from the table, using the `__index` metamethod if available, and falling back to direct access.
     pub fn get<K: IntoValue, V: FromValue>(&self, key: K, vm: &mut Vm) -> Result<V, RuntimeError> {
         let table_key = self.0.key();
-        let method_key = vm.metatable_keys().newindex.0.key();
+        let method_key = vm.metatable_keys().index.0.key();
 
         if let Some(function_key) = vm.heap.get_metamethod(table_key, method_key.into()) {
             return vm.call_function_key(function_key, (self.clone(), key));
