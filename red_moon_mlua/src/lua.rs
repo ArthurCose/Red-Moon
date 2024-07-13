@@ -15,10 +15,18 @@ pub struct RegistryKey {
     lua_identifier: Arc<()>,
 }
 
+#[derive(Clone)]
 struct MutableResources {
     multivalue_pool: Vec<Vec<Value<'static>>>,
     registry: slotmap::SlotMap<slotmap::DefaultKey, red_moon::interpreter::Value>,
     named_registry: FxHashMap<ByteString, red_moon::interpreter::Value>,
+}
+
+#[derive(Clone)]
+struct Snapshot {
+    vm: Vm,
+    resources: MutableResources,
+    count: usize,
 }
 
 pub struct Lua {
@@ -28,6 +36,8 @@ pub struct Lua {
     /// - Creating a string, creating a table, accessing or setting values, should never use vm longer than a function call and never overlap
     /// - Native function calls pass `&mut VM`` as a parameter, we're safe to use our UnsafeCell in there
     vm: UnsafeCell<Vm>,
+    snapshots: Vec<Snapshot>,
+    modified: Cell<bool>,
     compiler: LuaCompiler,
     resources: RefCell<MutableResources>,
     nil_registry_id: slotmap::DefaultKey,
@@ -48,6 +58,8 @@ impl Default for Lua {
 
         Self {
             vm: UnsafeCell::new(vm),
+            snapshots: Default::default(),
+            modified: Cell::new(false),
             compiler: Default::default(),
             resources: RefCell::new(MutableResources {
                 multivalue_pool: Default::default(),
@@ -110,12 +122,55 @@ impl Lua {
         }
     }
 
+    pub fn snap(&mut self) {
+        if !self.modified.get() {
+            if let Some(snapshot) = self.snapshots.last_mut() {
+                snapshot.count += 1;
+                return;
+            }
+        }
+
+        self.snapshots.push(Snapshot {
+            vm: self.vm.get_mut().clone(),
+            resources: self.resources.borrow_mut().clone(),
+            count: 1,
+        });
+    }
+
+    pub fn rollback(&mut self, mut n: usize) {
+        while let Some(snapshot) = self.snapshots.last_mut() {
+            if snapshot.count < n {
+                n -= snapshot.count;
+                self.snapshots.pop();
+                continue;
+            }
+
+            snapshot.count -= n;
+
+            if snapshot.count == 0 {
+                let snapshot = self.snapshots.pop().unwrap();
+                *self.vm.get_mut() = snapshot.vm;
+                *self.resources.borrow_mut() = snapshot.resources;
+            } else {
+                self.vm.get_mut().clone_from(&snapshot.vm);
+                self.resources.borrow_mut().clone_from(&snapshot.resources);
+            }
+
+            return;
+        }
+
+        #[cfg(debug_assertions)]
+        panic!("Not enough snapshots")
+    }
+
     /// Loads the specified subset of the standard libraries into an existing Lua state.
     ///
     /// Use the [`StdLib`] flags to specify the libraries you want to load.
     ///
     /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
+        self.modified.set(true);
+
         if libs.contains(StdLib::TABLE) {
             impl_table(unsafe { self.vm_mut() })?;
         }
@@ -146,6 +201,8 @@ impl Lua {
     /// [`Chunk::exec`]: crate::Chunk::exec
     #[track_caller]
     pub fn load<'lua, 'a>(&'lua self, chunk: impl AsChunk<'lua, 'a>) -> Chunk<'lua, 'a> {
+        self.modified.set(true);
+
         let caller = Location::caller();
 
         Chunk {
@@ -157,6 +214,8 @@ impl Lua {
     }
 
     pub fn environment(&self) -> Result<Table> {
+        self.modified.set(true);
+
         let vm = unsafe { self.vm_mut() };
         let Some(table_ref) = vm.environment_up_value() else {
             return Ok(self.globals());
@@ -329,6 +388,8 @@ impl Lua {
         let vm = unsafe { self.vm() };
         let table_ref = vm.default_environment();
 
+        self.modified.set(true);
+
         Table {
             lua: self,
             table_ref,
@@ -459,6 +520,8 @@ impl Lua {
     where
         T: IntoLua<'lua>,
     {
+        self.modified.set(true);
+
         let vm = unsafe { self.vm_mut() };
         let name = vm.intern_string(name.as_bytes());
         let name = name.fetch(vm)?.clone();
@@ -482,6 +545,8 @@ impl Lua {
     where
         T: FromLua<'lua>,
     {
+        self.modified.set(true);
+
         let resources = self.resources.borrow();
         let value = resources
             .named_registry
@@ -500,8 +565,11 @@ impl Lua {
     ///
     /// [`set_named_registry_value`]: #method.set_named_registry_value
     pub fn unset_named_registry_value(&self, name: &str) -> Result<()> {
+        self.modified.set(true);
+
         let mut resources = self.resources.borrow_mut();
         resources.named_registry.remove(name.as_bytes());
+
         Ok(())
     }
 
@@ -525,6 +593,8 @@ impl Lua {
             });
         }
 
+        self.modified.set(true);
+
         let value = t.into_red_moon();
         let mut resources = self.resources.borrow_mut();
         let registry_id = resources.registry.insert(value);
@@ -547,6 +617,8 @@ impl Lua {
         if !self.owns_registry_value(key) {
             return Err(Error::MismatchedRegistryKey);
         }
+
+        self.modified.set(true);
 
         let red_moon_value = {
             let resources = self.resources.borrow();
@@ -572,6 +644,7 @@ impl Lua {
         }
 
         if key.id != self.nil_registry_id {
+            self.modified.set(true);
             self.resources.borrow_mut().registry.remove(key.id);
         }
 
@@ -592,6 +665,7 @@ impl Lua {
             return Err(Error::MismatchedRegistryKey);
         }
 
+        self.modified.set(true);
         let t = t.into_lua(self)?;
 
         if t == Value::Nil && key.id == self.nil_registry_id {
@@ -661,6 +735,8 @@ impl Lua {
             panic!("cannot mutably borrow app data container");
         }
 
+        self.modified.set(true);
+
         let vm = unsafe { self.vm_mut() };
         vm.set_app_data(RefCell::new(data))
             .map(|cell| cell.into_inner())
@@ -690,6 +766,9 @@ impl Lua {
             if let Ok(mut existing) = existing_cell.try_borrow_mut() {
                 // try to swap
                 std::mem::swap(&mut *existing, &mut data);
+
+                self.modified.set(true);
+
                 Ok(Some(data))
             } else {
                 // failed
@@ -734,6 +813,8 @@ impl Lua {
     pub fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<T>> {
         let vm = unsafe { self.vm_mut() };
 
+        self.modified.set(true);
+
         vm.app_data::<RefCell<T>>().map(|cell| {
             let data_ref = AppDataRefMut {
                 data: cell.borrow_mut(),
@@ -757,6 +838,8 @@ impl Lua {
         if self.app_data_borrows.get() > 0 {
             panic!("cannot mutably borrow app data container");
         }
+
+        self.modified.set(true);
 
         let vm = unsafe { self.vm_mut() };
         vm.remove_app_data::<RefCell<T>>()
