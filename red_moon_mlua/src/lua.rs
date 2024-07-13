@@ -156,6 +156,18 @@ impl Lua {
         }
     }
 
+    pub fn environment(&self) -> Result<Table> {
+        let vm = unsafe { self.vm_mut() };
+        let Some(table_ref) = vm.environment_up_value() else {
+            return Ok(self.globals());
+        };
+
+        Ok(Table {
+            lua: self,
+            table_ref,
+        })
+    }
+
     #[inline]
     pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
         let vm = unsafe { self.vm_mut() };

@@ -56,6 +56,7 @@ pub struct Vm {
     limits: VmLimits,
     pub(crate) heap: Heap,
     default_environment: HeapRef,
+    pub(crate) environment_up_value: Option<HeapKey>,
     pub(crate) metatable_keys: Rc<MetatableKeys>,
     multivalues: Rc<VecCell<MultiValue>>,
     value_stacks: Rc<VecCell<ValueStack>>,
@@ -72,6 +73,7 @@ impl Clone for Vm {
             limits: self.limits.clone(),
             heap: self.heap.clone(),
             default_environment: self.default_environment.clone(),
+            environment_up_value: self.environment_up_value,
             metatable_keys: self.metatable_keys.clone(),
             multivalues: self.multivalues.clone(),
             value_stacks: self.value_stacks.clone(),
@@ -98,6 +100,7 @@ impl Vm {
             limits: Default::default(),
             heap,
             default_environment,
+            environment_up_value: None,
             metatable_keys: Rc::new(metatable_keys),
             multivalues: Default::default(),
             value_stacks: Default::default(),
@@ -155,6 +158,18 @@ impl Vm {
     #[inline]
     pub fn default_environment(&self) -> TableRef {
         TableRef(self.default_environment.clone())
+    }
+
+    #[inline]
+    pub fn environment_up_value(&mut self) -> Option<TableRef> {
+        let env_key = self.environment_up_value?;
+
+        if !matches!(self.heap.get(env_key), Some(HeapValue::Table(_))) {
+            // not a table or was garbage collected
+            return None;
+        }
+
+        Some(TableRef(self.heap.create_ref(env_key)))
     }
 
     #[inline]
@@ -265,14 +280,14 @@ impl Vm {
 
         let mut keys = Vec::with_capacity(module.chunks.len());
 
-        for (i, block) in module.chunks.into_iter().enumerate() {
-            let byte_strings = block
+        for (i, chunk) in module.chunks.into_iter().enumerate() {
+            let byte_strings = chunk
                 .byte_strings
                 .into_iter()
                 .map(|bytes| self.heap.intern_bytes(bytes.as_ref()))
                 .collect();
 
-            let functions = block
+            let functions = chunk
                 .dependencies
                 .into_iter()
                 .map(|index| keys[index])
@@ -281,18 +296,21 @@ impl Vm {
             let mut up_values = ValueStack::default();
 
             if i == module.main {
-                up_values.push(environment);
+                if let Some(index) = chunk.env {
+                    up_values.set(index, environment);
+                }
             }
 
             let key = self.heap.create(HeapValue::Function(Function {
                 up_values: up_values.into(),
                 definition: Rc::new(FunctionDefinition {
                     label: label.clone(),
+                    env: chunk.env,
                     byte_strings,
-                    numbers: block.numbers,
+                    numbers: chunk.numbers,
                     functions,
-                    instructions: block.instructions,
-                    source_map: block.source_map,
+                    instructions: chunk.instructions,
+                    source_map: chunk.source_map,
                 }),
             }));
 

@@ -292,6 +292,7 @@ where
 
         self.module.main = self.module.chunks.len();
         self.module.chunks.push(Chunk {
+            env: Some(0),
             dependencies: self.top_function.dependencies,
             byte_strings: self.top_function.strings,
             numbers: self.top_function.numbers,
@@ -1275,6 +1276,8 @@ where
         std::mem::swap(&mut function, &mut self.top_function);
 
         // resolve captures
+        let mut env = None;
+
         for (dest, capture) in function.captures.into_iter().enumerate() {
             let up_value_or_stack = if capture.parent == 0 {
                 capture.parent_variable
@@ -1293,11 +1296,17 @@ where
                 UpValueOrStack::Stack(src) => Instruction::Capture(dest as _, src),
             };
             instructions.push(instruction);
+
+            // identify _ENV
+            if capture.token.content == "_ENV" {
+                env = Some(dest);
+            }
         }
 
         // store our processed function in the module
         let chunk_index = self.module.chunks.len();
         self.module.chunks.push(Chunk {
+            env,
             byte_strings: function.strings,
             numbers: function.numbers,
             dependencies: function.dependencies,

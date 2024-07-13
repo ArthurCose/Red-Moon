@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 pub(crate) struct FunctionDefinition {
     pub(crate) label: Rc<str>,
+    pub(crate) env: Option<usize>,
     pub(crate) byte_strings: Vec<HeapKey>,
     pub(crate) numbers: Vec<i64>,
     pub(crate) functions: Vec<HeapKey>,

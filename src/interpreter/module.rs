@@ -21,6 +21,10 @@ impl SourceMapping {
 
 #[derive(Default)]
 pub struct Chunk<ByteStrings> {
+    /// The index of the _ENV up value.
+    /// If this is the main chunk, it will be used to load the initial environment.
+    /// On other chunks it will be used to read or overwrite the environment.
+    pub env: Option<usize>,
     pub byte_strings: ByteStrings,
     pub numbers: Vec<i64>,
     pub instructions: Vec<Instruction>,

@@ -1,4 +1,5 @@
-use super::heap::HeapRef;
+use super::heap::{HeapRef, HeapValue};
+use super::value_stack::StackValue;
 use super::{FromMulti, IntoMulti, TableRef, Vm};
 use crate::errors::RuntimeError;
 use slotmap::Key;

@@ -40,6 +40,7 @@ fn instructions_print() {
             None,
             Module {
                 chunks: vec![Chunk {
+                    env: Some(0),
                     dependencies: Default::default(),
                     byte_strings,
                     numbers: vec![3],

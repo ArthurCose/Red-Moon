@@ -402,6 +402,9 @@ impl Thread {
             }
         }
 
+        // clear environment up value
+        vm.environment_up_value = None;
+
         let mut return_values = vm.create_multi();
 
         if let Some(definition) = last_definition {
@@ -432,6 +435,9 @@ impl Thread {
     }
 
     fn unwind_error(self, vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
+        // clear environment up value
+        vm.environment_up_value = None;
+
         self.continue_unwind(
             vm,
             RuntimeError {
@@ -474,6 +480,14 @@ impl CallContext {
     ) -> Result<CallResult, RuntimeErrorData> {
         let definition = &self.function_definition;
         let mut for_loop_jump = false;
+
+        vm.environment_up_value =
+            definition
+                .env
+                .and_then(|index| match self.up_values.get_deref(&vm.heap, index) {
+                    StackValue::HeapValue(key) => Some(key),
+                    _ => None,
+                });
 
         while let Some(&instruction) = definition.instructions.get(self.next_instruction_index) {
             if vm.tracked_stack_size() + value_stack.len() > vm.limits().stack_size {
