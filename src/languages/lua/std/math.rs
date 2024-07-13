@@ -17,7 +17,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.set("abs", abs, vm)?;
+    math.raw_set("abs", abs, vm)?;
 
     // acos
     let acos = vm.create_native_function(|args, vm| {
@@ -25,7 +25,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.acos(), vm)
     });
-    math.set("acos", acos, vm)?;
+    math.raw_set("acos", acos, vm)?;
 
     // asin
     let asin = vm.create_native_function(|args, vm| {
@@ -33,7 +33,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.asin(), vm)
     });
-    math.set("asin", asin, vm)?;
+    math.raw_set("asin", asin, vm)?;
 
     // atan
     let atan = vm.create_native_function(|args, vm| {
@@ -47,7 +47,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(output, vm)
     });
-    math.set("atan", atan, vm)?;
+    math.raw_set("atan", atan, vm)?;
 
     // ceil
     let ceil = vm.create_native_function(|args, vm| {
@@ -55,7 +55,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.ceil(), vm)
     });
-    math.set("ceil", ceil, vm)?;
+    math.raw_set("ceil", ceil, vm)?;
 
     // cos
     let cos = vm.create_native_function(|args, vm| {
@@ -63,7 +63,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.cos(), vm)
     });
-    math.set("cos", cos, vm)?;
+    math.raw_set("cos", cos, vm)?;
 
     // deg
     let deg = vm.create_native_function(|args, vm| {
@@ -71,7 +71,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.to_degrees(), vm)
     });
-    math.set("deg", deg, vm)?;
+    math.raw_set("deg", deg, vm)?;
 
     // exp
     let exp = vm.create_native_function(|args, vm| {
@@ -79,7 +79,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.exp(), vm)
     });
-    math.set("exp", exp, vm)?;
+    math.raw_set("exp", exp, vm)?;
 
     // floor
     let floor = vm.create_native_function(|args, vm| {
@@ -87,7 +87,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.floor(), vm)
     });
-    math.set("floor", floor, vm)?;
+    math.raw_set("floor", floor, vm)?;
 
     // fmod
     // todo: lua preserves integers
@@ -96,14 +96,14 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x % y, vm)
     });
-    math.set("fmod", fmod, vm)?;
+    math.raw_set("fmod", fmod, vm)?;
 
     // huge
     let huge = vm.create_native_function(|args, vm| {
         vm.store_multi(args);
         MultiValue::pack(f64::INFINITY, vm)
     });
-    math.set("huge", huge, vm)?;
+    math.raw_set("huge", huge, vm)?;
 
     // log
     let log = vm.create_native_function(|args, vm| {
@@ -112,7 +112,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.log(base), vm)
     });
-    math.set("log", log, vm)?;
+    math.raw_set("log", log, vm)?;
 
     // max
     let max = vm.create_native_function(|mut args, vm| {
@@ -134,14 +134,14 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         args.push_front(max);
         Ok(args)
     });
-    math.set("max", max, vm)?;
+    math.raw_set("max", max, vm)?;
 
     // maxinteger
     let maxinteger = vm.create_native_function(|args, vm| {
         vm.store_multi(args);
         MultiValue::pack(i64::MAX, vm)
     });
-    math.set("maxinteger", maxinteger, vm)?;
+    math.raw_set("maxinteger", maxinteger, vm)?;
 
     // min
     let min = vm.create_native_function(|mut args, vm| {
@@ -163,51 +163,51 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         args.push_front(min);
         Ok(args)
     });
-    math.set("min", min, vm)?;
+    math.raw_set("min", min, vm)?;
 
     // mininteger
     let mininteger = vm.create_native_function(|args, vm| {
         vm.store_multi(args);
         MultiValue::pack(i64::MIN, vm)
     });
-    math.set("mininteger", mininteger, vm)?;
+    math.raw_set("mininteger", mininteger, vm)?;
 
     // modf
     let modf = vm.create_native_function(|args, vm| {
         let x: f64 = args.unpack_args(vm)?;
         MultiValue::pack((x.trunc(), x.fract()), vm)
     });
-    math.set("modf", modf, vm)?;
+    math.raw_set("modf", modf, vm)?;
 
-    math.set("pi", std::f64::consts::PI, vm)?;
+    math.raw_set("pi", std::f64::consts::PI, vm)?;
 
     // rad
     let rad = vm.create_native_function(|args, vm| {
         let x: f64 = args.unpack_args(vm)?;
         MultiValue::pack(x.to_radians(), vm)
     });
-    math.set("rad", rad, vm)?;
+    math.raw_set("rad", rad, vm)?;
 
     // sin
     let sin = vm.create_native_function(|args, vm| {
         let x: f64 = args.unpack_args(vm)?;
         MultiValue::pack(x.sin(), vm)
     });
-    math.set("sin", sin, vm)?;
+    math.raw_set("sin", sin, vm)?;
 
     // sqrt
     let sqrt = vm.create_native_function(|args, vm| {
         let x: f64 = args.unpack_args(vm)?;
         MultiValue::pack(x.sqrt(), vm)
     });
-    math.set("sqrt", sqrt, vm)?;
+    math.raw_set("sqrt", sqrt, vm)?;
 
     // tan
     let tan = vm.create_native_function(|args, vm| {
         let x: f64 = args.unpack_args(vm)?;
         MultiValue::pack(x.tan(), vm)
     });
-    math.set("tan", tan, vm)?;
+    math.raw_set("tan", tan, vm)?;
 
     // tointeger
     let tointeger = vm.create_native_function(|mut args, vm| {
@@ -221,7 +221,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.set("tointeger", tointeger, vm)?;
+    math.raw_set("tointeger", tointeger, vm)?;
 
     // type
     let integer_string_ref = vm.intern_string(b"integer");
@@ -237,7 +237,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.set("type", r#type, vm)?;
+    math.raw_set("type", r#type, vm)?;
 
     // ult
     let ult = vm.create_native_function(move |args, vm| {
@@ -245,7 +245,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(m < n, vm)
     });
-    math.set("ult", ult, vm)?;
+    math.raw_set("ult", ult, vm)?;
 
     let env = vm.default_environment();
     env.set("math", math, vm)?;

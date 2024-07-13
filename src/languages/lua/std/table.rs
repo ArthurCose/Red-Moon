@@ -45,7 +45,7 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), vm)
     });
-    table.set("concat", concat, vm)?;
+    table.raw_set("concat", concat, vm)?;
 
     // insert
     let insert = vm.create_native_function(|args, vm| {
@@ -66,7 +66,7 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), vm)
     });
-    table.set("insert", insert, vm)?;
+    table.raw_set("insert", insert, vm)?;
 
     // remove
     let remove = vm.create_native_function(|args, vm| {
@@ -88,7 +88,7 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), vm)
     });
-    table.set("remove", remove, vm)?;
+    table.raw_set("remove", remove, vm)?;
 
     // pack
     let pack = vm.create_native_function(|mut args, vm| {
@@ -103,7 +103,7 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(table, vm)
     });
-    table.set("pack", pack, vm)?;
+    table.raw_set("pack", pack, vm)?;
 
     // unpack
     let unpack = vm.create_native_function(|args, vm| {
@@ -118,7 +118,7 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         MultiValue::pack(multi, vm)
     });
-    table.set("unpack", unpack, vm)?;
+    table.raw_set("unpack", unpack, vm)?;
 
     // todo: table.move() https://www.lua.org/manual/5.4/manual.html#pdf-table.move
     // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort

@@ -18,7 +18,7 @@ pub fn impl_os(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    os.set("clock", clock, vm)?;
+    os.raw_set("clock", clock, vm)?;
 
     let env = vm.default_environment();
     env.set("os", os, vm)?;
