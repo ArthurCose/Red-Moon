@@ -2278,8 +2278,6 @@ where
         count: Register,
         index_offset: usize,
     ) -> Result<(), LuaCompilationError> {
-        println!("{count} {index_offset} {}", token.offset);
-
         let offset_remainder = index_offset % 256;
 
         // flush remaining single values
