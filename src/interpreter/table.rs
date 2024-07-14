@@ -170,9 +170,10 @@ impl Table {
 
     pub(crate) fn next(&mut self, previous: StackValue) -> Option<(StackValue, StackValue)> {
         if previous == Primitive::Nil.into() {
-            self.map.first().map(|(k, v)| (*k, *v))
-        } else {
-            self.map.get_full(&previous).map(|(_, k, v)| (*k, *v))
+            return self.map.first().map(|(k, v)| (*k, *v));
         }
+
+        let index = self.map.get_index_of(&previous)?;
+        self.map.get_index(index + 1).map(|(k, v)| (*k, *v))
     }
 }
