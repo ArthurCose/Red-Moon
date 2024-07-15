@@ -1,5 +1,5 @@
+use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapValue};
-use super::thread::Thread;
 use super::value_stack::{Primitive, StackValue};
 use super::{ByteString, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef, Vm};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
@@ -82,21 +82,23 @@ impl Value {
         args: A,
         vm: &mut Vm,
     ) -> Result<R, RuntimeError> {
-        let old_stack_size = vm.tracked_stack_size();
+        let old_stack_size = vm.execution_data.tracked_stack_size;
 
         let args = args.into_multi(vm)?;
 
         // must test validity of every arg, since invalid keys in the vm will cause a panic
         for value in &args.values {
-            value.test_validity(&vm.heap)?;
+            value.test_validity(&vm.execution_data.heap)?;
         }
 
-        let result = match Thread::new_value_call(self.to_stack_value(), args, vm) {
-            Ok(thread) => thread.resume(vm),
-            Err(err) => Err(RuntimeError::from(err)),
-        };
+        let result = ExecutionContext::new_value_call(self.to_stack_value(), args, vm)
+            .map_err(RuntimeError::from)
+            .and_then(|context| {
+                vm.execution_stack.push(context);
+                ExecutionContext::resume(vm)
+            });
 
-        vm.update_stack_size(old_stack_size);
+        vm.execution_data.tracked_stack_size = old_stack_size;
 
         let multi = result?;
         R::from_multi(multi, vm)
@@ -219,13 +221,15 @@ impl Value {
         let method_name = method_name.into();
 
         if let Some(key) = self.heap_key() {
-            if let Some(key) = vm.heap.get_metamethod(key, method_name) {
+            let heap = &vm.execution_data.heap;
+            if let Some(key) = heap.get_metamethod(key, method_name) {
                 return Some(vm.call_function_key(key, (self.clone(), other.clone())));
             }
         }
 
         if let Some(key) = other.heap_key() {
-            if let Some(key) = vm.heap.get_metamethod(key, method_name) {
+            let heap = &vm.execution_data.heap;
+            if let Some(key) = heap.get_metamethod(key, method_name) {
                 return Some(vm.call_function_key(key, (self.clone(), other.clone())));
             }
         }

@@ -3,7 +3,7 @@ use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
 use super::value_stack::{Primitive, StackValue, ValueStack};
-use super::vm::Vm;
+use super::vm::{ExecutionAccessibleData, Vm};
 use super::Value;
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
 use crate::languages::lua::{coerce_integer, parse_number};
@@ -15,27 +15,30 @@ enum CallResult {
     Return(usize),
 }
 
-pub(crate) struct Thread {
-    call_stack: Vec<CallContext>,
-    value_stack: ValueStack,
-    pending_captures: ValueStack,
+pub(crate) struct ExecutionContext {
+    pub(crate) call_stack: Vec<CallContext>,
+    pub(crate) value_stack: ValueStack,
+    pub(crate) pending_captures: ValueStack,
 }
 
-impl Thread {
+impl ExecutionContext {
     pub(crate) fn new_function_call(
         function_key: HeapKey,
         function: Function,
         args: MultiValue,
         vm: &mut Vm,
     ) -> Self {
-        let mut value_stack = vm.create_value_stack();
+        let exec_data = &mut vm.execution_data;
+        let mut value_stack = exec_data.cache_pools.create_value_stack();
 
         value_stack.push(function_key.into());
         args.push_stack_multi(&mut value_stack);
-        vm.store_multi(args);
+        exec_data.cache_pools.store_multi(args);
 
         let call_stack = vec![CallContext {
-            up_values: function.up_values.clone_using(&vm.short_value_stacks),
+            up_values: function
+                .up_values
+                .clone_using(&exec_data.cache_pools.short_value_stacks),
             function_definition: function.definition.clone(),
             next_instruction_index: 0,
             stack_start: 0,
@@ -46,7 +49,7 @@ impl Thread {
         Self {
             call_stack,
             value_stack,
-            pending_captures: vm.create_short_value_stack(),
+            pending_captures: exec_data.cache_pools.create_short_value_stack(),
         }
     }
 
@@ -55,18 +58,23 @@ impl Thread {
         mut args: MultiValue,
         vm: &mut Vm,
     ) -> Result<Self, RuntimeErrorData> {
-        let function_key = resolve_call(vm, value, |heap, value| {
+        let exec_data = &mut vm.execution_data;
+
+        let function_key = resolve_call(exec_data, value, |heap, value| {
             args.push_front(Value::from_stack_value(heap, value));
         })?;
 
         let mut call_stack = Vec::new();
-        let mut value_stack = vm.create_value_stack();
+        let mut value_stack = exec_data.cache_pools.create_value_stack();
 
-        match vm.heap.get(function_key).unwrap() {
+        match exec_data.heap.get(function_key).unwrap() {
             HeapValue::NativeFunction(function) => {
                 let results = match function.shallow_clone().call(args, vm) {
                     Ok(result) => result,
-                    Err(err) => return Err(err.data),
+                    Err(err) => {
+                        vm.execution_data.cache_pools.store_value_stack(value_stack);
+                        return Err(err.data);
+                    }
                 };
                 results.push_stack_multi(&mut value_stack);
             }
@@ -75,7 +83,9 @@ impl Thread {
                 args.push_stack_multi(&mut value_stack);
 
                 let call_context = CallContext {
-                    up_values: function.up_values.clone_using(&vm.short_value_stacks),
+                    up_values: function
+                        .up_values
+                        .clone_using(&exec_data.cache_pools.short_value_stacks),
                     function_definition: function.definition.clone(),
                     next_instruction_index: 0,
                     stack_start: 0,
@@ -84,25 +94,35 @@ impl Thread {
                 };
                 call_stack.push(call_context);
 
-                vm.store_multi(args);
+                exec_data.cache_pools.store_multi(args);
             }
             _ => unreachable!(),
         }
 
+        let exec_data = &mut vm.execution_data;
+
         Ok(Self {
             call_stack,
             value_stack,
-            pending_captures: vm.create_short_value_stack(),
+            pending_captures: exec_data.cache_pools.create_short_value_stack(),
         })
     }
 
-    pub(crate) fn resume(mut self, vm: &mut Vm) -> Result<MultiValue, RuntimeError> {
+    pub(crate) fn resume(vm: &mut Vm) -> Result<MultiValue, RuntimeError> {
+        let mut execution = vm.execution_stack.last_mut().unwrap();
+
         let mut last_definition = None;
 
-        while let Some(call) = self.call_stack.last_mut() {
-            let result = match call.resume(&mut self.value_stack, &mut self.pending_captures, vm) {
+        let mut exec_data = &mut vm.execution_data;
+
+        while let Some(call) = execution.call_stack.last_mut() {
+            let result = match call.resume(
+                &mut execution.value_stack,
+                &mut execution.pending_captures,
+                exec_data,
+            ) {
                 Ok(result) => result,
-                Err(err) => return Err(self.unwind_error(vm, err)),
+                Err(err) => return Err(Self::unwind_error(vm, err)),
             };
 
             match result {
@@ -117,45 +137,48 @@ impl Thread {
                     let register_base = call.register_base;
                     let stack_start = register_base + registry_index;
 
-                    let StackValue::HeapValue(heap_key) = self.value_stack.get(stack_start) else {
-                        return Err(self.unwind_error(vm, RuntimeErrorData::NotAFunction));
+                    let StackValue::HeapValue(heap_key) = execution.value_stack.get(stack_start)
+                    else {
+                        return Err(Self::unwind_error(vm, RuntimeErrorData::NotAFunction));
                     };
 
                     let StackValue::Primitive(Primitive::Integer(mut arg_count)) =
-                        self.value_stack.get(stack_start + 1)
+                        execution.value_stack.get(stack_start + 1)
                     else {
-                        return Err(
-                            self.unwind_error(vm, IllegalInstruction::MissingArgCount.into())
-                        );
+                        return Err(Self::unwind_error(
+                            vm,
+                            IllegalInstruction::MissingArgCount.into(),
+                        ));
                     };
 
-                    let function_key = resolve_call(vm, heap_key.into(), |_, value| {
-                        self.value_stack.insert(stack_start + 2, value);
+                    let function_key = resolve_call(exec_data, heap_key.into(), |_, value| {
+                        execution.value_stack.insert(stack_start + 2, value);
 
                         arg_count += 1;
-                        self.value_stack
+                        execution
+                            .value_stack
                             .set(stack_start + 1, Primitive::Integer(arg_count).into());
                     });
 
                     let function_key = match function_key {
                         Ok(key) => key,
-                        Err(err) => return Err(self.unwind_error(vm, err)),
+                        Err(err) => return Err(Self::unwind_error(vm, err)),
                     };
 
-                    match vm.heap.get(function_key) {
+                    match exec_data.heap.get(function_key) {
                         Some(HeapValue::NativeFunction(callback)) => {
                             let callback = callback.shallow_clone();
 
                             // load args
-                            let mut args = vm.create_multi();
+                            let mut args = exec_data.cache_pools.create_multi();
 
                             if let Err(err) = args.copy_stack_multi(
-                                &mut vm.heap,
-                                &mut self.value_stack,
+                                &mut exec_data.heap,
+                                &mut execution.value_stack,
                                 stack_start + 1,
                                 IllegalInstruction::MissingArgCount,
                             ) {
-                                return Err(self.unwind_error(vm, err.into()));
+                                return Err(Self::unwind_error(vm, err.into()));
                             };
 
                             let arg_count = args.len();
@@ -165,20 +188,23 @@ impl Thread {
                             let mut stack_start = stack_start;
                             let mut register_base = register_base;
 
-                            if return_mode == ReturnMode::TailCall && self.call_stack.len() > 1 {
+                            if return_mode == ReturnMode::TailCall && execution.call_stack.len() > 1
+                            {
                                 // if the callstack == 0 we retain the TailCall return mode and handle it later
 
                                 // remove caller and recycle value stacks
-                                let call = self.call_stack.pop().unwrap();
-                                vm.store_short_value_stack(call.up_values);
+                                let call = execution.call_stack.pop().unwrap();
+                                exec_data
+                                    .cache_pools
+                                    .store_short_value_stack(call.up_values);
 
                                 // adopt caller's return mode and stack placement
                                 return_mode = call.return_mode;
                                 stack_start = call.stack_start;
-                                self.value_stack.chip(stack_start, 0);
+                                execution.value_stack.chip(stack_start, 0);
 
                                 // adopt the register base of the caller's caller
-                                let grand_call = self
+                                let grand_call = execution
                                     .call_stack
                                     .last()
                                     .expect("a root native call is rewritten as ReturnMode::Multi");
@@ -186,27 +212,32 @@ impl Thread {
                             }
 
                             // update tracked stack size in case the native function calls an interpreted function
-                            let old_stack_size = vm.tracked_stack_size();
-                            vm.update_stack_size(old_stack_size + self.value_stack.len());
+                            let old_stack_size = exec_data.tracked_stack_size;
+                            exec_data.tracked_stack_size =
+                                old_stack_size + execution.value_stack.len();
 
                             // call the function and handle return values
                             let mut return_values = match callback.call(args, vm) {
                                 Ok(values) => values,
-                                Err(err) => return Err(self.continue_unwind(vm, err)),
+                                Err(err) => return Err(Self::continue_unwind(vm, err)),
                             };
 
+                            // juggling lifetimes
+                            execution = vm.execution_stack.last_mut().unwrap();
+                            exec_data = &mut vm.execution_data;
+
                             // revert tracked stack size
-                            vm.update_stack_size(old_stack_size);
+                            exec_data.tracked_stack_size = old_stack_size;
 
                             match return_mode {
                                 ReturnMode::Multi => {
-                                    self.value_stack.chip(stack_start, 0);
-                                    return_values.push_stack_multi(&mut self.value_stack);
+                                    execution.value_stack.chip(stack_start, 0);
+                                    return_values.push_stack_multi(&mut execution.value_stack);
                                 }
                                 ReturnMode::Static(return_count) => {
-                                    self.value_stack.chip(stack_start, 0);
+                                    execution.value_stack.chip(stack_start, 0);
 
-                                    self.value_stack.extend(
+                                    execution.value_stack.extend(
                                         std::iter::from_fn(|| return_values.pop_front())
                                             .map(|v| v.to_stack_value())
                                             .chain(std::iter::repeat(StackValue::default()))
@@ -214,20 +245,22 @@ impl Thread {
                                     );
                                 }
                                 ReturnMode::Destination(dest) => {
-                                    self.value_stack.chip(stack_start, 0);
+                                    execution.value_stack.chip(stack_start, 0);
 
                                     let value = return_values.pop_front().unwrap_or_default();
 
                                     let dest_index = register_base + dest as usize;
-                                    self.value_stack.set(dest_index, value.to_stack_value());
+                                    execution
+                                        .value_stack
+                                        .set(dest_index, value.to_stack_value());
                                 }
                                 ReturnMode::Extend(len_index) => {
-                                    self.value_stack.chip(stack_start, 0);
+                                    execution.value_stack.chip(stack_start, 0);
 
                                     let return_count = return_values.len();
 
                                     // append return values
-                                    self.value_stack.extend(std::iter::from_fn(|| {
+                                    execution.value_stack.extend(std::iter::from_fn(|| {
                                         return_values.pop_front().map(|v| v.to_stack_value())
                                     }));
 
@@ -236,9 +269,9 @@ impl Thread {
 
                                     let StackValue::Primitive(Primitive::Integer(
                                         stored_return_count,
-                                    )) = self.value_stack.get(len_register)
+                                    )) = execution.value_stack.get(len_register)
                                     else {
-                                        return Err(self.unwind_error(
+                                        return Err(Self::unwind_error(
                                             vm,
                                             IllegalInstruction::MissingReturnCount.into(),
                                         ));
@@ -246,11 +279,11 @@ impl Thread {
 
                                     let count = stored_return_count + return_count as i64 - 1;
                                     let count_value = Primitive::Integer(count).into();
-                                    self.value_stack.set(len_register, count_value);
+                                    execution.value_stack.set(len_register, count_value);
                                 }
                                 ReturnMode::UnsizedDestinationPreserve(dest) => {
                                     // keep the function and args
-                                    self.value_stack.chip(stack_start + arg_count + 2, 0);
+                                    execution.value_stack.chip(stack_start + arg_count + 2, 0);
 
                                     let return_count = return_values.len();
 
@@ -259,7 +292,7 @@ impl Thread {
                                             break;
                                         };
 
-                                        self.value_stack.set(
+                                        execution.value_stack.set(
                                             register_base + dest as usize + i,
                                             value.to_stack_value(),
                                         );
@@ -267,12 +300,15 @@ impl Thread {
                                 }
                                 ReturnMode::TailCall => {
                                     // we retained the TailCall return mode, this is our final return
-                                    vm.store_value_stack(self.value_stack);
+                                    let execution = vm.execution_stack.pop().unwrap();
+                                    exec_data
+                                        .cache_pools
+                                        .store_value_stack(execution.value_stack);
                                     return Ok(return_values);
                                 }
                             }
 
-                            vm.store_multi(return_values);
+                            exec_data.cache_pools.store_multi(return_values);
                         }
                         Some(HeapValue::Function(func)) => {
                             if return_mode == ReturnMode::TailCall {
@@ -281,29 +317,33 @@ impl Thread {
                                 call.function_definition = func.definition.clone();
                                 call.next_instruction_index = 0;
 
-                                self.value_stack
-                                    .chip(call.stack_start, self.value_stack.len() - stack_start);
+                                execution.value_stack.chip(
+                                    call.stack_start,
+                                    execution.value_stack.len() - stack_start,
+                                );
                             } else {
                                 let new_call = CallContext {
-                                    up_values: func.up_values.clone_using(&vm.short_value_stacks),
+                                    up_values: func
+                                        .up_values
+                                        .clone_using(&exec_data.cache_pools.short_value_stacks),
                                     function_definition: func.definition.clone(),
                                     next_instruction_index: 0,
                                     stack_start,
                                     register_base: stack_start + 2 + arg_count as usize,
                                     return_mode,
                                 };
-                                self.call_stack.push(new_call);
+                                execution.call_stack.push(new_call);
                             }
                         }
                         _ => {
-                            return Err(self.unwind_error(vm, RuntimeErrorData::NotAFunction));
+                            return Err(Self::unwind_error(vm, RuntimeErrorData::NotAFunction));
                         }
                     }
                 }
                 CallResult::Return(registry_index) => {
-                    let context = self.call_stack.pop().unwrap();
-                    let stack_index = context.register_base + registry_index;
-                    let parent_base = self
+                    let call = execution.call_stack.pop().unwrap();
+                    let stack_index = call.register_base + registry_index;
+                    let parent_base = execution
                         .call_stack
                         .last()
                         .map(|call| call.register_base)
@@ -311,107 +351,117 @@ impl Thread {
 
                     // get return count
                     let StackValue::Primitive(Primitive::Integer(return_count)) =
-                        self.value_stack.get(stack_index)
+                        execution.value_stack.get(stack_index)
                     else {
                         // put the call back
-                        self.call_stack.push(context);
+                        execution.call_stack.push(call);
 
-                        return Err(
-                            self.unwind_error(vm, IllegalInstruction::MissingReturnCount.into())
-                        );
+                        return Err(Self::unwind_error(
+                            vm,
+                            IllegalInstruction::MissingReturnCount.into(),
+                        ));
                     };
 
                     // recycle value stacks
-                    vm.store_short_value_stack(context.up_values);
+                    exec_data
+                        .cache_pools
+                        .store_short_value_stack(call.up_values);
 
                     let mut return_count = return_count as usize;
 
-                    match context.return_mode {
+                    match call.return_mode {
                         ReturnMode::Multi => {
                             // remove extra values past the return values
-                            self.value_stack
-                                .chip(context.register_base + registry_index + return_count + 1, 0);
+                            execution
+                                .value_stack
+                                .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // chip under the return values and count
-                            self.value_stack.chip(context.stack_start, return_count + 1);
+                            execution
+                                .value_stack
+                                .chip(call.stack_start, return_count + 1);
                         }
                         ReturnMode::Static(expected_count) => {
                             return_count = return_count.min(expected_count as _);
 
                             // remove extra values past the return values
-                            self.value_stack
-                                .chip(context.register_base + registry_index + return_count + 1, 0);
+                            execution
+                                .value_stack
+                                .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // chip under the return values
-                            self.value_stack.chip(context.stack_start, return_count);
+                            execution.value_stack.chip(call.stack_start, return_count);
                         }
                         ReturnMode::Destination(dest) => {
                             // copy value
-                            let value = self
+                            let value = execution
                                 .value_stack
-                                .get(context.register_base + registry_index + 1);
+                                .get(call.register_base + registry_index + 1);
 
                             // remove all values
-                            self.value_stack.chip(context.stack_start, 0);
+                            execution.value_stack.chip(call.stack_start, 0);
 
                             // store value
-                            self.value_stack.set(parent_base + dest as usize, value);
+                            execution
+                                .value_stack
+                                .set(parent_base + dest as usize, value);
                         }
                         ReturnMode::Extend(len_index) => {
                             // remove extra values past the return values
-                            self.value_stack
-                                .chip(context.register_base + registry_index + return_count + 1, 0);
+                            execution
+                                .value_stack
+                                .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // get the return count
                             let len_register = parent_base + len_index as usize;
                             let StackValue::Primitive(Primitive::Integer(stored_return_count)) =
-                                self.value_stack.get(len_register)
+                                execution.value_stack.get(len_register)
                             else {
-                                return Err(self.unwind_error(
+                                return Err(Self::unwind_error(
                                     vm,
                                     IllegalInstruction::MissingReturnCount.into(),
                                 ));
                             };
 
                             // chip under the return values
-                            self.value_stack.chip(context.stack_start, return_count);
+                            execution.value_stack.chip(call.stack_start, return_count);
                             // add the return count
                             let count = stored_return_count + return_count as i64 - 1;
                             let count_value = Primitive::Integer(count).into();
-                            self.value_stack.set(len_register, count_value);
+                            execution.value_stack.set(len_register, count_value);
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
-                            let mut values = vm.create_short_value_stack();
+                            let mut values = exec_data.cache_pools.create_short_value_stack();
 
                             let start = stack_index + 1;
-                            for value in self.value_stack.get_slice(start..start + return_count) {
+                            for value in
+                                execution.value_stack.get_slice(start..start + return_count)
+                            {
                                 values.push(*value);
                             }
 
                             let dest_index = parent_base + dest as usize;
-                            self.value_stack.chip(dest_index, 0);
-                            self.value_stack
+                            execution.value_stack.chip(dest_index, 0);
+                            execution
+                                .value_stack
                                 .extend(values.get_slice(0..return_count).iter().cloned());
-                            vm.store_short_value_stack(values);
+                            exec_data.cache_pools.store_short_value_stack(values);
                         }
                         ReturnMode::TailCall => unreachable!(),
                     }
 
-                    last_definition = Some(context.function_definition);
+                    last_definition = Some(call.function_definition);
                 }
             }
         }
 
-        // clear environment up value
-        vm.environment_up_value = None;
-
-        let mut return_values = vm.create_multi();
+        let mut return_values = exec_data.cache_pools.create_multi();
 
         if let Some(definition) = last_definition {
             return_values
                 .copy_stack_multi(
-                    &mut vm.heap,
-                    &mut self.value_stack,
+                    &mut exec_data.heap,
+                    &mut execution.value_stack,
                     0,
                     IllegalInstruction::MissingReturnCount,
                 )
@@ -428,17 +478,14 @@ impl Thread {
                 })?;
         }
 
-        // recycle
-        vm.store_value_stack(self.value_stack);
+        let context = vm.execution_stack.pop().unwrap();
+        exec_data.cache_pools.store_value_stack(context.value_stack);
 
         Ok(return_values)
     }
 
-    fn unwind_error(self, vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
-        // clear environment up value
-        vm.environment_up_value = None;
-
-        self.continue_unwind(
+    fn unwind_error(vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
+        Self::continue_unwind(
             vm,
             RuntimeError {
                 trace: StackTrace::default(),
@@ -447,28 +494,35 @@ impl Thread {
         )
     }
 
-    fn continue_unwind(self, vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
+    fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
+        let context = vm.execution_stack.pop().unwrap();
+        let exec_data = &mut vm.execution_data;
+
         // recycle value stacks
-        for call in self.call_stack.into_iter().rev() {
+        for call in context.call_stack.into_iter().rev() {
             let instruction_index = call.next_instruction_index.saturating_sub(1);
             let definition = call.function_definition;
             let frame = definition.create_stack_trace_frame(instruction_index);
             err.trace.push_frame(frame);
 
-            vm.store_short_value_stack(call.up_values);
+            exec_data
+                .cache_pools
+                .store_short_value_stack(call.up_values);
         }
+
+        exec_data.cache_pools.store_value_stack(context.value_stack);
 
         err
     }
 }
 
-struct CallContext {
-    up_values: ValueStack,
-    function_definition: Rc<FunctionDefinition>,
-    next_instruction_index: usize,
-    stack_start: usize,
-    register_base: usize,
-    return_mode: ReturnMode,
+pub(crate) struct CallContext {
+    pub(crate) up_values: ValueStack,
+    pub(crate) function_definition: Rc<FunctionDefinition>,
+    pub(crate) next_instruction_index: usize,
+    pub(crate) stack_start: usize,
+    pub(crate) register_base: usize,
+    pub(crate) return_mode: ReturnMode,
 }
 
 impl CallContext {
@@ -476,28 +530,20 @@ impl CallContext {
         &mut self,
         value_stack: &mut ValueStack,
         pending_captures: &mut ValueStack,
-        vm: &mut Vm,
+        exec_data: &mut ExecutionAccessibleData,
     ) -> Result<CallResult, RuntimeErrorData> {
         let definition = &self.function_definition;
         let mut for_loop_jump = false;
 
-        vm.environment_up_value =
-            definition
-                .env
-                .and_then(|index| match self.up_values.get_deref(&vm.heap, index) {
-                    StackValue::HeapValue(key) => Some(key),
-                    _ => None,
-                });
-
         while let Some(&instruction) = definition.instructions.get(self.next_instruction_index) {
-            if vm.tracked_stack_size() + value_stack.len() > vm.limits().stack_size {
+            if exec_data.tracked_stack_size + value_stack.len() > exec_data.limits.stack_size {
                 return Err(RuntimeErrorData::StackOverflow);
             }
 
             #[cfg(feature = "instruction_exec_counts")]
-            vm.track_instruction(instruction);
+            exec_data.instruction_counter.track(instruction);
 
-            let heap = &mut vm.heap;
+            let heap = &mut exec_data.heap;
             self.next_instruction_index += 1;
 
             match instruction {
@@ -660,7 +706,7 @@ impl CallContext {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_from_table(vm, value_stack, dest, base, heap_key.into())?
+                        self.copy_from_table(exec_data, value_stack, dest, base, heap_key.into())?
                     {
                         return Ok(call_result);
                     }
@@ -685,7 +731,7 @@ impl CallContext {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_to_table(vm, value_stack, base, heap_key.into(), src)?
+                        self.copy_to_table(exec_data, value_stack, base, heap_key.into(), src)?
                     {
                         return Ok(call_result);
                     }
@@ -696,7 +742,7 @@ impl CallContext {
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_from_table(vm, value_stack, dest, base, key)?
+                        self.copy_from_table(exec_data, value_stack, dest, base, key)?
                     {
                         return Ok(call_result);
                     }
@@ -707,7 +753,7 @@ impl CallContext {
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
                     if let Some(call_result) =
-                        self.copy_to_table(vm, value_stack, base, key, src)?
+                        self.copy_to_table(exec_data, value_stack, base, key, src)?
                     {
                         return Ok(call_result);
                     }
@@ -816,7 +862,7 @@ impl CallContext {
                         // copy the function to pass captures
                         let mut func = func.clone();
 
-                        let mut up_values = vm.short_value_stacks.pop().unwrap_or_default();
+                        let mut up_values = exec_data.cache_pools.create_short_value_stack();
                         std::mem::swap(pending_captures, &mut up_values);
                         func.up_values = Rc::new(up_values);
 
@@ -871,7 +917,7 @@ impl CallContext {
                     );
                 }
                 Instruction::Len(dest, src) => {
-                    let metamethod_key = vm.metatable_keys.len.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.len.0.key().into();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
@@ -903,7 +949,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
-                    let metamethod_key = vm.metatable_keys.unm.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.unm.0.key().into();
 
                     if let Some(call_result) = self.unary_number_operation(
                         (heap, value_stack),
@@ -920,7 +966,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseNot(dest, src) => {
-                    let metamethod_key = vm.metatable_keys.bnot.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bnot.0.key().into();
 
                     if let Some(call_result) = self.unary_number_operation(
                         (heap, value_stack),
@@ -933,7 +979,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Add(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.add.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.add.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -946,7 +992,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Subtract(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.sub.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.sub.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -959,7 +1005,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Multiply(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.mul.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.mul.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -972,7 +1018,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Division(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.div.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.div.0.key().into();
 
                     if let Some(call_result) = self.binary_float_operation(
                         (heap, value_stack),
@@ -998,7 +1044,7 @@ impl CallContext {
                         _ => {}
                     }
 
-                    let metamethod_key = vm.metatable_keys.idiv.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -1012,7 +1058,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Modulus(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.modulus.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.modulus.0.key().into();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -1025,7 +1071,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Power(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.pow.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.pow.0.key().into();
 
                     if let Some(call_result) = self.binary_float_operation(
                         (heap, value_stack),
@@ -1037,7 +1083,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseAnd(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.band.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.band.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1049,7 +1095,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseOr(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.bor.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bor.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1061,7 +1107,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseXor(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.bxor.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bxor.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1073,7 +1119,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftLeft(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.shl.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.shl.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1085,7 +1131,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftRight(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.shr.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.shr.0.key().into();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1097,7 +1143,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Equal(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.eq.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.eq.0.key().into();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1128,7 +1174,7 @@ impl CallContext {
                     );
                 }
                 Instruction::LessThan(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.lt.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.lt.0.key().into();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1150,7 +1196,7 @@ impl CallContext {
                     };
                 }
                 Instruction::LessThanEqual(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.le.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.le.0.key().into();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1172,7 +1218,7 @@ impl CallContext {
                     };
                 }
                 Instruction::Concat(dest, a, b) => {
-                    let metamethod_key = vm.metatable_keys.concat.0.key();
+                    let metamethod_key = exec_data.metatable_keys.concat.0.key();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1617,7 +1663,7 @@ impl CallContext {
 
     fn copy_from_table(
         &self,
-        vm: &mut Vm,
+        exec_data: &mut ExecutionAccessibleData,
         value_stack: &mut ValueStack,
         dest: Register,
         base: StackValue,
@@ -1628,7 +1674,7 @@ impl CallContext {
             return Err(RuntimeErrorData::AttemptToIndexInvalid);
         };
 
-        let mut value = match vm.heap.get(base_heap_key).unwrap() {
+        let mut value = match exec_data.heap.get(base_heap_key).unwrap() {
             HeapValue::Table(table) => table.get(key),
             HeapValue::Bytes(_) => StackValue::Primitive(Primitive::Nil),
             _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
@@ -1638,8 +1684,8 @@ impl CallContext {
 
         if value == StackValue::Primitive(Primitive::Nil) {
             // resolve using __index
-            let metamethod_key = vm.metatable_keys.index.0.key().into();
-            let max_chain_depth = vm.limits().metatable_chain_depth;
+            let metamethod_key = exec_data.metatable_keys.index.0.key().into();
+            let max_chain_depth = exec_data.limits.metatable_chain_depth;
             let mut chain_depth = 0;
 
             let mut next_index_base = index_base;
@@ -1651,7 +1697,7 @@ impl CallContext {
                     return Err(RuntimeErrorData::AttemptToIndexInvalid);
                 };
 
-                let heap_value = vm.heap.get(heap_key).unwrap();
+                let heap_value = exec_data.heap.get(heap_key).unwrap();
 
                 match heap_value {
                     HeapValue::Table(table) => {
@@ -1678,7 +1724,7 @@ impl CallContext {
                     _ => {}
                 };
 
-                next_index_base = vm.heap.get_metavalue(heap_key, metamethod_key);
+                next_index_base = exec_data.heap.get_metavalue(heap_key, metamethod_key);
                 chain_depth += 1;
 
                 if chain_depth > max_chain_depth {
@@ -1694,7 +1740,7 @@ impl CallContext {
 
     fn copy_to_table(
         &self,
-        vm: &mut Vm,
+        exec_data: &mut ExecutionAccessibleData,
         value_stack: &mut ValueStack,
         table_stack_value: StackValue,
         key: StackValue,
@@ -1704,10 +1750,10 @@ impl CallContext {
             return Err(RuntimeErrorData::AttemptToIndexInvalid);
         };
 
-        let metamethod_key = vm.metatable_keys.newindex.0.key().into();
-        let src_value = value_stack.get_deref(&vm.heap, self.register_base + src as usize);
+        let metamethod_key = exec_data.metatable_keys.newindex.0.key().into();
+        let src_value = value_stack.get_deref(&exec_data.heap, self.register_base + src as usize);
 
-        if let Some(function_key) = vm.heap.get_metamethod(heap_key, metamethod_key) {
+        if let Some(function_key) = exec_data.heap.get_metamethod(heap_key, metamethod_key) {
             let function_index = value_stack.len() - self.register_base;
 
             value_stack.extend([
@@ -1723,7 +1769,7 @@ impl CallContext {
                 ReturnMode::Static(0),
             )))
         } else {
-            let table_value = vm.heap.get_mut(heap_key).unwrap();
+            let table_value = exec_data.heap.get_mut(heap_key).unwrap();
 
             let HeapValue::Table(table) = table_value else {
                 return Err(RuntimeErrorData::AttemptToIndexInvalid);
@@ -1882,12 +1928,12 @@ fn heap_value_as_integer(heap: &mut Heap, heap_key: HeapKey) -> Result<i64, Runt
 
 // resolves __call metamethod chains and stack values promoted to heap values
 fn resolve_call(
-    vm: &mut Vm,
+    exec_data: &mut ExecutionAccessibleData,
     mut value: StackValue,
     mut prepend_arg: impl FnMut(&mut Heap, StackValue),
 ) -> Result<HeapKey, RuntimeErrorData> {
-    let call_key = vm.metatable_keys.call.0.key().into();
-    let max_chain_depth = vm.limits().metatable_chain_depth;
+    let call_key = exec_data.metatable_keys.call.0.key().into();
+    let max_chain_depth = exec_data.limits.metatable_chain_depth;
     let mut chain_depth = 0;
 
     loop {
@@ -1895,7 +1941,7 @@ fn resolve_call(
             return Err(RuntimeErrorData::NotAFunction);
         };
 
-        let Some(heap_value) = vm.heap.get_mut(heap_key) else {
+        let Some(heap_value) = exec_data.heap.get_mut(heap_key) else {
             return Err(RuntimeErrorData::NotAFunction);
         };
 
@@ -1906,8 +1952,8 @@ fn resolve_call(
             break Ok(heap_key);
         }
 
-        let next_value = vm.heap.get_metavalue(heap_key, call_key);
-        prepend_arg(&mut vm.heap, value);
+        let next_value = exec_data.heap.get_metavalue(heap_key, call_key);
+        prepend_arg(&mut exec_data.heap, value);
         value = next_value;
 
         chain_depth += 1;

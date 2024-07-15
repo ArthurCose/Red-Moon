@@ -32,12 +32,12 @@ impl RuntimeError {
     }
 }
 
-impl From<RuntimeErrorData> for RuntimeError {
+impl<T: Into<RuntimeErrorData>> From<T> for RuntimeError {
     #[inline]
-    fn from(data: RuntimeErrorData) -> Self {
+    fn from(data: T) -> Self {
         Self {
             trace: Default::default(),
-            data,
+            data: data.into(),
         }
     }
 }

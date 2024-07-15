@@ -1,23 +1,18 @@
+use super::cache_pools::CachePools;
+use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapRef, HeapValue};
 use super::metatable_keys::MetatableKeys;
-use super::thread::Thread;
-use super::value_stack::ValueStack;
+use super::value_stack::{StackValue, ValueStack};
 use super::{FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef, TableRef};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
-use crate::vec_cell::VecCell;
 use crate::FastHashMap;
 use downcast::downcast;
 use std::any::TypeId;
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_exec_counts")]
-use {
-    super::instruction::{Instruction, InstructionCounter},
-    std::cell::Cell,
-};
-
-const RECYCLE_LIMIT: usize = 64;
+use super::instruction::InstructionCounter;
 
 #[derive(Clone)]
 pub struct VmLimits {
@@ -52,37 +47,48 @@ impl Clone for Box<dyn AppData> {
 
 downcast!(dyn AppData);
 
-pub struct Vm {
-    limits: VmLimits,
+pub(crate) struct ExecutionAccessibleData {
+    pub(crate) limits: VmLimits,
     pub(crate) heap: Heap,
+    pub(crate) metatable_keys: Rc<MetatableKeys>,
+    pub(crate) cache_pools: CachePools,
+    pub(crate) tracked_stack_size: usize,
+    #[cfg(feature = "instruction_exec_counts")]
+    pub(crate) instruction_counter: InstructionCounter,
+}
+
+impl Clone for ExecutionAccessibleData {
+    fn clone(&self) -> Self {
+        Self {
+            limits: self.limits.clone(),
+            heap: self.heap.clone(),
+            metatable_keys: self.metatable_keys.clone(),
+            cache_pools: self.cache_pools.clone(),
+            // reset to 0, since there's no active call on the new vm
+            tracked_stack_size: 0,
+            #[cfg(feature = "instruction_exec_counts")]
+            instruction_counter: Default::default(),
+        }
+    }
+}
+
+pub struct Vm {
+    pub(crate) execution_data: ExecutionAccessibleData,
+    pub(crate) execution_stack: Vec<ExecutionContext>,
     default_environment: HeapRef,
     pub(crate) environment_up_value: Option<HeapKey>,
-    pub(crate) metatable_keys: Rc<MetatableKeys>,
-    multivalues: Rc<VecCell<MultiValue>>,
-    value_stacks: Rc<VecCell<ValueStack>>,
-    pub(crate) short_value_stacks: Rc<VecCell<ValueStack>>,
-    tracked_stack_size: usize,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
-    #[cfg(feature = "instruction_exec_counts")]
-    instruction_counter: Rc<Cell<InstructionCounter>>,
 }
 
 impl Clone for Vm {
     fn clone(&self) -> Self {
         Self {
-            limits: self.limits.clone(),
-            heap: self.heap.clone(),
+            execution_data: self.execution_data.clone(),
+            // we can clear the execution stack on the copy
+            execution_stack: Default::default(),
             default_environment: self.default_environment.clone(),
             environment_up_value: self.environment_up_value,
-            metatable_keys: self.metatable_keys.clone(),
-            multivalues: self.multivalues.clone(),
-            value_stacks: self.value_stacks.clone(),
-            short_value_stacks: self.short_value_stacks.clone(),
-            // reset to 0, since there's no active call on the new vm
-            tracked_stack_size: 0,
             app_data: self.app_data.clone(),
-            #[cfg(feature = "instruction_exec_counts")]
-            instruction_counter: self.instruction_counter.clone(),
         }
     }
 }
@@ -97,41 +103,39 @@ impl Vm {
         let metatable_keys = MetatableKeys::new(&mut heap);
 
         Self {
-            limits: Default::default(),
-            heap,
+            execution_data: ExecutionAccessibleData {
+                limits: Default::default(),
+                heap,
+                metatable_keys: Rc::new(metatable_keys),
+                cache_pools: Default::default(),
+                tracked_stack_size: 0,
+                #[cfg(feature = "instruction_exec_counts")]
+                instruction_counter: Default::default(),
+            },
+            execution_stack: Default::default(),
             default_environment,
             environment_up_value: None,
-            metatable_keys: Rc::new(metatable_keys),
-            multivalues: Default::default(),
-            value_stacks: Default::default(),
-            short_value_stacks: Default::default(),
-            tracked_stack_size: 0,
             app_data: Default::default(),
-            #[cfg(feature = "instruction_exec_counts")]
-            instruction_counter: Default::default(),
         }
     }
 
-    pub(crate) fn tracked_stack_size(&self) -> usize {
-        self.tracked_stack_size
+    #[inline]
+    pub fn create_multi(&mut self) -> MultiValue {
+        self.execution_data.cache_pools.create_multi()
     }
 
-    pub(crate) fn update_stack_size(&mut self, stack_size: usize) {
-        self.tracked_stack_size = stack_size;
-    }
-
-    #[cfg(feature = "instruction_exec_counts")]
-    pub(crate) fn track_instruction(&mut self, instruction: Instruction) {
-        let mut instruction_counter = self.instruction_counter.take();
-        instruction_counter.track(instruction);
-        self.instruction_counter.set(instruction_counter);
+    #[inline]
+    pub fn store_multi(&mut self, multivalue: MultiValue) {
+        self.execution_data.cache_pools.store_multi(multivalue)
     }
 
     #[cfg(feature = "instruction_exec_counts")]
     pub fn instruction_exec_counts(&mut self) -> Vec<(&'static str, usize)> {
-        let instruction_counter = self.instruction_counter.take();
-        let mut results = instruction_counter.data().collect::<Vec<_>>();
-        self.instruction_counter.set(instruction_counter);
+        let mut results = self
+            .execution_data
+            .instruction_counter
+            .data()
+            .collect::<Vec<_>>();
 
         // sort by count reversed
         results.sort_by_key(|(_, count)| usize::MAX - count);
@@ -140,19 +144,17 @@ impl Vm {
 
     #[cfg(feature = "instruction_exec_counts")]
     pub fn clear_instruction_exec_counts(&mut self) {
-        let mut instruction_counter = self.instruction_counter.take();
-        instruction_counter.clear();
-        self.instruction_counter.set(instruction_counter);
+        self.execution_data.instruction_counter.clear();
     }
 
     #[inline]
     pub fn limits(&self) -> &VmLimits {
-        &self.limits
+        &self.execution_data.limits
     }
 
     #[inline]
     pub fn set_limits(&mut self, limits: VmLimits) {
-        self.limits = limits;
+        self.execution_data.limits = limits;
     }
 
     #[inline]
@@ -162,59 +164,32 @@ impl Vm {
 
     #[inline]
     pub fn environment_up_value(&mut self) -> Option<TableRef> {
-        let env_key = self.environment_up_value?;
+        let context = self.execution_stack.last()?;
+        let call = context.call_stack.last()?;
+        let env_index = call.function_definition.env?;
+        let StackValue::HeapValue(env_key) = call.up_values.get(env_index) else {
+            return None;
+        };
 
-        if !matches!(self.heap.get(env_key), Some(HeapValue::Table(_))) {
+        let heap = &mut self.execution_data.heap;
+
+        if !matches!(heap.get(env_key), Some(HeapValue::Table(_))) {
             // not a table or was garbage collected
             return None;
         }
 
-        Some(TableRef(self.heap.create_ref(env_key)))
+        Some(TableRef(heap.create_ref(env_key)))
     }
 
     #[inline]
     pub fn string_metatable(&self) -> TableRef {
-        TableRef(self.heap.string_metatable_ref().clone())
+        let heap = &self.execution_data.heap;
+        TableRef(heap.string_metatable_ref().clone())
     }
 
     #[inline]
     pub fn metatable_keys(&self) -> &MetatableKeys {
-        &self.metatable_keys
-    }
-
-    pub fn create_multi(&mut self) -> MultiValue {
-        self.multivalues
-            .pop()
-            .unwrap_or_else(|| MultiValue { values: Vec::new() })
-    }
-
-    pub fn store_multi(&mut self, mut multivalue: MultiValue) {
-        if self.multivalues.len() < RECYCLE_LIMIT {
-            multivalue.clear();
-            self.multivalues.push(multivalue);
-        }
-    }
-
-    pub(crate) fn create_value_stack(&mut self) -> ValueStack {
-        self.value_stacks.pop().unwrap_or_default()
-    }
-
-    pub(crate) fn store_value_stack(&mut self, mut value_stack: ValueStack) {
-        if self.value_stacks.len() < RECYCLE_LIMIT {
-            value_stack.clear();
-            self.value_stacks.push(value_stack);
-        }
-    }
-
-    pub(crate) fn create_short_value_stack(&mut self) -> ValueStack {
-        self.short_value_stacks.pop().unwrap_or_default()
-    }
-
-    pub(crate) fn store_short_value_stack(&mut self, mut value_stack: ValueStack) {
-        if self.short_value_stacks.len() < RECYCLE_LIMIT {
-            value_stack.clear();
-            self.short_value_stacks.push(value_stack);
-        }
+        &self.execution_data.metatable_keys
     }
 
     pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {
@@ -242,21 +217,24 @@ impl Vm {
     }
 
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
-        let heap_key = self.heap.intern_bytes(bytes);
-        let heap_ref = self.heap.create_ref(heap_key);
+        let heap = &mut self.execution_data.heap;
+        let heap_key = heap.intern_bytes(bytes);
+        let heap_ref = heap.create_ref(heap_key);
 
         StringRef(heap_ref)
     }
 
     pub fn create_table(&mut self) -> TableRef {
-        let heap_key = self.heap.create_table(0, 0);
-        let heap_ref = self.heap.create_ref(heap_key);
+        let heap = &mut self.execution_data.heap;
+        let heap_key = heap.create_table(0, 0);
+        let heap_ref = heap.create_ref(heap_key);
         TableRef(heap_ref)
     }
 
     pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
-        let heap_key = self.heap.create_table(list, map);
-        let heap_ref = self.heap.create_ref(heap_key);
+        let heap = &mut self.execution_data.heap;
+        let heap_key = heap.create_table(list, map);
+        let heap_ref = heap.create_ref(heap_key);
         TableRef(heap_ref)
     }
 
@@ -274,6 +252,7 @@ impl Vm {
     {
         let label = label.into();
 
+        let heap = &mut self.execution_data.heap;
         let environment = environment
             .map(|table| table.0.key().into())
             .unwrap_or(self.default_environment.key().into());
@@ -284,7 +263,7 @@ impl Vm {
             let byte_strings = chunk
                 .byte_strings
                 .into_iter()
-                .map(|bytes| self.heap.intern_bytes(bytes.as_ref()))
+                .map(|bytes| heap.intern_bytes(bytes.as_ref()))
                 .collect();
 
             let functions = chunk
@@ -301,7 +280,7 @@ impl Vm {
                 }
             }
 
-            let key = self.heap.create(HeapValue::Function(Function {
+            let key = heap.create(HeapValue::Function(Function {
                 up_values: up_values.into(),
                 definition: Rc::new(FunctionDefinition {
                     label: label.clone(),
@@ -318,7 +297,7 @@ impl Vm {
         }
 
         let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
-        let heap_ref = self.heap.create_ref(*key);
+        let heap_ref = heap.create_ref(*key);
 
         Ok(FunctionRef(heap_ref))
     }
@@ -327,9 +306,10 @@ impl Vm {
         &mut self,
         callback: impl Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> + Clone + 'static,
     ) -> FunctionRef {
-        let key = self.heap.create(HeapValue::NativeFunction(callback.into()));
+        let heap = &mut self.execution_data.heap;
+        let key = heap.create(HeapValue::NativeFunction(callback.into()));
 
-        let heap_ref = self.heap.create_ref(key);
+        let heap_ref = heap.create_ref(key);
 
         FunctionRef(heap_ref)
     }
@@ -342,35 +322,43 @@ impl Vm {
         let args = args.into_multi(self)?;
 
         // must test validity of every arg, since invalid keys in the vm will cause a panic
+        let heap = &self.execution_data.heap;
+
         for value in &args.values {
-            value.test_validity(&self.heap)?;
+            value.test_validity(heap)?;
         }
 
-        let Some(value) = self.heap.get(function_key) else {
+        let Some(value) = heap.get(function_key) else {
             return Err(RuntimeErrorData::NotAFunction.into());
         };
 
-        let old_stack_size = self.tracked_stack_size;
+        let old_stack_size = self.execution_data.tracked_stack_size;
 
         let result = match value {
             HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
             HeapValue::Function(func) => {
-                let thread = Thread::new_function_call(function_key, func.clone(), args, self);
-                thread.resume(self)
+                let context =
+                    ExecutionContext::new_function_call(function_key, func.clone(), args, self);
+                self.execution_stack.push(context);
+                ExecutionContext::resume(self)
             }
-            _ => Thread::new_value_call(function_key.into(), args, self)
+            _ => ExecutionContext::new_value_call(function_key.into(), args, self)
                 .map_err(RuntimeError::from)
-                .and_then(|thread| thread.resume(self)),
+                .and_then(|context| {
+                    self.execution_stack.push(context);
+                    ExecutionContext::resume(self)
+                }),
         };
 
-        self.tracked_stack_size = old_stack_size;
+        self.execution_data.tracked_stack_size = old_stack_size;
 
         let multi = result?;
         R::from_multi(multi, self)
     }
 
     pub fn gc_collect(&mut self) {
-        self.heap.collect_garbage();
+        let heap = &mut self.execution_data.heap;
+        heap.collect_garbage();
     }
 }
 

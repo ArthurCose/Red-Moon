@@ -1,4 +1,6 @@
 mod byte_string;
+mod cache_pools;
+mod execution;
 mod function_ref;
 mod heap;
 mod instruction;
@@ -11,7 +13,6 @@ mod native_function;
 mod string_ref;
 mod table;
 mod table_ref;
-mod thread;
 mod value;
 mod value_stack;
 mod vm;

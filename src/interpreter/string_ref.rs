@@ -13,7 +13,8 @@ impl StringRef {
     }
 
     pub fn fetch<'vm>(&self, vm: &'vm Vm) -> Result<&'vm ByteString, RuntimeError> {
-        let Some(HeapValue::Bytes(bytes)) = vm.heap.get(self.0.key()) else {
+        let heap = &vm.execution_data.heap;
+        let Some(HeapValue::Bytes(bytes)) = heap.get(self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
