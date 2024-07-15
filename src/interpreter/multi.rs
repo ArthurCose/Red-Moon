@@ -72,6 +72,11 @@ impl MultiValue {
         self.values
     }
 
+    #[inline]
+    pub fn drain_all(&mut self) -> impl DoubleEndedIterator<Item = Value> + '_ {
+        self.values.drain(..).rev()
+    }
+
     /// Copies values from a ValueStack
     pub(crate) fn copy_stack_multi(
         &mut self,

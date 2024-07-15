@@ -723,8 +723,8 @@ impl<'lua> MultiValue<'lua> {
     ) -> Self {
         let mut mlua_multi = Self::with_lua_and_capacity(lua, red_moon_multi.len());
 
-        while let Some(value) = red_moon_multi.pop_front() {
-            let mlua_value = Value::from_red_moon(lua, value);
+        for red_moon_value in red_moon_multi.drain_all().rev() {
+            let mlua_value = Value::from_red_moon(lua, red_moon_value);
             mlua_multi.push_front(mlua_value);
         }
 
@@ -743,7 +743,7 @@ impl<'lua> MultiValue<'lua> {
         let vm = unsafe { lua.vm_mut() };
         let mut red_moon_multi = ().into_multi(vm)?;
 
-        while let Some(mlua_value) = self.pop_front() {
+        for mlua_value in self.vec.drain(..) {
             let red_moon_value = mlua_value.into_red_moon();
             red_moon_multi.push_front(red_moon_value);
         }
