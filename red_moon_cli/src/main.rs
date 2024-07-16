@@ -3,7 +3,9 @@ use red_moon::errors::{LuaCompilationError, RuntimeError, RuntimeErrorData, Synt
 use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm};
 use red_moon::languages::lua::{std as lua_std, LuaCompiler};
 use rustyline::error::ReadlineError;
+use std::cell::{Cell, RefCell};
 use std::process::ExitCode;
+use std::rc::Rc;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -37,7 +39,6 @@ fn main2() -> Result<(), ()> {
     lua_std::impl_math(&mut vm).unwrap();
     lua_std::impl_table(&mut vm).unwrap();
     lua_std::impl_os(&mut vm).unwrap();
-    impl_rewind(&mut vm).unwrap();
 
     load_args(&mut vm, &options.args);
 
@@ -140,7 +141,13 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
 
     println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
+    let queued_rewind = impl_rewind(vm).unwrap();
+
     loop {
+        if let Some(snapshot) = queued_rewind.take() {
+            *vm = snapshot;
+        }
+
         let prompt = if request_more { ">> " } else { "> " };
         request_more = false;
 
@@ -209,11 +216,11 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
     }
 }
 
-fn impl_rewind(vm: &mut Vm) -> Result<(), RuntimeError> {
-    use std::cell::RefCell;
-    use std::rc::Rc;
+type QueuedRewind = Rc<Cell<Option<Vm>>>;
 
+fn impl_rewind(vm: &mut Vm) -> Result<QueuedRewind, RuntimeError> {
     let snapshots: Rc<RefCell<Vec<Vm>>> = Default::default();
+    let queued_rewind = QueuedRewind::default();
 
     let env = vm.default_environment();
 
@@ -225,31 +232,37 @@ fn impl_rewind(vm: &mut Vm) -> Result<(), RuntimeError> {
     });
     env.set("snap", snap, vm)?;
 
+    let queued_rewind_capture = queued_rewind.clone();
     let rewind = vm.create_native_function(move |args, vm| {
         let x: Option<i64> = args.unpack(vm)?;
-        let x = x.unwrap_or(1);
+        let x = x.unwrap_or(-1);
 
-        let snapshots = snapshots.borrow();
+        let mut snapshots = snapshots.borrow_mut();
 
-        if x <= 0 {
-            return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
-        }
+        let x = match x.cmp(&0) {
+            std::cmp::Ordering::Less => return Err(RuntimeErrorData::OutOfBounds.into()),
+            std::cmp::Ordering::Equal => return MultiValue::pack((), vm),
+            std::cmp::Ordering::Greater => {
+                let x = x as usize;
 
-        let x = x as usize;
+                if x > snapshots.len() {
+                    return Err(RuntimeError::new_static_string(
+                        "not enough snapshots taken",
+                    ));
+                }
 
-        if snapshots.len() < x {
-            return Err(RuntimeError::new_static_string(
-                "not enough snapshots taken",
-            ));
-        }
+                snapshots.len() - x
+            }
+        };
 
-        *vm = snapshots[snapshots.len() - x].clone();
+        snapshots.truncate(x + 1);
+        queued_rewind_capture.set(snapshots.pop());
 
         MultiValue::pack((), vm)
     });
-    env.set("rewind", rewind, vm)?;
+    env.set("queue_rewind", rewind, vm)?;
 
-    Ok(())
+    Ok(queued_rewind)
 }
 
 #[cfg(feature = "instruction_exec_counts")]
