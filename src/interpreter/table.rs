@@ -42,10 +42,11 @@ impl Table {
             self.map.swap_remove(&map_key);
         }
 
-        // shrink so we can properly extend
-        self.list.truncate(index_start);
+        // remove existing overlapping values from the list by using splice to extend
+        let index_end = (index_start + values.len()).min(self.list.len());
+        self.list
+            .splice(index_start..index_end, values.iter().cloned());
 
-        self.list.extend(values);
         self.merge_from_map_into_list();
     }
 
@@ -168,7 +169,7 @@ impl Table {
         self.metatable = None;
     }
 
-    pub(crate) fn next(&mut self, previous: StackValue) -> Option<(StackValue, StackValue)> {
+    pub(crate) fn next(&self, previous: StackValue) -> Option<(StackValue, StackValue)> {
         if previous == Primitive::Nil.into() {
             return self.map.first().map(|(k, v)| (*k, *v));
         }

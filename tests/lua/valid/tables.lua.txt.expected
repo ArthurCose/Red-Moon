@@ -40,6 +40,9 @@ expresion execution order:
 51 elements - double flush:
 51	2	1
 
+preserving outside of flush:
+4	7
+
 expression access:
-2
+1
 3

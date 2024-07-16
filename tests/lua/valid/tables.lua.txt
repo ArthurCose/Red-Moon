@@ -93,6 +93,10 @@ a = {
 }
 print(#a, a[1], a[51])
 
+print("\npreserving outside of flush:")
+a = { 1, 2, 3, [1] = 4, [2] = 5, [3] = 6, [4] = 7 }
+print(#a, a[4])
+
 print("\nexpression access:")
 a.a = 3
 print((a)[1])
