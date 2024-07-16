@@ -51,7 +51,7 @@ pub(crate) struct ExecutionAccessibleData {
     pub(crate) limits: VmLimits,
     pub(crate) heap: Heap,
     pub(crate) metatable_keys: Rc<MetatableKeys>,
-    pub(crate) cache_pools: CachePools,
+    pub(crate) cache_pools: Rc<CachePools>,
     pub(crate) tracked_stack_size: usize,
     #[cfg(feature = "instruction_exec_counts")]
     pub(crate) instruction_counter: InstructionCounter,
