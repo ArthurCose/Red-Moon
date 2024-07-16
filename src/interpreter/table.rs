@@ -6,9 +6,9 @@ use std::ops::Range;
 
 #[derive(Clone, Default)]
 pub(crate) struct Table {
-    metatable: Option<HeapKey>,
-    map: IndexMap<StackValue, StackValue, FxBuildHasher>,
-    list: Vec<StackValue>,
+    pub(crate) metatable: Option<HeapKey>,
+    pub(crate) map: IndexMap<StackValue, StackValue, FxBuildHasher>,
+    pub(crate) list: Vec<StackValue>,
 }
 
 impl Table {

@@ -1,14 +1,18 @@
-use super::value_stack::ValueStack;
+use super::heap::HeapKey;
+use super::value_stack::{StackValue, ValueStack};
 use super::MultiValue;
 use crate::vec_cell::VecCell;
+use std::cell::Cell;
 
-const RECYCLE_LIMIT: usize = 64;
+pub(crate) const RECYCLE_LIMIT: usize = 64;
 
 #[derive(Default)]
 pub(crate) struct CachePools {
     pub(crate) multivalues: VecCell<MultiValue>,
     pub(crate) value_stacks: VecCell<ValueStack>,
     pub(crate) short_value_stacks: VecCell<ValueStack>,
+    pub(crate) gc_work_queue: Cell<Vec<HeapKey>>,
+    pub(crate) weak_associations: VecCell<Vec<(HeapKey, StackValue)>>,
 }
 
 impl CachePools {
@@ -46,6 +50,17 @@ impl CachePools {
         if self.short_value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
             self.short_value_stacks.push(value_stack);
+        }
+    }
+
+    pub(crate) fn create_weak_associations_list(&self) -> Vec<(HeapKey, StackValue)> {
+        self.weak_associations.pop().unwrap_or_default()
+    }
+
+    pub(crate) fn store_weak_associations_list(&self, mut list: Vec<(HeapKey, StackValue)>) {
+        if self.weak_associations.len() < RECYCLE_LIMIT {
+            list.clear();
+            self.weak_associations.push(list);
         }
     }
 }

@@ -174,6 +174,10 @@ impl ValueStack {
     pub(crate) fn clear(&mut self) {
         self.values.clear();
     }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &StackValue> {
+        self.values.iter()
+    }
 }
 
 impl std::fmt::Debug for ValueStack {

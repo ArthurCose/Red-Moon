@@ -358,7 +358,11 @@ impl Vm {
 
     pub fn gc_collect(&mut self) {
         let heap = &mut self.execution_data.heap;
-        heap.collect_garbage();
+        heap.gc_collect(
+            &self.execution_data.metatable_keys,
+            &self.execution_data.cache_pools,
+            &self.execution_stack,
+        );
     }
 }
 

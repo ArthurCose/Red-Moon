@@ -26,6 +26,30 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
     });
     env.set("assert", assert, vm)?;
 
+    // collectgarbage
+    let assert = vm.create_native_function(|args, vm| {
+        let opt: Option<ByteString> = args.unpack_args(vm)?;
+
+        if let Some(opt) = opt {
+            match opt.as_bytes() {
+                b"collect" => {
+                    vm.gc_collect();
+                }
+                // todo: stop, restart, step, isrunning, incremental
+                _ => {
+                    let message = format!("invalid option '{opt}'");
+                    let inner_error = RuntimeError::new_string(message);
+                    return Err(RuntimeError::new_bad_argument(1, inner_error));
+                }
+            }
+        } else {
+            vm.gc_collect();
+        }
+
+        MultiValue::pack((), vm)
+    });
+    env.set("collectgarbage", assert, vm)?;
+
     // error
     let error = vm.create_native_function(|args, vm| {
         // todo: level
