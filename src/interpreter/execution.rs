@@ -1941,7 +1941,7 @@ fn resolve_call(
             return Err(RuntimeErrorData::NotAFunction);
         };
 
-        let Some(heap_value) = exec_data.heap.get_mut(heap_key) else {
+        let Some(heap_value) = exec_data.heap.get(heap_key) else {
             return Err(RuntimeErrorData::NotAFunction);
         };
 

@@ -153,7 +153,7 @@ impl TableRef {
     pub fn len(&self, vm: &mut Vm) -> Result<usize, RuntimeError> {
         let heap = &mut vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(table_key) else {
+        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -243,7 +243,7 @@ impl TableRef {
 
         let heap = &mut vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(table_key) else {
+        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -263,7 +263,7 @@ impl TableRef {
     pub fn is_map_empty(&self, vm: &mut Vm) -> Result<bool, RuntimeError> {
         let heap = &mut vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(table_key) else {
+        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
