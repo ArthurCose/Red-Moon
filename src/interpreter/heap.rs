@@ -40,10 +40,14 @@ impl RefCounter {
         }
     }
 
-    fn create_strong(&self) -> StrongRef {
-        StrongRef {
-            rc: self.weak.upgrade().unwrap_or_default(),
-        }
+    fn create_strong(&mut self) -> StrongRef {
+        let rc = self.weak.upgrade().unwrap_or_else(|| {
+            let rc = Default::default();
+            self.weak = Rc::downgrade(&rc);
+            rc
+        });
+
+        StrongRef { rc }
     }
 
     fn count(&self) -> usize {
@@ -167,7 +171,7 @@ impl Heap {
 
     pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> HeapRef {
         let strong_ref = match self.ref_roots.entry(heap_key) {
-            indexmap::map::Entry::Occupied(entry) => entry.get().create_strong(),
+            indexmap::map::Entry::Occupied(mut entry) => entry.get_mut().create_strong(),
             indexmap::map::Entry::Vacant(entry) => {
                 debug_assert!(self.storage.contains_key(heap_key));
                 let strong_ref = StrongRef::default();
