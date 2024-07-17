@@ -297,6 +297,10 @@ impl Heap {
 
     fn gc_mark_stack(&mut self, execution_stack: &[ExecutionContext]) {
         for execution in execution_stack {
+            for value in execution.pending_captures.iter() {
+                self.gc_state.mark_stack_value(value);
+            }
+
             for value in execution.value_stack.iter() {
                 self.gc_state.mark_stack_value(value);
             }
