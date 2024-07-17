@@ -397,6 +397,7 @@ impl Heap {
 
         self.gc_state.marked.clear();
         self.gc_state.traversed_definitions.clear();
+        self.gc_state.weak_associations.clear();
     }
 }
 
