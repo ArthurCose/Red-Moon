@@ -374,25 +374,14 @@ impl Heap {
             match value {
                 HeapValue::Bytes(bytes) => {
                     self.byte_strings.remove(&bytes);
-                    println!("deleted string");
-                }
-                HeapValue::Function(_) => {
-                    println!("deleted function");
-                }
-                HeapValue::NativeFunction(_) => {
-                    println!("deleted native function");
                 }
                 HeapValue::Table(mut table) => {
-                    println!("deleted table");
-
                     if self.recycled_tables.len() < RECYCLE_LIMIT {
                         table.reset();
                         self.recycled_tables.push(table);
                     }
                 }
-                HeapValue::StackValue(_) => {
-                    println!("deleted stack value");
-                }
+                _ => {}
             }
         }
 
