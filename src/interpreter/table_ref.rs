@@ -204,7 +204,7 @@ impl TableRef {
             return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
         }
 
-        table.splice(index..index, [value.to_stack_value()]);
+        table.list.insert(index, value.to_stack_value());
 
         Ok(())
     }
@@ -227,7 +227,8 @@ impl TableRef {
         }
 
         let value = table.get(Primitive::Integer((index + 1) as _).into());
-        table.splice(index..index, []);
+
+        table.list.remove(index);
 
         let value = Value::from_stack_value(heap, value);
 

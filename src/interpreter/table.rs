@@ -2,7 +2,6 @@ use super::heap::HeapKey;
 use super::value_stack::{Primitive, StackValue};
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
-use std::ops::Range;
 
 #[derive(Clone, Default)]
 pub(crate) struct Table {
@@ -48,16 +47,6 @@ impl Table {
             .splice(index_start..index_end, values.iter().cloned());
 
         self.merge_from_map_into_list();
-    }
-
-    /// Uses zero-based index
-    /// Panics if the starting point is greater than the end point or if the end point is greater than the length of the vector.
-    pub(crate) fn splice(
-        &mut self,
-        range: Range<usize>,
-        iter: impl IntoIterator<Item = StackValue>,
-    ) {
-        self.list.splice(range, iter);
     }
 
     pub(crate) fn get(&self, key: StackValue) -> StackValue {
