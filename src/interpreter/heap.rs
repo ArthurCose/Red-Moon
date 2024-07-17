@@ -546,7 +546,8 @@ impl GcState {
                     }
                 }
             }
-            HeapValue::Bytes(_) | HeapValue::NativeFunction(_) | HeapValue::StackValue(_) => {}
+            HeapValue::StackValue(StackValue::HeapValue(key)) => self.mark_heap_key(*key),
+            _ => {}
         }
     }
 
