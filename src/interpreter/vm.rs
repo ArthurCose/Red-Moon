@@ -356,6 +356,11 @@ impl Vm {
         R::from_multi(multi, self)
     }
 
+    pub fn gc_used_memory(&self) -> usize {
+        let heap = &self.execution_data.heap;
+        heap.gc_used_memory()
+    }
+
     pub fn gc_collect(&mut self) {
         let heap = &mut self.execution_data.heap;
         heap.gc_collect(

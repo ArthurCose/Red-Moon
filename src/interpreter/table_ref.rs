@@ -1,4 +1,5 @@
 use super::heap::{HeapRef, HeapValue};
+use super::table::Table;
 use super::{FromValue, IntoValue, Primitive, Value, Vm};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use slotmap::Key;
@@ -98,7 +99,13 @@ impl TableRef {
 
         let key = key.to_stack_value();
         let value = value.to_stack_value();
+
+        let original_size = table.allocation_size();
+
         table.set(key, value);
+
+        let new_size = table.allocation_size();
+        heap.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())
     }
@@ -175,7 +182,12 @@ impl TableRef {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
+        let original_size = table.allocation_size();
+
         table.clear();
+
+        let new_size = table.allocation_size();
+        heap.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())
     }
@@ -206,6 +218,8 @@ impl TableRef {
 
         table.list.insert(index, value.to_stack_value());
 
+        heap.modify_used_memory(Table::LIST_ELEMENT_SIZE as isize);
+
         Ok(())
     }
 
@@ -229,6 +243,8 @@ impl TableRef {
         let value = table.get(Primitive::Integer((index + 1) as _).into());
 
         table.list.remove(index);
+
+        heap.modify_used_memory(-(Table::LIST_ELEMENT_SIZE as isize));
 
         let value = Value::from_stack_value(heap, value);
 

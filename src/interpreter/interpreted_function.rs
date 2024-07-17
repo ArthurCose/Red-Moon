@@ -16,6 +16,23 @@ pub(crate) struct FunctionDefinition {
 }
 
 impl FunctionDefinition {
+    pub(crate) fn allocation_size(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        // label: weak count + strong count + data
+        size += std::mem::size_of::<usize>() * 2 + self.label.len();
+        // byte_strings
+        size += self.byte_strings.len() * std::mem::size_of::<HeapKey>();
+        // numbers
+        size += self.numbers.len() * std::mem::size_of::<i64>();
+        // functions
+        size += self.functions.len() * std::mem::size_of::<HeapKey>();
+        // instructions
+        size += self.instructions.len() * std::mem::size_of::<Instruction>();
+        // source_map
+        size += self.source_map.len() * std::mem::size_of::<SourceMapping>();
+        size
+    }
+
     fn resolve_line_and_col(&self, instruction_index: usize) -> (usize, usize) {
         let source_map = &self.source_map;
 
@@ -48,4 +65,16 @@ impl FunctionDefinition {
 pub(crate) struct Function {
     pub(crate) up_values: Rc<ValueStack>,
     pub(crate) definition: Rc<FunctionDefinition>,
+}
+
+impl Function {
+    pub(crate) fn allocation_size(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        // value_stack: weak count + strong count + data
+        size += std::mem::size_of::<usize>() * 2 + self.up_values.allocated_size();
+        // definition: RcBox, we're excluding the data since there will be multiple copies in the same vm
+        // the deduplicated size should be handled externally to avoid duplicated calculations
+        size += std::mem::size_of::<usize>() * 2;
+        size
+    }
 }

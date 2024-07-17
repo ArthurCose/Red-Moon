@@ -35,6 +35,10 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
                 b"collect" => {
                     vm.gc_collect();
                 }
+                b"count" => {
+                    let kibi = vm.gc_used_memory() as f32 / 1024.0;
+                    return MultiValue::pack(kibi, vm);
+                }
                 // todo: stop, restart, step, isrunning, incremental
                 _ => {
                     let message = format!("invalid option '{opt}'");

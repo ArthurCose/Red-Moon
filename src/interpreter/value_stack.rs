@@ -84,6 +84,10 @@ impl Clone for ValueStack {
 }
 
 impl ValueStack {
+    pub(crate) fn allocated_size(&self) -> usize {
+        std::mem::size_of::<Self>() + self.values.len() * std::mem::size_of::<StackValue>()
+    }
+
     pub(crate) fn clone_using(&self, short_value_stacks: &VecCell<ValueStack>) -> ValueStack {
         let mut up_values = short_value_stacks.pop().unwrap_or_default();
         up_values.clone_from(self);

@@ -23,6 +23,23 @@ pub(crate) enum HeapValue {
     Function(Function),
 }
 
+impl HeapValue {
+    fn allocation_size(&self) -> usize {
+        match self {
+            HeapValue::StackValue(_) => std::mem::size_of::<Self>(),
+            HeapValue::Bytes(bytes) => {
+                bytes.allocation_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(bytes)
+            }
+            HeapValue::Table(table) => table.allocation_size() + std::mem::size_of::<Self>(),
+            HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
+            HeapValue::Function(function) => {
+                function.allocation_size() + std::mem::size_of::<Self>()
+                    - std::mem::size_of_val(function)
+            }
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 struct StrongRef {
     rc: Rc<()>,
@@ -100,6 +117,7 @@ enum Mark {
 
 #[derive(Default, Clone)]
 struct GcState {
+    used_memory: usize,
     traversed_definitions: FastHashSet<usize>,
     // gray + black, excluded keys are white
     marked: slotmap::SecondaryMap<HeapKey, Mark>,
@@ -125,8 +143,12 @@ impl Default for Heap {
     fn default() -> Self {
         let mut storage: slotmap::SlotMap<_, _> = Default::default();
 
+        let mut gc_state = GcState::default();
+
         // create string metatable
-        let string_metatable_key = storage.insert(HeapValue::Table(Default::default()));
+        let string_metatable_heap_value = HeapValue::Table(Default::default());
+        gc_state.used_memory = string_metatable_heap_value.allocation_size();
+        let string_metatable_key = storage.insert(string_metatable_heap_value);
 
         let mut ref_roots = IndexMap::<HeapKey, RefCounter, FxBuildHasher>::default();
         let strong_ref = StrongRef::default();
@@ -141,7 +163,7 @@ impl Default for Heap {
             storage,
             byte_strings: Default::default(),
             ref_roots,
-            gc_state: GcState::default(),
+            gc_state,
             recycled_tables: Default::default(),
             string_metatable_ref,
         }
@@ -164,6 +186,8 @@ impl Heap {
     }
 
     pub(crate) fn create(&mut self, value: HeapValue) -> HeapKey {
+        self.gc_state.used_memory += value.allocation_size();
+
         let key = self.storage.insert(value);
         self.gc_state.acknowledge_write(key);
         key
@@ -259,6 +283,14 @@ impl Heap {
         }
 
         Some(method_key)
+    }
+
+    pub(crate) fn gc_used_memory(&self) -> usize {
+        self.gc_state.used_memory
+    }
+
+    pub(crate) fn modify_used_memory(&mut self, size: isize) {
+        self.gc_state.used_memory = (self.gc_state.used_memory as isize + size) as usize;
     }
 
     pub(crate) fn gc_collect(
@@ -368,6 +400,8 @@ impl Heap {
         // delete
         for &key in &gc_work_queue {
             let value = self.storage.remove(key).unwrap();
+
+            self.gc_state.used_memory -= value.allocation_size();
 
             match value {
                 HeapValue::Bytes(bytes) => {

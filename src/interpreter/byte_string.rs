@@ -4,6 +4,13 @@ use std::rc::Rc;
 pub struct ByteString(pub(crate) Rc<[u8]>);
 
 impl ByteString {
+    pub(crate) fn allocation_size(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        // label: weak count + strong count + data
+        size += std::mem::size_of::<usize>() * 2 + self.0.len();
+        size
+    }
+
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

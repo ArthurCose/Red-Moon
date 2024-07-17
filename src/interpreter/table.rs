@@ -3,14 +3,29 @@ use super::value_stack::{Primitive, StackValue};
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Table {
     pub(crate) metatable: Option<HeapKey>,
     pub(crate) map: IndexMap<StackValue, StackValue, FxBuildHasher>,
     pub(crate) list: Vec<StackValue>,
 }
 
+const BUCKET_SIZE: usize = std::mem::size_of::<usize>() + std::mem::size_of::<StackValue>() * 2;
+
 impl Table {
+    pub(crate) const LIST_ELEMENT_SIZE: usize = std::mem::size_of::<StackValue>();
+    // index + bucket, could use verification
+    pub(crate) const MAP_ELEMENT_SIZE: usize = std::mem::size_of::<usize>() + BUCKET_SIZE;
+
+    pub(crate) fn allocation_size(&self) -> usize {
+        let mut size = std::mem::size_of::<Self>();
+        // map
+        size += self.map.len() * Self::MAP_ELEMENT_SIZE;
+        // list
+        size += self.list.len() * Self::LIST_ELEMENT_SIZE;
+        size
+    }
+
     pub(crate) fn metatable(&self) -> Option<HeapKey> {
         self.metatable
     }

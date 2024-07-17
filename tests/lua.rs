@@ -13,6 +13,7 @@ fn valid() {
     let test_files = vec![
         "expressions.lua",
         "functions.lua",
+        "garbage_collection.lua",
         "loops.lua",
         "metatables.lua",
         "munchausen_numbers.lua",
