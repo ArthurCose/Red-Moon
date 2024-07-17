@@ -216,6 +216,7 @@ impl Heap {
     #[must_use]
     pub(crate) fn set(&mut self, heap_key: HeapKey, value: HeapValue) -> Option<()> {
         *self.storage.get_mut(heap_key)? = value;
+        self.gc_state.acknowledge_write(heap_key);
 
         Some(())
     }
