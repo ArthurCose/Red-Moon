@@ -464,7 +464,7 @@ impl GcState {
 
                 let definition_key = Rc::as_ptr(&function.definition) as usize;
 
-                if !self.traversed_definitions.insert(definition_key) {
+                if self.traversed_definitions.insert(definition_key) {
                     for key in &function.definition.byte_strings {
                         self.mark_heap_key(*key);
                     }
