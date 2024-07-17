@@ -887,7 +887,7 @@ impl CallContext {
 
                     if let StackValue::Pointer(heap_key) = self.up_values.get(dest as usize) {
                         // pointing to another stack value
-                        heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+                        heap.set(heap_key, HeapValue::StackValue(value));
                     } else {
                         self.up_values.set(dest as usize, value);
                     }
@@ -901,7 +901,7 @@ impl CallContext {
                     let dest_index = self.register_base + dest as usize;
 
                     if let StackValue::Pointer(heap_key) = value_stack.get(dest_index) {
-                        heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+                        heap.set(heap_key, HeapValue::StackValue(value));
                     } else {
                         value_stack.set(dest_index, value);
                     }
@@ -1824,7 +1824,7 @@ impl CallContext {
             let value = slice[src_index].get_deref(heap);
 
             if let StackValue::Pointer(heap_key) = slice[dest_index] {
-                heap.set(heap_key, HeapValue::StackValue(value)).unwrap();
+                heap.set(heap_key, HeapValue::StackValue(value));
             } else {
                 slice[dest_index] = value;
             }
