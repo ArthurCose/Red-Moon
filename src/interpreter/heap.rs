@@ -24,17 +24,16 @@ pub(crate) enum HeapValue {
 }
 
 impl HeapValue {
-    fn allocation_size(&self) -> usize {
+    fn gc_size(&self) -> usize {
         match self {
             HeapValue::StackValue(_) => std::mem::size_of::<Self>(),
             HeapValue::Bytes(bytes) => {
-                bytes.allocation_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(bytes)
+                bytes.gc_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(bytes)
             }
-            HeapValue::Table(table) => table.allocation_size() + std::mem::size_of::<Self>(),
+            HeapValue::Table(table) => table.gc_size() + std::mem::size_of::<Self>(),
             HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
             HeapValue::Function(function) => {
-                function.allocation_size() + std::mem::size_of::<Self>()
-                    - std::mem::size_of_val(function)
+                function.gc_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(function)
             }
         }
     }
@@ -147,7 +146,7 @@ impl Default for Heap {
 
         // create string metatable
         let string_metatable_heap_value = HeapValue::Table(Default::default());
-        gc_state.used_memory = string_metatable_heap_value.allocation_size();
+        gc_state.used_memory = string_metatable_heap_value.gc_size();
         let string_metatable_key = storage.insert(string_metatable_heap_value);
 
         let mut ref_roots = IndexMap::<HeapKey, RefCounter, FxBuildHasher>::default();
@@ -186,7 +185,7 @@ impl Heap {
     }
 
     pub(crate) fn create(&mut self, value: HeapValue) -> HeapKey {
-        self.gc_state.used_memory += value.allocation_size();
+        self.gc_state.used_memory += value.gc_size();
 
         let key = self.storage.insert(value);
         self.gc_state.acknowledge_write(key);
@@ -401,7 +400,7 @@ impl Heap {
         for &key in &gc_work_queue {
             let value = self.storage.remove(key).unwrap();
 
-            self.gc_state.used_memory -= value.allocation_size();
+            self.gc_state.used_memory -= value.gc_size();
 
             match value {
                 HeapValue::Bytes(bytes) => {

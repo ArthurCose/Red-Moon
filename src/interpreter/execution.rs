@@ -637,11 +637,11 @@ impl CallContext {
                     let start = dest_index + 2;
                     let end = start + total as usize;
 
-                    let original_size = table.allocation_size();
+                    let original_size = table.gc_size();
 
                     table.flush(index_offset, value_stack.get_slice(start..end));
 
-                    let new_size = table.allocation_size();
+                    let new_size = table.gc_size();
                     heap.modify_used_memory(new_size as isize - original_size as isize);
                 }
                 Instruction::VariadicToTable(dest, src_start, index_offset) => {
@@ -688,12 +688,12 @@ impl CallContext {
                     let start = self.register_base + src_start as usize;
                     let end = start + count as usize;
 
-                    let original_size = table.allocation_size();
+                    let original_size = table.gc_size();
 
                     table.reserve_list(count as usize);
                     table.flush(index_offset, value_stack.get_slice(start..end));
 
-                    let new_size = table.allocation_size();
+                    let new_size = table.gc_size();
                     heap.modify_used_memory(new_size as isize - original_size as isize);
                 }
                 Instruction::CopyTableField(dest, table_index) => {
@@ -1786,11 +1786,11 @@ impl CallContext {
                 return Err(RuntimeErrorData::AttemptToIndexInvalid);
             };
 
-            let original_size = table.allocation_size();
+            let original_size = table.gc_size();
 
             table.set(key, src_value);
 
-            let new_size = table.allocation_size();
+            let new_size = table.gc_size();
             heap.modify_used_memory(new_size as isize - original_size as isize);
 
             Ok(None)

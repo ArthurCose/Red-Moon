@@ -100,11 +100,11 @@ impl TableRef {
         let key = key.to_stack_value();
         let value = value.to_stack_value();
 
-        let original_size = table.allocation_size();
+        let original_size = table.gc_size();
 
         table.set(key, value);
 
-        let new_size = table.allocation_size();
+        let new_size = table.gc_size();
         heap.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())
@@ -182,11 +182,11 @@ impl TableRef {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
-        let original_size = table.allocation_size();
+        let original_size = table.gc_size();
 
         table.clear();
 
-        let new_size = table.allocation_size();
+        let new_size = table.gc_size();
         heap.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())

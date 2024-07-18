@@ -84,7 +84,7 @@ impl Clone for ValueStack {
 }
 
 impl ValueStack {
-    pub(crate) fn allocated_size(&self) -> usize {
+    pub(crate) fn gc_size(&self) -> usize {
         std::mem::size_of::<Self>() + self.values.len() * std::mem::size_of::<StackValue>()
     }
 

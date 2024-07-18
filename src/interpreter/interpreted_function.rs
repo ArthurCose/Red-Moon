@@ -16,7 +16,7 @@ pub(crate) struct FunctionDefinition {
 }
 
 impl FunctionDefinition {
-    pub(crate) fn allocation_size(&self) -> usize {
+    pub(crate) fn gc_size(&self) -> usize {
         let mut size = std::mem::size_of::<Self>();
         // label: weak count + strong count + data
         size += std::mem::size_of::<usize>() * 2 + self.label.len();
@@ -68,10 +68,10 @@ pub(crate) struct Function {
 }
 
 impl Function {
-    pub(crate) fn allocation_size(&self) -> usize {
+    pub(crate) fn gc_size(&self) -> usize {
         let mut size = std::mem::size_of::<Self>();
         // value_stack: weak count + strong count + data
-        size += std::mem::size_of::<usize>() * 2 + self.up_values.allocated_size();
+        size += std::mem::size_of::<usize>() * 2 + self.up_values.gc_size();
         // definition: RcBox, we're excluding the data since there will be multiple copies in the same vm
         // the deduplicated size should be handled externally to avoid duplicated calculations
         size += std::mem::size_of::<usize>() * 2;
