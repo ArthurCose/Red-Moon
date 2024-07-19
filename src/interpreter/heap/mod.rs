@@ -10,7 +10,6 @@ pub(crate) use heap_value::*;
 use super::byte_string::ByteString;
 use super::table::Table;
 use super::value_stack::StackValue;
-use super::Primitive;
 use crate::vec_cell::VecCell;
 use crate::FastHashMap;
 use indexmap::IndexMap;
@@ -146,27 +145,27 @@ impl Heap {
 
     pub(crate) fn get_metavalue(&self, heap_key: HeapKey, name: StackValue) -> StackValue {
         let Some(value) = self.storage.get(heap_key) else {
-            return Primitive::Nil.into();
+            return StackValue::Nil;
         };
 
         let metatable_key = match value {
             HeapValue::Table(table) => {
                 let Some(key) = table.metatable() else {
-                    return Primitive::Nil.into();
+                    return StackValue::Nil;
                 };
 
                 key
             }
             HeapValue::Bytes(_) => self.string_metatable_ref.key(),
-            _ => return Primitive::Nil.into(),
+            _ => return StackValue::Nil,
         };
 
         let Some(metatable_value) = &self.storage.get(metatable_key) else {
-            return Primitive::Nil.into();
+            return StackValue::Nil;
         };
 
         let HeapValue::Table(metatable) = &metatable_value else {
-            return Primitive::Nil.into();
+            return StackValue::Nil;
         };
 
         metatable.get(name)

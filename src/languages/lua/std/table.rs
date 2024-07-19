@@ -1,5 +1,5 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{ByteString, FromValue, MultiValue, Primitive, Value};
+use crate::interpreter::{ByteString, FromValue, MultiValue, Value};
 use crate::interpreter::{TableRef, Vm};
 
 pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
@@ -22,10 +22,10 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
                     Value::String(s) => {
                         bytes.extend(s.fetch(vm)?.as_bytes());
                     }
-                    Value::Primitive(Primitive::Integer(i)) => {
+                    Value::Integer(i) => {
                         bytes.extend(i.to_string().as_bytes());
                     }
-                    Value::Primitive(Primitive::Float(f)) => {
+                    Value::Float(f) => {
                         // todo: use lua's formatting
                         bytes.extend(f.to_string().as_bytes());
                     }

@@ -1,6 +1,7 @@
 use super::heap::{HeapRef, HeapValue};
 use super::table::Table;
-use super::{FromValue, IntoValue, Primitive, Value, Vm};
+use super::value_stack::StackValue;
+use super::{FromValue, IntoValue, Value, Vm};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
@@ -245,7 +246,7 @@ impl TableRef {
             return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
         }
 
-        let value = table.get(Primitive::Integer((index + 1) as _).into());
+        let value = table.get(StackValue::Integer((index + 1) as _));
 
         table.list.remove(index);
 
@@ -289,7 +290,7 @@ impl TableRef {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
-        let has_next = table.next(Primitive::Nil.into()).is_some();
+        let has_next = table.next(StackValue::Nil).is_some();
 
         Ok(!has_next)
     }

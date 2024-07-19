@@ -464,16 +464,13 @@ impl<'lua> Value<'lua> {
     }
 
     pub(crate) fn from_red_moon(lua: &'lua Lua, value: red_moon::interpreter::Value) -> Self {
-        use red_moon::interpreter::Primitive;
         use red_moon::interpreter::Value as RedMoonValue;
 
         match value {
-            RedMoonValue::Primitive(primitive) => match primitive {
-                Primitive::Nil => Self::Nil,
-                Primitive::Bool(b) => Self::Boolean(b),
-                Primitive::Integer(i) => Self::Integer(i),
-                Primitive::Float(f) => Self::Number(f),
-            },
+            RedMoonValue::Nil => Self::Nil,
+            RedMoonValue::Bool(b) => Self::Boolean(b),
+            RedMoonValue::Integer(i) => Self::Integer(i),
+            RedMoonValue::Float(f) => Self::Number(f),
             RedMoonValue::String(string_ref) => Value::String(String {
                 lua,
                 string_ref,
@@ -485,15 +482,14 @@ impl<'lua> Value<'lua> {
     }
 
     pub(crate) fn into_red_moon(self) -> red_moon::interpreter::Value {
-        use red_moon::interpreter::Primitive;
         use red_moon::interpreter::Value as RedMoonValue;
 
         match self {
-            Value::Nil => Primitive::Nil.into(),
-            Value::Boolean(b) => Primitive::Bool(b).into(),
-            Value::LightUserData(_) => Primitive::Nil.into(),
-            Value::Integer(i) => Primitive::Integer(i).into(),
-            Value::Number(f) => Primitive::Float(f).into(),
+            Value::Nil => RedMoonValue::Nil,
+            Value::Boolean(b) => RedMoonValue::Bool(b),
+            Value::LightUserData(_) => RedMoonValue::Nil,
+            Value::Integer(i) => RedMoonValue::Integer(i),
+            Value::Number(f) => RedMoonValue::Float(f),
             Value::String(s) => RedMoonValue::String(s.string_ref),
             Value::Table(t) => RedMoonValue::Table(t.table_ref),
             Value::Function(f) => RedMoonValue::Function(f.function_ref),

@@ -2,7 +2,7 @@ use super::heap::{Heap, HeapKey, HeapValue};
 use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
-use super::value_stack::{Primitive, StackValue, ValueStack};
+use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
 use super::Value;
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
@@ -143,7 +143,7 @@ impl ExecutionContext {
                         return Err(Self::unwind_error(vm, RuntimeErrorData::NotAFunction));
                     };
 
-                    let StackValue::Primitive(Primitive::Integer(mut arg_count)) =
+                    let StackValue::Integer(mut arg_count) =
                         execution.value_stack.get(stack_start + 1)
                     else {
                         return Err(Self::unwind_error(
@@ -158,7 +158,7 @@ impl ExecutionContext {
                         arg_count += 1;
                         execution
                             .value_stack
-                            .set(stack_start + 1, Primitive::Integer(arg_count).into());
+                            .set(stack_start + 1, StackValue::Integer(arg_count));
                     });
 
                     let function_key = match function_key {
@@ -268,9 +268,8 @@ impl ExecutionContext {
                                     // add the return count
                                     let len_register = register_base + len_index as usize;
 
-                                    let StackValue::Primitive(Primitive::Integer(
-                                        stored_return_count,
-                                    )) = execution.value_stack.get(len_register)
+                                    let StackValue::Integer(stored_return_count) =
+                                        execution.value_stack.get(len_register)
                                     else {
                                         return Err(Self::unwind_error(
                                             vm,
@@ -279,7 +278,7 @@ impl ExecutionContext {
                                     };
 
                                     let count = stored_return_count + return_count as i64 - 1;
-                                    let count_value = Primitive::Integer(count).into();
+                                    let count_value = StackValue::Integer(count);
                                     execution.value_stack.set(len_register, count_value);
                                 }
                                 ReturnMode::UnsizedDestinationPreserve(dest) => {
@@ -351,8 +350,7 @@ impl ExecutionContext {
                         .unwrap_or_default();
 
                     // get return count
-                    let StackValue::Primitive(Primitive::Integer(return_count)) =
-                        execution.value_stack.get(stack_index)
+                    let StackValue::Integer(return_count) = execution.value_stack.get(stack_index)
                     else {
                         // put the call back
                         execution.call_stack.push(call);
@@ -415,7 +413,7 @@ impl ExecutionContext {
 
                             // get the return count
                             let len_register = parent_base + len_index as usize;
-                            let StackValue::Primitive(Primitive::Integer(stored_return_count)) =
+                            let StackValue::Integer(stored_return_count) =
                                 execution.value_stack.get(len_register)
                             else {
                                 return Err(Self::unwind_error(
@@ -428,7 +426,7 @@ impl ExecutionContext {
                             execution.value_stack.chip(call.stack_start, return_count);
                             // add the return count
                             let count = stored_return_count + return_count as i64 - 1;
-                            let count_value = Primitive::Integer(count).into();
+                            let count_value = StackValue::Integer(count);
                             execution.value_stack.set(len_register, count_value);
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
@@ -563,24 +561,24 @@ impl CallContext {
                     return Err(IllegalInstruction::UnexpectedConstant.into())
                 }
                 Instruction::SetNil(dest) => {
-                    value_stack.set(self.register_base + dest as usize, Primitive::Nil.into());
+                    value_stack.set(self.register_base + dest as usize, StackValue::Nil);
                 }
                 Instruction::SetBool(dest, b) => {
-                    let value = Primitive::Bool(b).into();
+                    let value = StackValue::Bool(b);
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadInt(dest, index) => {
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
-                    let value = Primitive::Integer(*number).into();
+                    let value = StackValue::Integer(*number);
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadFloat(dest, index) => {
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
-                    let value = Primitive::Float(f64::from_bits(*number as u64)).into();
+                    let value = StackValue::Float(f64::from_bits(*number as u64));
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadBytes(dest, index) => {
@@ -598,7 +596,7 @@ impl CallContext {
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
-                    let value = Primitive::Integer(*number).into();
+                    let value = StackValue::Integer(*number);
 
                     let dest_index = self.register_base + dest as usize;
                     value_stack.set(dest_index, value);
@@ -699,9 +697,7 @@ impl CallContext {
 
                     // grab the count
                     let count_index = dest_index + 1;
-                    let StackValue::Primitive(Primitive::Integer(count)) =
-                        value_stack.get(count_index)
-                    else {
+                    let StackValue::Integer(count) = value_stack.get(count_index) else {
                         return Err(table_err.clone());
                     };
 
@@ -812,9 +808,7 @@ impl CallContext {
                     let arg_index = self.stack_start + 2 + skip as usize;
                     let count_index = self.register_base + count_register as usize;
 
-                    let StackValue::Primitive(Primitive::Integer(count)) =
-                        value_stack.get(count_index)
-                    else {
+                    let StackValue::Integer(count) = value_stack.get(count_index) else {
                         return Err(IllegalInstruction::MissingVariadicCount.into());
                     };
 
@@ -832,7 +826,7 @@ impl CallContext {
                             value_stack.set(dest_index + i, value);
                         }
 
-                        let count_value = Primitive::Integer(count + total as i64).into();
+                        let count_value = StackValue::Integer(count + total as i64);
                         value_stack.set(count_index, count_value);
                     }
                 }
@@ -918,7 +912,7 @@ impl CallContext {
                     }
                 }
                 Instruction::ClearUpValue(dest) => {
-                    self.up_values.set(dest as usize, Primitive::Nil.into());
+                    self.up_values.set(dest as usize, StackValue::Nil);
                 }
                 Instruction::CopyUpValue(dest, src) => {
                     let value = self.up_values.get_deref(heap, src as usize);
@@ -957,10 +951,7 @@ impl CallContext {
                 }
                 Instruction::Not(dest, src) => {
                     let value = !value_stack.is_truthy(self.register_base + src as usize);
-                    value_stack.set(
-                        self.register_base + dest as usize,
-                        Primitive::Bool(value).into(),
-                    );
+                    value_stack.set(self.register_base + dest as usize, StackValue::Bool(value));
                 }
                 Instruction::Len(dest, src) => {
                     let metamethod_key = exec_data.metatable_keys.len.0.key().into();
@@ -991,7 +982,7 @@ impl CallContext {
                         }
                     }
 
-                    let value = Primitive::Integer(len as i64).into();
+                    let value = StackValue::Integer(len as i64);
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
@@ -1002,9 +993,9 @@ impl CallContext {
                         (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
-                        |primitive| match primitive {
-                            Primitive::Integer(n) => Ok(Primitive::Integer(-n)),
-                            Primitive::Float(n) => Ok(Primitive::Float(-n)),
+                        |value| match value {
+                            StackValue::Integer(n) => Ok(StackValue::Integer(-n)),
+                            StackValue::Float(n) => Ok(StackValue::Float(-n)),
                             _ => Err(RuntimeErrorData::InvalidArithmetic),
                         },
                     )? {
@@ -1019,7 +1010,7 @@ impl CallContext {
                         (dest, src),
                         metamethod_key,
                         || RuntimeErrorData::InvalidArithmetic,
-                        |primitive| Ok(Primitive::Integer(-arithmetic_cast_integer(primitive)?)),
+                        |value| Ok(StackValue::Integer(-arithmetic_cast_integer(value)?)),
                     )? {
                         return Ok(call_result);
                     }
@@ -1079,10 +1070,8 @@ impl CallContext {
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
                     match value_b {
-                        StackValue::Primitive(Primitive::Integer(0)) => {
-                            return Err(RuntimeErrorData::DivideByZero)
-                        }
-                        StackValue::Primitive(Primitive::Float(float)) => {
+                        StackValue::Integer(0) => return Err(RuntimeErrorData::DivideByZero),
+                        StackValue::Float(float) => {
                             if float as i64 == 0 {
                                 return Err(RuntimeErrorData::DivideByZero);
                             }
@@ -1203,21 +1192,14 @@ impl CallContext {
                     }
 
                     let equal = match (value_a, value_b) {
-                        (
-                            StackValue::Primitive(Primitive::Float(float)),
-                            StackValue::Primitive(Primitive::Integer(int)),
-                        )
-                        | (
-                            StackValue::Primitive(Primitive::Integer(int)),
-                            StackValue::Primitive(Primitive::Float(float)),
-                        ) => int as f64 == float,
+                        (StackValue::Float(float), StackValue::Integer(int))
+                        | (StackValue::Integer(int), StackValue::Float(float)) => {
+                            int as f64 == float
+                        }
                         _ => value_a == value_b,
                     };
 
-                    value_stack.set(
-                        self.register_base + dest as usize,
-                        Primitive::Bool(equal).into(),
-                    );
+                    value_stack.set(self.register_base + dest as usize, StackValue::Bool(equal));
                 }
                 Instruction::LessThan(dest, a, b) => {
                     let metamethod_key = exec_data.metatable_keys.lt.0.key().into();
@@ -1304,7 +1286,7 @@ impl CallContext {
                 }
                 Instruction::TestNil(src) => {
                     if value_stack.get_deref(heap, self.register_base + src as usize)
-                        != StackValue::Primitive(Primitive::Nil)
+                        != StackValue::Nil
                     {
                         self.next_instruction_index += 1;
                     }
@@ -1339,7 +1321,7 @@ impl CallContext {
                     if !stop {
                         value_stack.set(
                             self.register_base + local as usize,
-                            Primitive::Integer(value).into(),
+                            StackValue::Integer(value),
                         );
                         self.next_instruction_index += 1;
                     }
@@ -1358,7 +1340,7 @@ impl CallContext {
             }
         }
 
-        value_stack.set(self.register_base, Primitive::Integer(0).into());
+        value_stack.set(self.register_base, StackValue::Integer(0));
 
         // exhausted instructions
         Ok(CallResult::Return(0))
@@ -1371,11 +1353,10 @@ impl CallContext {
         metamethod_key: StackValue,
         metamethod_params: (Register, StackValue, StackValue),
         value: StackValue,
-        coerce_primitive: impl Fn(Primitive) -> T,
+        coerce_value: impl Fn(StackValue) -> T,
         coerce_heap_value: impl Fn(&mut Heap, HeapKey) -> T,
     ) -> Result<T, CallResult> {
         match value {
-            StackValue::Primitive(primitive) => Ok(coerce_primitive(primitive)),
             StackValue::HeapValue(heap_key) => {
                 if let Some(call_result) = self.binary_metamethod(
                     heap,
@@ -1400,10 +1381,11 @@ impl CallContext {
                     metamethod_key,
                     metamethod_params,
                     value,
-                    coerce_primitive,
+                    coerce_value,
                     coerce_heap_value,
                 )
             }
+            _ => Ok(coerce_value(value)),
         }
     }
 
@@ -1420,42 +1402,42 @@ impl CallContext {
         let value_a = value_stack.get(self.register_base + a as usize);
         let value_b = value_stack.get(self.register_base + b as usize);
 
-        let primitive_a = match self.resolve_binary_operand(
+        let resolved_a = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
             (dest, value_a, value_b),
             value_a,
-            |primitive| primitive,
+            |value| value,
             |heap, heap_key| heap_value_as_number(heap, heap_key),
         ) {
-            Ok(primitive) => primitive,
+            Ok(value) => value,
             Err(call_result) => return Ok(Some(call_result)),
         };
 
-        let primitive_b = match self.resolve_binary_operand(
+        let resolved_b = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
             (dest, value_a, value_b),
             value_b,
-            |primitive| primitive,
+            |value| value,
             |heap, heap_key| heap_value_as_number(heap, heap_key),
         ) {
-            Ok(primitive) => primitive,
+            Ok(value) => value,
             Err(call_result) => return Ok(Some(call_result)),
         };
 
-        let value = match (primitive_a, primitive_b) {
-            (Primitive::Integer(a), Primitive::Integer(b)) => {
-                Primitive::Integer(integer_operation(a, b)).into()
+        let value = match (resolved_a, resolved_b) {
+            (StackValue::Integer(a), StackValue::Integer(b)) => {
+                StackValue::Integer(integer_operation(a, b))
             }
-            (Primitive::Float(a), Primitive::Float(b)) => {
-                Primitive::Float(float_operation(a, b)).into()
+            (StackValue::Float(a), StackValue::Float(b)) => {
+                StackValue::Float(float_operation(a, b))
             }
-            (Primitive::Float(a), Primitive::Integer(b)) => {
-                Primitive::Float(float_operation(a, b as f64)).into()
+            (StackValue::Float(a), StackValue::Integer(b)) => {
+                StackValue::Float(float_operation(a, b as f64))
             }
-            (Primitive::Integer(a), Primitive::Float(b)) => {
-                Primitive::Float(float_operation(a as f64, b)).into()
+            (StackValue::Integer(a), StackValue::Float(b)) => {
+                StackValue::Float(float_operation(a as f64, b))
             }
             _ => {
                 return Err(RuntimeErrorData::InvalidArithmetic);
@@ -1505,7 +1487,7 @@ impl CallContext {
 
         value_stack.set(
             self.register_base + dest as usize,
-            Primitive::Float(operation(float_a, float_b)).into(),
+            StackValue::Float(operation(float_a, float_b)),
         );
 
         Ok(None)
@@ -1549,7 +1531,7 @@ impl CallContext {
 
         value_stack.set(
             self.register_base + dest as usize,
-            Primitive::Integer(operation(int_a, int_b)).into(),
+            StackValue::Integer(operation(int_a, int_b)),
         );
 
         Ok(None)
@@ -1576,32 +1558,23 @@ impl CallContext {
         }
 
         let result = match (value_a, value_b) {
-            (
-                StackValue::Primitive(Primitive::Integer(int_a)),
-                StackValue::Primitive(Primitive::Integer(int_b)),
-            ) => integer_comparison(int_a, int_b),
-            (
-                StackValue::Primitive(Primitive::Float(float)),
-                StackValue::Primitive(Primitive::Integer(int)),
-            )
-            | (
-                StackValue::Primitive(Primitive::Integer(int)),
-                StackValue::Primitive(Primitive::Float(float)),
-            ) => float_comparison(int as f64, float),
-            (
-                StackValue::Primitive(Primitive::Float(float_a)),
-                StackValue::Primitive(Primitive::Float(float_b)),
-            ) => float_comparison(float_a, float_b),
+            (StackValue::Integer(int_a), StackValue::Integer(int_b)) => {
+                integer_comparison(int_a, int_b)
+            }
+            (StackValue::Float(float), StackValue::Integer(int))
+            | (StackValue::Integer(int), StackValue::Float(float)) => {
+                float_comparison(int as f64, float)
+            }
+            (StackValue::Float(float_a), StackValue::Float(float_b)) => {
+                float_comparison(float_a, float_b)
+            }
             (StackValue::HeapValue(key_a), StackValue::HeapValue(key_b)) => {
                 heap_comparison(heap, key_a, key_b)?
             }
             _ => return Err(RuntimeErrorData::InvalidCompare),
         };
 
-        value_stack.set(
-            self.register_base + dest as usize,
-            Primitive::Bool(result).into(),
-        );
+        value_stack.set(self.register_base + dest as usize, StackValue::Bool(result));
 
         Ok(None)
     }
@@ -1650,7 +1623,7 @@ impl CallContext {
 
         value_stack.extend([
             function_key.into(),
-            Primitive::Integer(2).into(),
+            StackValue::Integer(2),
             value_a,
             value_b,
         ]);
@@ -1667,12 +1640,11 @@ impl CallContext {
         (dest, a): (Register, Register),
         metamethod_key: StackValue,
         generate_error: impl Fn() -> RuntimeErrorData,
-        operation: impl Fn(Primitive) -> Result<Primitive, RuntimeErrorData>,
+        operation: impl Fn(StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
 
-        let primitive = match value_a {
-            StackValue::Primitive(primitive) => operation(primitive)?,
+        let result = match value_a {
             StackValue::HeapValue(heap_key) => {
                 return Ok(Some(
                     self.unary_metamethod(
@@ -1686,9 +1658,10 @@ impl CallContext {
             }
             // already resolved the pointer
             StackValue::Pointer(_) => unreachable!(),
+            _ => operation(value_a)?,
         };
 
-        value_stack.set(self.register_base + dest as usize, primitive.into());
+        value_stack.set(self.register_base + dest as usize, result);
 
         Ok(None)
     }
@@ -1703,7 +1676,7 @@ impl CallContext {
         let function_key = heap.get_metamethod(heap_key, metamethod_key)?;
         let function_index = value_stack.len() - self.register_base;
 
-        value_stack.extend([function_key.into(), Primitive::Integer(1).into(), value_a]);
+        value_stack.extend([function_key.into(), StackValue::Integer(1), value_a]);
 
         Some(CallResult::Call(
             function_index,
@@ -1726,13 +1699,13 @@ impl CallContext {
 
         let mut value = match exec_data.heap.get(base_heap_key).unwrap() {
             HeapValue::Table(table) => table.get(key),
-            HeapValue::Bytes(_) => StackValue::Primitive(Primitive::Nil),
+            HeapValue::Bytes(_) => StackValue::Nil,
             _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
         };
 
         let mut index_base = base;
 
-        if value == StackValue::Primitive(Primitive::Nil) {
+        if value == StackValue::Nil {
             // resolve using __index
             let metamethod_key = exec_data.metatable_keys.index.0.key().into();
             let max_chain_depth = exec_data.limits.metatable_chain_depth;
@@ -1740,7 +1713,7 @@ impl CallContext {
 
             let mut next_index_base = index_base;
 
-            while next_index_base != StackValue::Primitive(Primitive::Nil) {
+            while next_index_base != StackValue::Nil {
                 index_base = next_index_base;
 
                 let StackValue::HeapValue(heap_key) = index_base else {
@@ -1753,18 +1726,13 @@ impl CallContext {
                     HeapValue::Table(table) => {
                         value = table.get(key);
 
-                        if value != StackValue::Primitive(Primitive::Nil) {
+                        if value != StackValue::Nil {
                             break;
                         }
                     }
                     HeapValue::NativeFunction(_) | HeapValue::Function(_) => {
                         let function_index = value_stack.len() - self.register_base;
-                        value_stack.extend([
-                            heap_key.into(),
-                            Primitive::Integer(2).into(),
-                            base,
-                            key,
-                        ]);
+                        value_stack.extend([heap_key.into(), StackValue::Integer(2), base, key]);
 
                         return Ok(Some(CallResult::Call(
                             function_index,
@@ -1808,7 +1776,7 @@ impl CallContext {
 
             value_stack.extend([
                 function_key.into(),
-                Primitive::Integer(3).into(),
+                StackValue::Integer(3),
                 heap_key.into(),
                 key,
                 src_value,
@@ -1859,7 +1827,7 @@ impl CallContext {
         // set nil if there isn't enough args
         let copied = arg_end_index - arg_start_index;
         for value in &mut slice[dest_start + copied..dest_start + count] {
-            *value = StackValue::Primitive(Primitive::Nil);
+            *value = StackValue::Nil;
         }
     }
 
@@ -1899,11 +1867,8 @@ impl CallContext {
 fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
     let heap_key = match value {
         StackValue::HeapValue(heap_key) => heap_key,
-        StackValue::Primitive(primitive) => match primitive {
-            Primitive::Integer(i) => return Some(i.to_string().into_bytes().into()),
-            Primitive::Float(f) => return Some(format!("{f:?}").into_bytes().into()),
-            _ => return None,
-        },
+        StackValue::Integer(i) => return Some(i.to_string().into_bytes().into()),
+        StackValue::Float(f) => return Some(format!("{f:?}").into_bytes().into()),
         StackValue::Pointer(key) => {
             let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
                 unreachable!();
@@ -1911,6 +1876,7 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
 
             return stringify(heap, value);
         }
+        StackValue::Nil | StackValue::Bool(_) => return None,
     };
 
     let HeapValue::Bytes(bytes) = heap.get(heap_key).unwrap() else {
@@ -1921,25 +1887,25 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
 }
 
 fn cast_integer(
-    primitive: Primitive,
+    value: StackValue,
     generate_err: impl FnOnce() -> RuntimeErrorData,
 ) -> Result<i64, RuntimeErrorData> {
-    match primitive {
-        Primitive::Float(float) => {
+    match value {
+        StackValue::Float(float) => {
             coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation(float))
         }
-        Primitive::Integer(int) => Ok(int),
+        StackValue::Integer(int) => Ok(int),
         _ => Err(generate_err()),
     }
 }
 
 fn cast_float(
-    primitive: Primitive,
+    value: StackValue,
     generate_err: impl FnOnce() -> RuntimeErrorData,
 ) -> Result<f64, RuntimeErrorData> {
-    match primitive {
-        Primitive::Integer(int) => Ok(int as f64),
-        Primitive::Float(float) => Ok(float),
+    match value {
+        StackValue::Integer(int) => Ok(int as f64),
+        StackValue::Float(float) => Ok(float),
         _ => Err(generate_err()),
     }
 }
@@ -1950,7 +1916,10 @@ fn coerce_stack_value_to_integer(
     generate_err: impl FnOnce() -> RuntimeErrorData,
 ) -> Result<i64, RuntimeErrorData> {
     match value {
-        StackValue::Primitive(primitive) => cast_integer(primitive, generate_err),
+        StackValue::Float(float) => {
+            coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation(float))
+        }
+        StackValue::Integer(int) => Ok(int),
         StackValue::HeapValue(key) => cast_integer(heap_value_as_number(heap, key), generate_err),
         StackValue::Pointer(key) => {
             let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
@@ -1959,27 +1928,31 @@ fn coerce_stack_value_to_integer(
 
             coerce_stack_value_to_integer(heap, value, generate_err)
         }
+        StackValue::Nil | StackValue::Bool(_) => Err(generate_err()),
     }
 }
 
-fn arithmetic_cast_float(primitive: Primitive) -> Result<f64, RuntimeErrorData> {
-    cast_float(primitive, || RuntimeErrorData::InvalidArithmetic)
+fn arithmetic_cast_float(value: StackValue) -> Result<f64, RuntimeErrorData> {
+    cast_float(value, || RuntimeErrorData::InvalidArithmetic)
 }
 
-fn arithmetic_cast_integer(primitive: Primitive) -> Result<i64, RuntimeErrorData> {
-    cast_integer(primitive, || RuntimeErrorData::InvalidArithmetic)
+fn arithmetic_cast_integer(value: StackValue) -> Result<i64, RuntimeErrorData> {
+    cast_integer(value, || RuntimeErrorData::InvalidArithmetic)
 }
 
-fn heap_value_as_number(heap: &Heap, heap_key: HeapKey) -> Primitive {
+fn heap_value_as_number(heap: &Heap, heap_key: HeapKey) -> StackValue {
     let Some(HeapValue::Bytes(string)) = heap.get(heap_key) else {
-        return Primitive::Nil;
+        return StackValue::Nil;
     };
 
     let Ok(s) = std::str::from_utf8(string.as_bytes()) else {
-        return Primitive::Nil;
+        return StackValue::Nil;
     };
 
-    parse_number(s)
+    match parse_number(s) {
+        Some(n) => n.into(),
+        None => StackValue::Nil,
+    }
 }
 
 fn heap_value_as_float(heap: &mut Heap, heap_key: HeapKey) -> Result<f64, RuntimeErrorData> {

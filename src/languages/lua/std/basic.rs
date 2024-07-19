@@ -1,7 +1,5 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{
-    ByteString, FromValue, LazyArg, MultiValue, Primitive, TableRef, Value, Vm,
-};
+use crate::interpreter::{ByteString, FromValue, LazyArg, MultiValue, TableRef, Value, Vm};
 use crate::languages::lua::parse_number;
 
 pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
@@ -114,8 +112,8 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
         let message: Value = args.unpack_args(vm)?;
 
         let err = match message {
-            Value::Primitive(Primitive::Integer(i)) => RuntimeError::new_string(i.to_string()),
-            Value::Primitive(Primitive::Float(f)) => RuntimeError::new_string(f.to_string()),
+            Value::Integer(i) => RuntimeError::new_string(i.to_string()),
+            Value::Float(f) => RuntimeError::new_string(f.to_string()),
             Value::String(s) => RuntimeError::new_byte_string(s.fetch(vm)?.clone()),
             _ => RuntimeError::new_string(format!("(error is a {} value)", message.type_name())),
         };
@@ -446,12 +444,10 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
 
 fn to_string(value: Value, vm: &mut Vm) -> Result<String, RuntimeError> {
     match value {
-        Value::Primitive(p) => match p {
-            Primitive::Nil => Ok("nil".to_string()),
-            Primitive::Bool(b) => Ok(b.to_string()),
-            Primitive::Integer(i) => Ok(i.to_string()),
-            Primitive::Float(f) => Ok(f.to_string()),
-        },
+        Value::Nil => Ok("nil".to_string()),
+        Value::Bool(b) => Ok(b.to_string()),
+        Value::Integer(i) => Ok(i.to_string()),
+        Value::Float(f) => Ok(f.to_string()),
         Value::String(s) => Ok(s.fetch(vm)?.to_string_lossy().to_string()),
         Value::Table(table) => {
             if let Ok(Some(metatable)) = table.metatable(vm) {

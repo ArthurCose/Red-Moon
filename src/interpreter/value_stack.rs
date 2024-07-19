@@ -1,53 +1,45 @@
 use super::heap::{Heap, HeapKey, HeapValue};
-use crate::vec_cell::VecCell;
+use crate::{languages::lua::Number, vec_cell::VecCell};
 use std::ops::Range;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
-pub enum Primitive {
+pub(crate) enum StackValue {
     #[default]
     Nil,
     Bool(bool),
     Integer(i64),
     Float(f64),
-}
-
-impl std::hash::Hash for Primitive {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Primitive::Nil => core::mem::discriminant(self).hash(state),
-            Primitive::Bool(b) => b.hash(state),
-            Primitive::Integer(i) => i.hash(state),
-            Primitive::Float(f) => f.to_bits().hash(state),
-        }
-    }
-}
-
-impl Eq for Primitive {}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub(crate) enum StackValue {
-    Primitive(Primitive),
     HeapValue(HeapKey),
     Pointer(HeapKey),
 }
 
-impl Default for StackValue {
-    #[inline]
-    fn default() -> Self {
-        Self::Primitive(Primitive::Nil)
-    }
-}
+impl Eq for StackValue {}
 
-impl From<Primitive> for StackValue {
-    fn from(value: Primitive) -> Self {
-        StackValue::Primitive(value)
+impl std::hash::Hash for StackValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            StackValue::Nil => core::mem::discriminant(self).hash(state),
+            StackValue::Bool(b) => b.hash(state),
+            StackValue::Integer(i) => i.hash(state),
+            StackValue::Float(f) => f.to_bits().hash(state),
+            StackValue::HeapValue(key) => key.hash(state),
+            StackValue::Pointer(key) => key.hash(state),
+        }
     }
 }
 
 impl From<HeapKey> for StackValue {
     fn from(value: HeapKey) -> Self {
         StackValue::HeapValue(value)
+    }
+}
+
+impl From<Number> for StackValue {
+    fn from(value: Number) -> Self {
+        match value {
+            Number::Integer(i) => StackValue::Integer(i),
+            Number::Float(f) => StackValue::Float(f),
+        }
     }
 }
 
@@ -110,7 +102,7 @@ impl ValueStack {
         if let Some(value) = self.values.get(index) {
             *value
         } else {
-            StackValue::Primitive(Primitive::Nil)
+            StackValue::Nil
         }
     }
 
@@ -137,10 +129,7 @@ impl ValueStack {
     pub(crate) fn is_truthy(&self, index: usize) -> bool {
         let stack_value = self.get(index);
 
-        !matches!(
-            stack_value,
-            StackValue::Primitive(Primitive::Nil | Primitive::Bool(false))
-        )
+        !matches!(stack_value, StackValue::Nil | StackValue::Bool(false))
     }
 
     pub(crate) fn set(&mut self, index: usize, value: StackValue) {

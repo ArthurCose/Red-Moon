@@ -1,6 +1,6 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{IntoValue, MultiValue, Primitive, Value, Vm};
-use crate::languages::lua::{coerce_integer, parse_number};
+use crate::interpreter::{IntoValue, MultiValue, Value, Vm};
+use crate::languages::lua::{coerce_integer, parse_number, Number};
 
 pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
     let math = vm.create_table();
@@ -10,9 +10,8 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         let x = coerce_number(&mut args, 1, vm)?;
 
         args.push_front(match x {
-            Primitive::Integer(i) => i.abs().into_value(vm)?,
-            Primitive::Float(f) => f.abs().into_value(vm)?,
-            _ => unreachable!(),
+            Number::Integer(i) => i.abs().into_value(vm)?,
+            Number::Float(f) => f.abs().into_value(vm)?,
         });
 
         Ok(args)
@@ -214,9 +213,8 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         let x = coerce_number(&mut args, 1, vm)?;
 
         args.push_front(match x {
-            Primitive::Integer(i) => i.into_value(vm)?,
-            Primitive::Float(f) => coerce_integer(f).into_value(vm)?,
-            _ => unreachable!(),
+            Number::Integer(i) => i.into_value(vm)?,
+            Number::Float(f) => coerce_integer(f).into_value(vm)?,
         });
 
         Ok(args)
@@ -230,9 +228,8 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         let x = coerce_number(&mut args, 1, vm)?;
 
         args.push_front(match x {
-            Primitive::Integer(_) => integer_string_ref.clone().into_value(vm)?,
-            Primitive::Float(_) => float_string_ref.clone().into_value(vm)?,
-            _ => Value::default(),
+            Number::Integer(_) => integer_string_ref.clone().into_value(vm)?,
+            Number::Float(_) => float_string_ref.clone().into_value(vm)?,
         });
 
         Ok(args)
@@ -259,7 +256,7 @@ fn coerce_number(
     args: &mut MultiValue,
     position: usize,
     vm: &mut Vm,
-) -> Result<Primitive, RuntimeError> {
+) -> Result<Number, RuntimeError> {
     let Some(value) = args.pop_front() else {
         return Err(RuntimeError::new_bad_argument(
             position,
@@ -267,24 +264,18 @@ fn coerce_number(
         ));
     };
 
-    let primitive = match value {
-        Value::Primitive(p @ (Primitive::Integer(_) | Primitive::Float(_))) => p,
-        Value::String(s) => match parse_number(&s.fetch(vm)?.to_string_lossy()) {
-            p @ (Primitive::Integer(_) | Primitive::Float(_)) => p,
-            _ => {
-                return Err(RuntimeError::new_bad_argument(
-                    position,
-                    RuntimeError::new_static_string("number expected, got string"),
-                ))
-            }
-        },
-        _ => {
-            return Err(RuntimeError::new_bad_argument(
+    match value {
+        Value::Integer(i) => Ok(Number::Integer(i)),
+        Value::Float(f) => Ok(Number::Float(f)),
+        Value::String(s) => parse_number(&s.fetch(vm)?.to_string_lossy()).ok_or_else(|| {
+            RuntimeError::new_bad_argument(
                 position,
-                RuntimeError::new_string(format!("number expected, got {}", value.type_name())),
-            ));
-        }
-    };
-
-    Ok(primitive)
+                RuntimeError::new_static_string("number expected, got string"),
+            )
+        }),
+        _ => Err(RuntimeError::new_bad_argument(
+            position,
+            RuntimeError::new_string(format!("number expected, got {}", value.type_name())),
+        )),
+    }
 }

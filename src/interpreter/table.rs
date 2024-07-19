@@ -1,5 +1,5 @@
 use super::heap::HeapKey;
-use super::value_stack::{Primitive, StackValue};
+use super::value_stack::StackValue;
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
@@ -51,7 +51,7 @@ impl Table {
 
         for i in 1..=values.len() {
             let index = index_start + i;
-            let map_key = StackValue::Primitive(Primitive::Integer(index as _));
+            let map_key = StackValue::Integer(index as _);
 
             self.map.swap_remove(&map_key);
         }
@@ -66,14 +66,14 @@ impl Table {
 
     pub(crate) fn get(&self, key: StackValue) -> StackValue {
         match key {
-            StackValue::Primitive(Primitive::Integer(index)) => {
+            StackValue::Integer(index) => {
                 if index > 0 {
                     if let Some(value) = self.list.get(index as usize - 1) {
                         return *value;
                     }
                 }
             }
-            StackValue::Primitive(Primitive::Float(float)) => {
+            StackValue::Float(float) => {
                 if float.fract() == 0.0 {
                     if let Some(value) = self.list.get(float as usize - 1) {
                         return *value;
@@ -83,20 +83,13 @@ impl Table {
             _ => {}
         }
 
-        self.map
-            .get(&key)
-            .cloned()
-            .unwrap_or(StackValue::Primitive(Primitive::Nil))
+        self.map.get(&key).cloned().unwrap_or(StackValue::Nil)
     }
 
     pub(crate) fn set(&mut self, key: StackValue, value: StackValue) {
         let used_list = match key {
-            StackValue::Primitive(Primitive::Integer(index)) if index > 0 => {
-                self.set_in_list(index as usize - 1, value)
-            }
-            StackValue::Primitive(Primitive::Float(float))
-                if float.fract() == 0.0 && float as usize > 0 =>
-            {
+            StackValue::Integer(index) if index > 0 => self.set_in_list(index as usize - 1, value),
+            StackValue::Float(float) if float.fract() == 0.0 && float as usize > 0 => {
                 self.set_in_list(float as usize - 1, value)
             }
             _ => false,
@@ -106,7 +99,7 @@ impl Table {
             return;
         }
 
-        if let StackValue::Primitive(Primitive::Nil) = value {
+        if let StackValue::Nil = value {
             self.map.shift_remove(&key);
             return;
         }
@@ -116,12 +109,12 @@ impl Table {
 
     fn set_in_list(&mut self, index: usize, value: StackValue) -> bool {
         if self.list.get(index).is_some() {
-            if value == Primitive::Nil.into() && index + 1 == self.list.len() {
+            if value == StackValue::Nil && index + 1 == self.list.len() {
                 // shrink the list
                 let reverse_iter = self.list.iter().rev();
                 let nil_count = reverse_iter
                     .skip(1)
-                    .filter(|v| **v == StackValue::Primitive(Primitive::Nil))
+                    .filter(|v| **v == StackValue::Nil)
                     .count()
                     + 1;
 
@@ -133,7 +126,7 @@ impl Table {
                 self.list[index] = value;
             }
         } else if index == self.list.len() {
-            if value == Primitive::Nil.into() {
+            if value == StackValue::Nil {
                 return false;
             }
 
@@ -151,10 +144,7 @@ impl Table {
     fn merge_from_map_into_list(&mut self) {
         let mut map_index = self.list.len() as i64 + 1;
 
-        while let Some(value) = self
-            .map
-            .swap_remove(&StackValue::Primitive(Primitive::Integer(map_index)))
-        {
+        while let Some(value) = self.map.swap_remove(&StackValue::Integer(map_index)) {
             self.list.push(value);
             map_index += 1;
         }
@@ -174,7 +164,7 @@ impl Table {
     }
 
     pub(crate) fn next(&self, previous: StackValue) -> Option<(StackValue, StackValue)> {
-        if previous == Primitive::Nil.into() {
+        if previous == StackValue::Nil {
             return self.map.first().map(|(k, v)| (*k, *v));
         }
 

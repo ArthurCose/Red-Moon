@@ -1,52 +1,46 @@
 use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapValue};
-use super::value_stack::{Primitive, StackValue};
+use super::value_stack::StackValue;
 use super::{ByteString, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef, Vm};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
-use crate::languages::lua::parse_number;
+use crate::languages::lua::{parse_number, Number};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Primitive(Primitive),
+    Nil,
+    Bool(bool),
+    Integer(i64),
+    Float(f64),
     String(StringRef),
     Table(TableRef),
     Function(FunctionRef),
 }
 
+impl Eq for Value {}
+
 impl Default for Value {
     #[inline]
     fn default() -> Self {
-        Self::Primitive(Primitive::Nil)
+        Self::Nil
     }
 }
 
 impl Value {
     #[inline]
     pub fn is_nil(&self) -> bool {
-        matches!(self, Self::Primitive(Primitive::Nil))
+        matches!(self, Self::Nil)
     }
 
     #[inline]
     pub fn type_name(&self) -> &'static str {
         match self {
-            Value::Primitive(primitive) => match primitive {
-                Primitive::Nil => "nil",
-                Primitive::Bool(_) => "boolean",
-                Primitive::Integer(_) => "number",
-                Primitive::Float(_) => "number",
-            },
+            Value::Nil => "nil",
+            Value::Bool(_) => "boolean",
+            Value::Integer(_) => "number",
+            Value::Float(_) => "number",
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
-        }
-    }
-
-    #[inline]
-    pub fn as_primitive(&self) -> Option<Primitive> {
-        if let Value::Primitive(primitive) = self {
-            Some(*primitive)
-        } else {
-            None
         }
     }
 
@@ -121,28 +115,18 @@ impl Value {
             return result;
         };
 
-        let primitive_l = match self {
-            Value::Primitive(primitive) => primitive,
-            Value::String(l) => {
+        let value = match (self, other) {
+            (Value::String(l), _) => {
                 let Value::String(r) = other else {
                     return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
                 };
 
                 return Ok(l.fetch(vm)?.as_bytes() < r.fetch(vm)?.as_bytes());
             }
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
-        };
-
-        let primitive_r = match other {
-            Value::Primitive(primitive) => primitive,
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
-        };
-
-        let value = match (primitive_l, primitive_r) {
-            (Primitive::Float(l), Primitive::Float(r)) => *l < *r,
-            (Primitive::Integer(l), Primitive::Integer(r)) => *l < *r,
-            (Primitive::Float(l), Primitive::Integer(r)) => *l < (*r as f64),
-            (Primitive::Integer(l), Primitive::Float(r)) => (*l as f64) < *r,
+            (Value::Float(l), Value::Float(r)) => *l < *r,
+            (Value::Integer(l), Value::Integer(r)) => *l < *r,
+            (Value::Float(l), Value::Integer(r)) => *l < (*r as f64),
+            (Value::Integer(l), Value::Float(r)) => (*l as f64) < *r,
             _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
         };
 
@@ -156,28 +140,18 @@ impl Value {
             return result;
         };
 
-        let primitive_l = match self {
-            Value::Primitive(primitive) => primitive,
-            Value::String(l) => {
+        let value = match (self, other) {
+            (Value::String(l), _) => {
                 let Value::String(r) = other else {
                     return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
                 };
 
                 return Ok(l.fetch(vm)?.as_bytes() <= r.fetch(vm)?.as_bytes());
             }
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
-        };
-
-        let primitive_r = match other {
-            Value::Primitive(primitive) => primitive,
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
-        };
-
-        let value = match (primitive_l, primitive_r) {
-            (Primitive::Float(l), Primitive::Float(r)) => *l <= *r,
-            (Primitive::Integer(l), Primitive::Integer(r)) => *l <= *r,
-            (Primitive::Float(l), Primitive::Integer(r)) => *l <= (*r as f64),
-            (Primitive::Integer(l), Primitive::Float(r)) => (*l as f64) <= *r,
+            (Value::Float(l), Value::Float(r)) => *l <= *r,
+            (Value::Integer(l), Value::Integer(r)) => *l <= *r,
+            (Value::Float(l), Value::Integer(r)) => *l <= (*r as f64),
+            (Value::Integer(l), Value::Float(r)) => (*l as f64) <= *r,
             _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
         };
 
@@ -191,21 +165,11 @@ impl Value {
             return result;
         };
 
-        let primitive_l = match self {
-            Value::Primitive(primitive) => primitive,
-            _ => return Ok(self == other),
-        };
-
-        let primitive_r = match other {
-            Value::Primitive(primitive) => primitive,
-            _ => return Ok(self == other),
-        };
-
-        let value = match (primitive_l, primitive_r) {
-            (Primitive::Float(l), Primitive::Float(r)) => *l == *r,
-            (Primitive::Integer(l), Primitive::Integer(r)) => *l == *r,
-            (Primitive::Float(l), Primitive::Integer(r)) => *l == (*r as f64),
-            (Primitive::Integer(l), Primitive::Float(r)) => (*l as f64) <= *r,
+        let value = match (self, other) {
+            (Value::Float(l), Value::Float(r)) => *l == *r,
+            (Value::Integer(l), Value::Integer(r)) => *l == *r,
+            (Value::Float(l), Value::Integer(r)) => *l == (*r as f64),
+            (Value::Integer(l), Value::Float(r)) => (*l as f64) <= *r,
             _ => return Ok(self == other),
         };
 
@@ -239,7 +203,10 @@ impl Value {
 
     pub(crate) fn to_stack_value(&self) -> StackValue {
         match self {
-            Value::Primitive(primitive) => (*primitive).into(),
+            Value::Nil => StackValue::Nil,
+            Value::Bool(b) => StackValue::Bool(*b),
+            Value::Integer(i) => StackValue::Integer(*i),
+            Value::Float(f) => StackValue::Float(*f),
             Value::String(heap_ref) => heap_ref.0.key().into(),
             Value::Table(heap_ref) => heap_ref.0.key().into(),
             Value::Function(heap_ref) => heap_ref.0.key().into(),
@@ -249,7 +216,10 @@ impl Value {
     /// Expects stack values to made from within the same vm as the heap
     pub(crate) fn from_stack_value(heap: &mut Heap, value: StackValue) -> Value {
         match value {
-            StackValue::Primitive(primitive) => Value::Primitive(primitive),
+            StackValue::Nil => Value::Nil,
+            StackValue::Bool(b) => Value::Bool(b),
+            StackValue::Integer(i) => Value::Integer(i),
+            StackValue::Float(f) => Value::Float(f),
             StackValue::HeapValue(key) => {
                 // stack values should be made from within the same vm as the heap
                 let value = heap.get(key).unwrap();
@@ -290,18 +260,14 @@ impl Value {
 
     pub(crate) fn heap_key(&self) -> Option<HeapKey> {
         match self {
-            Value::Primitive(_) => None,
+            Value::Nil => None,
+            Value::Bool(_) => None,
+            Value::Integer(_) => None,
+            Value::Float(_) => None,
             Value::String(string_ref) => Some(string_ref.0.key()),
             Value::Table(table_ref) => Some(table_ref.0.key()),
             Value::Function(function_ref) => Some(function_ref.0.key()),
         }
-    }
-}
-
-impl From<Primitive> for Value {
-    #[inline]
-    fn from(value: Primitive) -> Self {
-        Self::Primitive(value)
     }
 }
 
@@ -337,19 +303,12 @@ impl IntoValue for Value {
     }
 }
 
-impl IntoValue for Primitive {
-    #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
-        Ok(self.into())
-    }
-}
-
 impl<T: IntoValue> IntoValue for Option<T> {
     #[inline]
     fn into_value(self, vm: &mut Vm) -> Result<Value, RuntimeError> {
         match self {
             Some(v) => v.into_value(vm),
-            None => Ok(Value::Primitive(Primitive::Nil)),
+            None => Ok(Value::Nil),
         }
     }
 }
@@ -392,7 +351,7 @@ impl<'a> IntoValue for &'a str {
 impl IntoValue for bool {
     #[inline]
     fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
-        Ok(Value::Primitive(Primitive::Bool(self)))
+        Ok(Value::Bool(self))
     }
 }
 
@@ -401,7 +360,7 @@ macro_rules! into_int_value {
         impl IntoValue for $name {
             #[inline]
             fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
-                Ok(Value::Primitive(Primitive::Integer(self as _)))
+                Ok(Value::Integer(self as _))
             }
         }
     };
@@ -412,7 +371,7 @@ macro_rules! into_float_value {
         impl IntoValue for $name {
             #[inline]
             fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
-                Ok(Value::Primitive(Primitive::Float(self as _)))
+                Ok(Value::Float(self as _))
             }
         }
     };
@@ -442,27 +401,11 @@ impl FromValue for Value {
     }
 }
 
-impl FromValue for Primitive {
-    #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
-        if let Value::Primitive(primitive) = value {
-            Ok(primitive)
-        } else {
-            Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "Primitive",
-                message: None,
-            }
-            .into())
-        }
-    }
-}
-
 impl<T: FromValue> FromValue for Option<T> {
     #[inline]
     fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
         match value {
-            Value::Primitive(Primitive::Nil) => Ok(None),
+            Value::Nil => Ok(None),
             _ => Ok(Some(T::from_value(value, vm)?)),
         }
     }
@@ -552,10 +495,7 @@ impl FromValue for ByteString {
 impl FromValue for bool {
     #[inline]
     fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
-        Ok(!matches!(
-            value,
-            Value::Primitive(Primitive::Nil | Primitive::Bool(false))
-        ))
+        Ok(!matches!(value, Value::Nil | Value::Bool(false)))
     }
 }
 
@@ -565,15 +505,14 @@ macro_rules! number_from_value {
             #[inline]
             fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
                 match &value {
-                    Value::Primitive(Primitive::Integer(i)) => return Ok(*i as _),
-                    Value::Primitive(Primitive::Float(f)) => return Ok(*f as _),
+                    Value::Integer(i) => return Ok(*i as _),
+                    Value::Float(f) => return Ok(*f as _),
                     Value::String(s) => {
-                        let number = parse_number(&*s.fetch(vm)?.to_string_lossy());
-
-                        match number {
-                            Primitive::Integer(i) => return Ok(i as _),
-                            Primitive::Float(f) => return Ok(f as _),
-                            _ => {}
+                        if let Some(number) = parse_number(&*s.fetch(vm)?.to_string_lossy()) {
+                            match number {
+                                Number::Integer(i) => return Ok(i as _),
+                                Number::Float(f) => return Ok(f as _),
+                            }
                         }
                     }
                     _ => {}

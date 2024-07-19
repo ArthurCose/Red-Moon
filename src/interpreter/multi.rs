@@ -1,7 +1,7 @@
 use super::heap::Heap;
 use super::value::{FromValue, IntoValue};
 use super::value_stack::{StackValue, ValueStack};
-use super::{Primitive, Value, Vm};
+use super::{Value, Vm};
 use crate::errors::{IllegalInstruction, RuntimeError};
 
 #[derive(Clone)]
@@ -85,8 +85,7 @@ impl MultiValue {
         len_index: usize,
         missing_count_err: IllegalInstruction,
     ) -> Result<(), IllegalInstruction> {
-        let StackValue::Primitive(Primitive::Integer(arg_count)) = value_stack.get(len_index)
-        else {
+        let StackValue::Integer(arg_count) = value_stack.get(len_index) else {
             return Err(missing_count_err);
         };
 
@@ -109,7 +108,7 @@ impl MultiValue {
 
     /// Pushes values into a ValueStack
     pub(crate) fn push_stack_multi(&self, value_stack: &mut ValueStack) {
-        value_stack.push(Primitive::Integer(self.len() as _).into());
+        value_stack.push(StackValue::Integer(self.len() as _));
 
         value_stack.extend(self.values.iter().rev().map(|value| value.to_stack_value()));
     }
@@ -193,7 +192,7 @@ impl FromMulti for () {
 impl<T: FromValue> FromMulti for T {
     #[inline]
     fn from_multi(mut multi: MultiValue, vm: &mut Vm) -> Result<Self, RuntimeError> {
-        let result = T::from_value(multi.pop_front().unwrap_or(Primitive::Nil.into()), vm);
+        let result = T::from_value(multi.pop_front().unwrap_or(Value::Nil), vm);
         vm.store_multi(multi);
         result
     }
@@ -205,7 +204,7 @@ macro_rules! impl_from_multi {
             #[allow(non_snake_case)]
             #[inline]
             fn from_multi(mut multi: MultiValue, vm: &mut Vm) -> Result<Self, RuntimeError> {
-                $(let $name = $name::from_value(multi.pop_front().unwrap_or(Primitive::Nil.into()), vm)?;)*
+                $(let $name = $name::from_value(multi.pop_front().unwrap_or(Value::Nil), vm)?;)*
                 let $last = $last::from_multi( multi,vm)?;
                 Ok(($($name,)* $last,))
             }
@@ -267,11 +266,7 @@ impl<T: FromArg> FromArgs for T {
         position: usize,
         vm: &mut Vm,
     ) -> Result<Self, RuntimeError> {
-        let result = T::from_arg(
-            multi.pop_front().unwrap_or(Primitive::Nil.into()),
-            position,
-            vm,
-        );
+        let result = T::from_arg(multi.pop_front().unwrap_or(Value::Nil), position, vm);
 
         vm.store_multi(multi);
         result
@@ -289,7 +284,7 @@ macro_rules! impl_from_args {
                 vm: &mut Vm,
             ) -> Result<Self, RuntimeError> {
                 $(let $name =
-                    match $name::from_arg(multi.pop_front().unwrap_or(Primitive::Nil.into()), position, vm) {
+                    match $name::from_arg(multi.pop_front().unwrap_or(Value::Nil), position, vm) {
                         Ok(value) => value,
                         Err(err) => {
                             vm.store_multi(multi);

@@ -7,7 +7,6 @@ use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::execution::ExecutionContext;
 use crate::interpreter::metatable_keys::MetatableKeys;
 use crate::interpreter::value_stack::StackValue;
-use crate::interpreter::Primitive;
 use crate::{FastHashMap, FastHashSet};
 
 /// Configuration for the incremental garbage collector
@@ -407,7 +406,7 @@ impl GarbageCollector {
                             cache_pools,
                             *heap_key,
                             table_heap_key,
-                            Primitive::Integer((i + 1) as _).into(),
+                            StackValue::Integer((i + 1) as _),
                         );
                     }
 

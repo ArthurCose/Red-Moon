@@ -1,9 +1,9 @@
 use super::lua_lexer::LuaLexer;
 use super::lua_parsing::{parse_string, parse_unsigned_number};
-use super::{LuaToken, LuaTokenLabel};
+use super::{LuaToken, LuaTokenLabel, Number};
 use crate::errors::{LuaCompilationError, SyntaxError};
 use crate::interpreter::{
-    Chunk, ConstantIndex, Instruction, Module, Primitive, Register, ReturnMode, SourceMapping,
+    Chunk, ConstantIndex, Instruction, Module, Register, ReturnMode, SourceMapping,
 };
 use crate::FastHashMap;
 use std::borrow::Cow;
@@ -1733,16 +1733,16 @@ where
             }
             LuaTokenLabel::Numeral => {
                 let instruction = match parse_unsigned_number(token.content) {
-                    Primitive::Integer(i) => {
+                    Some(Number::Integer(i)) => {
                         let constant = self.top_function.register_number(self.source, token, i)?;
                         Instruction::LoadInt(top_register, constant)
                     }
-                    Primitive::Float(f) => {
+                    Some(Number::Float(f)) => {
                         let i = f.to_bits() as i64;
                         let constant = self.top_function.register_number(self.source, token, i)?;
                         Instruction::LoadFloat(top_register, constant)
                     }
-                    _ => {
+                    None => {
                         return Err(LuaCompilationError::new_invalid_number(
                             self.source,
                             token.offset,

@@ -1,6 +1,6 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationError, RuntimeErrorData, SyntaxError};
-use red_moon::interpreter::{MultiValue, Primitive, Value, Vm};
+use red_moon::interpreter::{MultiValue, Value, Vm};
 use red_moon::languages::lua::std::impl_basic;
 use red_moon::languages::lua::{LuaCompiler, LuaTokenLabel};
 use std::cell::RefCell;
@@ -39,10 +39,10 @@ fn valid() {
 
         for (i, arg) in args.to_vec().into_iter().enumerate() {
             match arg {
-                Value::Primitive(Primitive::Nil) => write!(&mut *out, "nil").unwrap(),
-                Value::Primitive(Primitive::Bool(b)) => write!(&mut *out, "{b}").unwrap(),
-                Value::Primitive(Primitive::Integer(n)) => write!(&mut *out, "{n}").unwrap(),
-                Value::Primitive(Primitive::Float(n)) => write!(&mut *out, "{n:?}").unwrap(),
+                Value::Nil => write!(&mut *out, "nil").unwrap(),
+                Value::Bool(b) => write!(&mut *out, "{b}").unwrap(),
+                Value::Integer(n) => write!(&mut *out, "{n}").unwrap(),
+                Value::Float(n) => write!(&mut *out, "{n:?}").unwrap(),
                 Value::Table(_) => write!(&mut *out, "table").unwrap(),
                 Value::Function(_) => write!(&mut *out, "function").unwrap(),
                 Value::String(string_ref) => write!(

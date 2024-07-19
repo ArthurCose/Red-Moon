@@ -1,5 +1,5 @@
 use pretty_assertions::assert_eq;
-use red_moon::interpreter::{Primitive, Value, Vm};
+use red_moon::interpreter::{Value, Vm};
 
 #[test]
 fn basic() {
@@ -12,13 +12,7 @@ fn basic() {
 
     env.raw_set("a", 2, &mut vm).unwrap();
 
-    assert_eq!(
-        Value::Primitive(Primitive::Integer(2)),
-        env.raw_get("a", &mut vm).unwrap()
-    );
+    assert_eq!(Value::Integer(2), env.raw_get("a", &mut vm).unwrap());
 
-    assert_eq!(
-        Value::Primitive(Primitive::Integer(1)),
-        env.raw_get("a", &mut snapshot).unwrap()
-    );
+    assert_eq!(Value::Integer(1), env.raw_get("a", &mut snapshot).unwrap());
 }

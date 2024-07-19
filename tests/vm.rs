@@ -1,6 +1,4 @@
-use red_moon::interpreter::{
-    Chunk, Instruction, Module, MultiValue, Primitive, ReturnMode, Value, Vm,
-};
+use red_moon::interpreter::{Chunk, Instruction, Module, MultiValue, ReturnMode, Value, Vm};
 
 #[test]
 fn instructions_print() {
@@ -10,10 +8,10 @@ fn instructions_print() {
 
         for (i, arg) in args.to_vec().into_iter().enumerate() {
             match arg {
-                Value::Primitive(Primitive::Nil) => print!("nil"),
-                Value::Primitive(Primitive::Bool(b)) => print!("{b}"),
-                Value::Primitive(Primitive::Integer(n)) => print!("{n}"),
-                Value::Primitive(Primitive::Float(n)) => print!("{n}"),
+                Value::Nil => print!("nil"),
+                Value::Bool(b) => print!("{b}"),
+                Value::Integer(n) => print!("{n}"),
+                Value::Float(n) => print!("{n}"),
                 Value::Table(_) => print!("table"),
                 Value::Function(_) => print!("function"),
                 Value::String(string_ref) => {

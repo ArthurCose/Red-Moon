@@ -1,7 +1,46 @@
 use super::{LuaToken, LuaTokenLabel};
-use crate::errors::SyntaxError;
-use crate::interpreter::Primitive;
+use crate::errors::{RuntimeError, RuntimeErrorData, SyntaxError};
+use crate::interpreter::{FromValue, IntoValue, Value, Vm};
 use std::borrow::Cow;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Number {
+    Integer(i64),
+    Float(f64),
+}
+
+impl From<Number> for Value {
+    fn from(value: Number) -> Self {
+        match value {
+            Number::Integer(i) => Value::Integer(i),
+            Number::Float(f) => Value::Float(f),
+        }
+    }
+}
+
+impl IntoValue for Number {
+    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+        match self {
+            Number::Integer(i) => Ok(Value::Integer(i)),
+            Number::Float(f) => Ok(Value::Float(f)),
+        }
+    }
+}
+
+impl FromValue for Number {
+    fn from_value(value: Value, _: &mut Vm) -> Result<Number, RuntimeError> {
+        match value {
+            Value::Integer(i) => Ok(Number::Integer(i)),
+            Value::Float(f) => Ok(Number::Float(f)),
+            _ => Err(RuntimeErrorData::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Number",
+                message: None,
+            }
+            .into()),
+        }
+    }
+}
 
 // private as we have assumptions that can cause panics
 // to make this public it would be preferable to return a syntax error instead
@@ -128,18 +167,18 @@ pub(crate) fn parse_string<'source>(
     })
 }
 
-pub(crate) fn parse_unsigned_number(s: &str) -> Primitive {
+pub(crate) fn parse_unsigned_number(s: &str) -> Option<Number> {
     if !s.starts_with("0x") && !s.starts_with("0X") {
         return if s.contains(['.', 'e', 'E']) {
             if let Ok(i) = s.parse() {
-                Primitive::Float(i)
+                Some(Number::Float(i))
             } else {
-                Primitive::Nil
+                None
             }
         } else if let Ok(i) = s.parse() {
-            Primitive::Integer(i)
+            Some(Number::Integer(i))
         } else {
-            Primitive::Nil
+            None
         };
     }
 
@@ -165,7 +204,7 @@ pub(crate) fn parse_unsigned_number(s: &str) -> Primitive {
             }
             b'.' => {
                 if decimal_offset.is_some() {
-                    return Primitive::Nil;
+                    return None;
                 }
 
                 b = a;
@@ -175,19 +214,19 @@ pub(crate) fn parse_unsigned_number(s: &str) -> Primitive {
             b'p' | b'P' => {
                 // try to parse the remaining characters as an i32 for p
                 let Ok(int) = s[2 + i + 1..].parse::<i32>() else {
-                    return Primitive::Nil;
+                    return None;
                 };
 
                 p = Some(int);
                 p_offset = Some(i);
                 break;
             }
-            _ => return Primitive::Nil,
+            _ => return None,
         }
     }
 
     if p.is_none() && decimal_offset.is_none() {
-        return Primitive::Integer(a);
+        return Some(Number::Integer(a));
     }
 
     let mut float = a as f64;
@@ -207,19 +246,19 @@ pub(crate) fn parse_unsigned_number(s: &str) -> Primitive {
         float *= 2f64.powi(p);
     }
 
-    Primitive::Float(float)
+    Some(Number::Float(float))
 }
 
-/// Trims input. Returns [`Primitive::Integer`], [`Primitive::Float`] or [`Primitive::Nil`]
-pub fn parse_number(mut s: &str) -> Primitive {
+/// Trims input
+pub fn parse_number(mut s: &str) -> Option<Number> {
     s = s.trim();
 
     if s.starts_with('-') {
         s = &s[1..];
 
         match parse_unsigned_number(s) {
-            Primitive::Float(f) => Primitive::Float(-f),
-            Primitive::Integer(i) => Primitive::Integer(-i),
+            Some(Number::Float(f)) => Some(Number::Float(-f)),
+            Some(Number::Integer(i)) => Some(Number::Integer(-i)),
             p => p,
         }
     } else {
@@ -265,54 +304,57 @@ mod test {
     #[test]
     fn number_parsing() {
         // integer
-        assert_eq!(parse_unsigned_number("3"), Primitive::Integer(3));
-        assert_eq!(parse_unsigned_number("345"), Primitive::Integer(345));
-        assert_eq!(parse_unsigned_number("0xff"), Primitive::Integer(0xff));
+        assert_eq!(parse_unsigned_number("3"), Some(Number::Integer(3)));
+        assert_eq!(parse_unsigned_number("345"), Some(Number::Integer(345)));
+        assert_eq!(parse_unsigned_number("0xff"), Some(Number::Integer(0xff)));
         assert_eq!(
             parse_unsigned_number("0xBEBADA"),
-            Primitive::Integer(0xBEBADA)
+            Some(Number::Integer(0xBEBADA))
         );
 
         // floats
-        assert_eq!(parse_unsigned_number("3."), Primitive::Float(3.0));
-        assert_eq!(parse_unsigned_number("3.0"), Primitive::Float(3.0));
+        assert_eq!(parse_unsigned_number("3."), Some(Number::Float(3.0)));
+        assert_eq!(parse_unsigned_number("3.0"), Some(Number::Float(3.0)));
         assert_eq!(
             parse_unsigned_number("3.1416"),
-            Primitive::Float(
+            Some(Number::Float(
                 #[allow(clippy::approx_constant)]
                 3.1416
-            )
+            ))
         );
         assert_eq!(
             parse_unsigned_number("314.16e-2"),
-            Primitive::Float(314.16e-2)
+            Some(Number::Float(314.16e-2))
         );
         assert_eq!(
             parse_unsigned_number("0.31416E1"),
-            Primitive::Float(0.31416E1)
+            Some(Number::Float(0.31416E1))
         );
-        assert_eq!(parse_unsigned_number("34e1"), Primitive::Float(34e1));
-        assert_eq!(parse_unsigned_number("0x0.1E"), Primitive::Float(0.1171875));
+        assert_eq!(parse_unsigned_number("34e1"), Some(Number::Float(34e1)));
+        assert_eq!(
+            parse_unsigned_number("0x0.1E"),
+            Some(Number::Float(0.1171875))
+        );
         assert_eq!(
             parse_unsigned_number("0xA23p-4"),
-            Primitive::Float(162.1875)
+            Some(Number::Float(162.1875))
         );
 
         // todo: we differ from lua on this currently
         // lua: 3.1415926535898
         assert_eq!(
             parse_unsigned_number("0X1.921FB54442D18P+1"),
-            Primitive::Float(
+            Some(Number::Float(
                 #[allow(clippy::approx_constant)]
                 3.141592653589793
-            )
+            ))
         );
 
-        assert_eq!(parse_number(" -1  "), Primitive::Integer(-1));
-        assert_eq!(parse_number(" -1.0 "), Primitive::Float(-1.0));
-        assert_eq!(parse_number(" 1  "), Primitive::Integer(1));
-        assert_eq!(parse_number(" 1.0 "), Primitive::Float(1.0));
-        assert_eq!(parse_number("  +1  "), Primitive::Integer(1));
-        assert_eq!(parse_number(" +1.0 "), Primitive::Float(1.0));
+        assert_eq!(parse_number(" -1  "), Some(Number::Integer(-1)));
+        assert_eq!(parse_number(" -1.0 "), Some(Number::Float(-1.0)));
+        assert_eq!(parse_number(" 1  "), Some(Number::Integer(1)));
+        assert_eq!(parse_number(" 1.0 "), Some(Number::Float(1.0)));
+        assert_eq!(parse_number("  +1  "), Some(Number::Integer(1)));
+        assert_eq!(parse_number(" +1.0 "), Some(Number::Float(1.0)));
     }
 }

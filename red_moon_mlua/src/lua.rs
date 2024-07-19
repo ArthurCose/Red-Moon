@@ -447,7 +447,7 @@ impl Lua {
     /// representation as an integer, or a string that can be converted to an integer. Refer to the
     /// Lua manual for details.
     pub fn coerce_integer(&self, v: Value) -> Result<Option<Integer>> {
-        use red_moon::interpreter::Primitive;
+        use red_moon::languages::lua::Number;
 
         Ok(match v {
             Value::Integer(i) => Some(i),
@@ -455,11 +455,10 @@ impl Lua {
             Value::String(s) => {
                 let s = s.to_str()?;
 
-                match parse_number(s) {
-                    Primitive::Integer(i) => Some(i),
-                    Primitive::Float(n) => coerce_integer(n),
-                    _ => None,
-                }
+                parse_number(s).and_then(|number| match number {
+                    Number::Integer(i) => Some(i),
+                    Number::Float(n) => coerce_integer(n),
+                })
             }
             _ => None,
         })
@@ -471,7 +470,7 @@ impl Lua {
     /// To succeed, the value must be a number or a string that can be converted to a number. Refer
     /// to the Lua manual for details.
     pub fn coerce_number(&self, v: Value) -> Result<Option<Number>> {
-        use red_moon::interpreter::Primitive;
+        use red_moon::languages::lua::Number;
 
         Ok(match v {
             Value::Number(n) => Some(n),
@@ -479,11 +478,10 @@ impl Lua {
             Value::String(s) => {
                 let s = s.to_str()?;
 
-                match parse_number(s) {
-                    Primitive::Integer(i) => Some(i as f64),
-                    Primitive::Float(f) => Some(f),
-                    _ => None,
-                }
+                parse_number(s).map(|number| match number {
+                    Number::Integer(i) => i as f64,
+                    Number::Float(f) => f,
+                })
             }
             _ => None,
         })
