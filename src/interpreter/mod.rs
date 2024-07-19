@@ -19,6 +19,7 @@ mod vm;
 
 pub use byte_string::ByteString;
 pub use function_ref::FunctionRef;
+pub use heap::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use lazy_arg::LazyArg;
 pub use module::{Chunk, Module, SourceMapping};

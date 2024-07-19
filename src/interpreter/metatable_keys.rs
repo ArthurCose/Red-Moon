@@ -1,4 +1,4 @@
-use super::heap::Heap;
+use super::heap::{GarbageCollector, Heap};
 use super::StringRef;
 
 pub struct MetatableKeys {
@@ -65,38 +65,38 @@ pub struct MetatableKeys {
 }
 
 impl MetatableKeys {
-    pub(crate) fn new(heap: &mut Heap) -> Self {
+    pub(crate) fn new(gc: &mut GarbageCollector, heap: &mut Heap) -> Self {
         Self {
-            len: StringRef(heap.intern_bytes_to_ref(b"__len")),
-            unm: StringRef(heap.intern_bytes_to_ref(b"__unm")),
-            bnot: StringRef(heap.intern_bytes_to_ref(b"__bnot")),
-            add: StringRef(heap.intern_bytes_to_ref(b"__add")),
-            sub: StringRef(heap.intern_bytes_to_ref(b"__sub")),
-            mul: StringRef(heap.intern_bytes_to_ref(b"__mul")),
-            div: StringRef(heap.intern_bytes_to_ref(b"__div")),
-            idiv: StringRef(heap.intern_bytes_to_ref(b"__idiv")),
-            modulus: StringRef(heap.intern_bytes_to_ref(b"__mod")),
-            pow: StringRef(heap.intern_bytes_to_ref(b"__pow")),
-            band: StringRef(heap.intern_bytes_to_ref(b"__band")),
-            bor: StringRef(heap.intern_bytes_to_ref(b"__bor")),
-            bxor: StringRef(heap.intern_bytes_to_ref(b"__bxor")),
-            shl: StringRef(heap.intern_bytes_to_ref(b"__shl")),
-            shr: StringRef(heap.intern_bytes_to_ref(b"__shr")),
-            eq: StringRef(heap.intern_bytes_to_ref(b"__eq")),
-            lt: StringRef(heap.intern_bytes_to_ref(b"__lt")),
-            le: StringRef(heap.intern_bytes_to_ref(b"__le")),
-            concat: StringRef(heap.intern_bytes_to_ref(b"__concat")),
-            index: StringRef(heap.intern_bytes_to_ref(b"__index")),
-            newindex: StringRef(heap.intern_bytes_to_ref(b"__newindex")),
-            call: StringRef(heap.intern_bytes_to_ref(b"__call")),
-            mode: StringRef(heap.intern_bytes_to_ref(b"__mode")),
-            close: StringRef(heap.intern_bytes_to_ref(b"__close")),
-            gc: StringRef(heap.intern_bytes_to_ref(b"__gc")),
-            metatable: StringRef(heap.intern_bytes_to_ref(b"__metatable")),
-            name: StringRef(heap.intern_bytes_to_ref(b"__name")),
-            tostring: StringRef(heap.intern_bytes_to_ref(b"__tostring")),
-            pairs: StringRef(heap.intern_bytes_to_ref(b"__pairs")),
-            ipairs: StringRef(heap.intern_bytes_to_ref(b"__ipairs")),
+            len: StringRef(heap.intern_bytes_to_ref(gc, b"__len")),
+            unm: StringRef(heap.intern_bytes_to_ref(gc, b"__unm")),
+            bnot: StringRef(heap.intern_bytes_to_ref(gc, b"__bnot")),
+            add: StringRef(heap.intern_bytes_to_ref(gc, b"__add")),
+            sub: StringRef(heap.intern_bytes_to_ref(gc, b"__sub")),
+            mul: StringRef(heap.intern_bytes_to_ref(gc, b"__mul")),
+            div: StringRef(heap.intern_bytes_to_ref(gc, b"__div")),
+            idiv: StringRef(heap.intern_bytes_to_ref(gc, b"__idiv")),
+            modulus: StringRef(heap.intern_bytes_to_ref(gc, b"__mod")),
+            pow: StringRef(heap.intern_bytes_to_ref(gc, b"__pow")),
+            band: StringRef(heap.intern_bytes_to_ref(gc, b"__band")),
+            bor: StringRef(heap.intern_bytes_to_ref(gc, b"__bor")),
+            bxor: StringRef(heap.intern_bytes_to_ref(gc, b"__bxor")),
+            shl: StringRef(heap.intern_bytes_to_ref(gc, b"__shl")),
+            shr: StringRef(heap.intern_bytes_to_ref(gc, b"__shr")),
+            eq: StringRef(heap.intern_bytes_to_ref(gc, b"__eq")),
+            lt: StringRef(heap.intern_bytes_to_ref(gc, b"__lt")),
+            le: StringRef(heap.intern_bytes_to_ref(gc, b"__le")),
+            concat: StringRef(heap.intern_bytes_to_ref(gc, b"__concat")),
+            index: StringRef(heap.intern_bytes_to_ref(gc, b"__index")),
+            newindex: StringRef(heap.intern_bytes_to_ref(gc, b"__newindex")),
+            call: StringRef(heap.intern_bytes_to_ref(gc, b"__call")),
+            mode: StringRef(heap.intern_bytes_to_ref(gc, b"__mode")),
+            close: StringRef(heap.intern_bytes_to_ref(gc, b"__close")),
+            gc: StringRef(heap.intern_bytes_to_ref(gc, b"__gc")),
+            metatable: StringRef(heap.intern_bytes_to_ref(gc, b"__metatable")),
+            name: StringRef(heap.intern_bytes_to_ref(gc, b"__name")),
+            tostring: StringRef(heap.intern_bytes_to_ref(gc, b"__tostring")),
+            pairs: StringRef(heap.intern_bytes_to_ref(gc, b"__pairs")),
+            ipairs: StringRef(heap.intern_bytes_to_ref(gc, b"__ipairs")),
         }
     }
 }

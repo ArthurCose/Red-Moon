@@ -13,6 +13,7 @@ use std::rc::Rc;
 enum CallResult {
     Call(usize, ReturnMode),
     Return(usize),
+    StepGc,
 }
 
 pub(crate) struct ExecutionContext {
@@ -452,6 +453,16 @@ impl ExecutionContext {
 
                     last_definition = Some(call.function_definition);
                 }
+                CallResult::StepGc => {
+                    exec_data.gc.step(
+                        &exec_data.metatable_keys,
+                        &exec_data.cache_pools,
+                        &vm.execution_stack,
+                        &mut exec_data.heap,
+                    );
+
+                    execution = vm.execution_stack.last_mut().unwrap();
+                }
             }
         }
 
@@ -543,6 +554,7 @@ impl CallContext {
             #[cfg(feature = "instruction_exec_counts")]
             exec_data.instruction_counter.track(instruction);
 
+            let gc = &mut exec_data.gc;
             let heap = &mut exec_data.heap;
             self.next_instruction_index += 1;
 
@@ -597,9 +609,13 @@ impl CallContext {
                         return Err(IllegalInstruction::MissingNumberConstant(len_index).into());
                     };
 
-                    let heap_key = heap.create_table(len as _, 0);
+                    let heap_key = heap.create_table(gc, len as _, 0);
 
                     value_stack.set(self.register_base + dest as usize, heap_key.into());
+
+                    if gc.should_step() {
+                        return Ok(CallResult::StepGc);
+                    }
                 }
                 Instruction::FlushToTable(dest, total, index_offset) => {
                     let err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
@@ -611,7 +627,7 @@ impl CallContext {
                         return Err(err.clone());
                     };
 
-                    let Some(table_value) = heap.get_mut(heap_key) else {
+                    let Some(table_value) = heap.get_mut(gc, heap_key) else {
                         return Err(err.clone());
                     };
 
@@ -642,7 +658,11 @@ impl CallContext {
                     table.flush(index_offset, value_stack.get_slice(start..end));
 
                     let new_size = table.gc_size();
-                    heap.modify_used_memory(new_size as isize - original_size as isize);
+                    gc.modify_used_memory(new_size as isize - original_size as isize);
+
+                    if gc.should_step() {
+                        return Ok(CallResult::StepGc);
+                    }
                 }
                 Instruction::VariadicToTable(dest, src_start, index_offset) => {
                     let table_err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
@@ -654,7 +674,7 @@ impl CallContext {
                         return Err(table_err.clone());
                     };
 
-                    let Some(table_value) = heap.get_mut(heap_key) else {
+                    let Some(table_value) = heap.get_mut(gc, heap_key) else {
                         return Err(table_err.clone());
                     };
 
@@ -694,7 +714,11 @@ impl CallContext {
                     table.flush(index_offset, value_stack.get_slice(start..end));
 
                     let new_size = table.gc_size();
-                    heap.modify_used_memory(new_size as isize - original_size as isize);
+                    gc.modify_used_memory(new_size as isize - original_size as isize);
+
+                    if gc.should_step() {
+                        return Ok(CallResult::StepGc);
+                    }
                 }
                 Instruction::CopyTableField(dest, table_index) => {
                     // resolve field key
@@ -836,24 +860,32 @@ impl CallContext {
 
                     if !matches!(value, StackValue::Pointer(_)) {
                         // move the stack value to the heap
-                        let heap_key = heap.create(HeapValue::StackValue(value));
+                        let heap_key = heap.create(gc, HeapValue::StackValue(value));
                         value = StackValue::Pointer(heap_key);
                         value_stack.set(self.register_base + src as usize, value);
                     }
 
                     pending_captures.set(dest as usize, value);
+
+                    if gc.should_step() {
+                        return Ok(CallResult::StepGc);
+                    }
                 }
                 Instruction::CaptureUpValue(dest, src) => {
                     let mut value = self.up_values.get(src as usize);
 
                     if !matches!(value, StackValue::Pointer(_)) {
                         // move the stack value to the heap
-                        let heap_key = heap.create(HeapValue::StackValue(value));
+                        let heap_key = heap.create(gc, HeapValue::StackValue(value));
                         value = StackValue::Pointer(heap_key);
                         self.up_values.set(src as usize, value);
                     }
 
                     pending_captures.set(dest as usize, value);
+
+                    if gc.should_step() {
+                        return Ok(CallResult::StepGc);
+                    }
                 }
                 Instruction::Closure(dest, function_index) => {
                     let Some(&heap_key) = definition.functions.get(function_index as usize) else {
@@ -876,9 +908,13 @@ impl CallContext {
                         std::mem::swap(pending_captures, &mut up_values);
                         func.up_values = Rc::new(up_values);
 
-                        let heap_key = heap.create(HeapValue::Function(func));
+                        let heap_key = heap.create(gc, HeapValue::Function(func));
 
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
+
+                        if gc.should_step() {
+                            return Ok(CallResult::StepGc);
+                        }
                     }
                 }
                 Instruction::ClearUpValue(dest) => {
@@ -897,7 +933,7 @@ impl CallContext {
 
                     if let StackValue::Pointer(heap_key) = self.up_values.get(dest as usize) {
                         // pointing to another stack value
-                        heap.set(heap_key, HeapValue::StackValue(value));
+                        heap.set(gc, heap_key, HeapValue::StackValue(value));
                     } else {
                         self.up_values.set(dest as usize, value);
                     }
@@ -911,13 +947,13 @@ impl CallContext {
                     let dest_index = self.register_base + dest as usize;
 
                     if let StackValue::Pointer(heap_key) = value_stack.get(dest_index) {
-                        heap.set(heap_key, HeapValue::StackValue(value));
+                        heap.set(gc, heap_key, HeapValue::StackValue(value));
                     } else {
                         value_stack.set(dest_index, value);
                     }
                 }
                 Instruction::CopyRangeToDeref(dest, src, count) => {
-                    self.copy_range_to_deref(heap, value_stack, dest, src, count);
+                    self.copy_range_to_deref(exec_data, value_stack, dest, src, count);
                 }
                 Instruction::Not(dest, src) => {
                     let value = !value_stack.is_truthy(self.register_base + src as usize);
@@ -1242,8 +1278,12 @@ impl CallContext {
 
                         bytes.extend(string_a.iter());
                         bytes.extend(string_b.iter());
-                        let heap_key = heap.intern_bytes(&bytes);
+                        let heap_key = heap.intern_bytes(gc, &bytes);
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
+
+                        if gc.should_step() {
+                            return Ok(CallResult::StepGc);
+                        }
                     } else {
                         // try metamethod as a fallback using the default value
                         let call_result = self
@@ -1779,8 +1819,9 @@ impl CallContext {
                 ReturnMode::Static(0),
             )))
         } else {
+            let gc = &mut exec_data.gc;
             let heap = &mut exec_data.heap;
-            let table_value = heap.get_mut(heap_key).unwrap();
+            let table_value = heap.get_mut(gc, heap_key).unwrap();
 
             let HeapValue::Table(table) = table_value else {
                 return Err(RuntimeErrorData::AttemptToIndexInvalid);
@@ -1791,9 +1832,13 @@ impl CallContext {
             table.set(key, src_value);
 
             let new_size = table.gc_size();
-            heap.modify_used_memory(new_size as isize - original_size as isize);
+            gc.modify_used_memory(new_size as isize - original_size as isize);
 
-            Ok(None)
+            if gc.should_step() {
+                Ok(Some(CallResult::StepGc))
+            } else {
+                Ok(None)
+            }
         }
     }
 
@@ -1820,12 +1865,15 @@ impl CallContext {
 
     fn copy_range_to_deref(
         &self,
-        heap: &mut Heap,
+        exec_data: &mut ExecutionAccessibleData,
         value_stack: &mut ValueStack,
         dest: Register,
         src: Register,
         count: Register,
     ) {
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
         let src_start = self.register_base + src as usize;
         let dest_start = self.register_base + dest as usize;
         let count = count as usize;
@@ -1840,7 +1888,7 @@ impl CallContext {
             let value = slice[src_index].get_deref(heap);
 
             if let StackValue::Pointer(heap_key) = slice[dest_index] {
-                heap.set(heap_key, HeapValue::StackValue(value));
+                heap.set(gc, heap_key, HeapValue::StackValue(value));
             } else {
                 slice[dest_index] = value;
             }

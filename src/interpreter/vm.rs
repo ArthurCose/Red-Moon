@@ -1,6 +1,6 @@
 use super::cache_pools::CachePools;
 use super::execution::ExecutionContext;
-use super::heap::{Heap, HeapKey, HeapRef, HeapValue};
+use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapRef, HeapValue};
 use super::metatable_keys::MetatableKeys;
 use super::value_stack::{StackValue, ValueStack};
 use super::{FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef, TableRef};
@@ -50,6 +50,7 @@ downcast!(dyn AppData);
 pub(crate) struct ExecutionAccessibleData {
     pub(crate) limits: VmLimits,
     pub(crate) heap: Heap,
+    pub(crate) gc: GarbageCollector,
     pub(crate) metatable_keys: Rc<MetatableKeys>,
     pub(crate) cache_pools: Rc<CachePools>,
     pub(crate) tracked_stack_size: usize,
@@ -62,6 +63,7 @@ impl Clone for ExecutionAccessibleData {
         Self {
             limits: self.limits.clone(),
             heap: self.heap.clone(),
+            gc: self.gc.clone(),
             metatable_keys: self.metatable_keys.clone(),
             cache_pools: self.cache_pools.clone(),
             // reset to 0, since there's no active call on the new vm
@@ -95,17 +97,18 @@ impl Clone for Vm {
 
 impl Vm {
     pub fn new() -> Self {
-        let mut heap = Heap::default();
-
-        let default_environment = heap.create(HeapValue::Table(Default::default()));
+        let mut gc = GarbageCollector::default();
+        let mut heap = Heap::new(&mut gc);
+        let default_environment = heap.create(&mut gc, HeapValue::Table(Default::default()));
         let default_environment = heap.create_ref(default_environment);
 
-        let metatable_keys = MetatableKeys::new(&mut heap);
+        let metatable_keys = MetatableKeys::new(&mut gc, &mut heap);
 
         Self {
             execution_data: ExecutionAccessibleData {
                 limits: Default::default(),
                 heap,
+                gc,
                 metatable_keys: Rc::new(metatable_keys),
                 cache_pools: Default::default(),
                 tracked_stack_size: 0,
@@ -217,24 +220,59 @@ impl Vm {
     }
 
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
+        let gc = &mut self.execution_data.gc;
         let heap = &mut self.execution_data.heap;
-        let heap_key = heap.intern_bytes(bytes);
+        let heap_key = heap.intern_bytes(gc, bytes);
         let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
 
         StringRef(heap_ref)
     }
 
     pub fn create_table(&mut self) -> TableRef {
+        let gc = &mut self.execution_data.gc;
         let heap = &mut self.execution_data.heap;
-        let heap_key = heap.create_table(0, 0);
+        let heap_key = heap.create_table(gc, 0, 0);
         let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
+
         TableRef(heap_ref)
     }
 
     pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
+        let gc = &mut self.execution_data.gc;
         let heap = &mut self.execution_data.heap;
-        let heap_key = heap.create_table(list, map);
+        let heap_key = heap.create_table(gc, list, map);
         let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
+
         TableRef(heap_ref)
     }
 
@@ -252,6 +290,7 @@ impl Vm {
     {
         let label = label.into();
 
+        let gc = &mut self.execution_data.gc;
         let heap = &mut self.execution_data.heap;
         let environment = environment
             .map(|table| table.0.key().into())
@@ -263,7 +302,7 @@ impl Vm {
             let byte_strings = chunk
                 .byte_strings
                 .into_iter()
-                .map(|bytes| heap.intern_bytes(bytes.as_ref()))
+                .map(|bytes| heap.intern_bytes(gc, bytes.as_ref()))
                 .collect();
 
             let functions = chunk
@@ -280,24 +319,37 @@ impl Vm {
                 }
             }
 
-            let key = heap.create(HeapValue::Function(Function {
-                up_values: up_values.into(),
-                definition: Rc::new(FunctionDefinition {
-                    label: label.clone(),
-                    env: chunk.env,
-                    byte_strings,
-                    numbers: chunk.numbers,
-                    functions,
-                    instructions: chunk.instructions,
-                    source_map: chunk.source_map,
+            let key = heap.create(
+                gc,
+                HeapValue::Function(Function {
+                    up_values: up_values.into(),
+                    definition: Rc::new(FunctionDefinition {
+                        label: label.clone(),
+                        env: chunk.env,
+                        byte_strings,
+                        numbers: chunk.numbers,
+                        functions,
+                        instructions: chunk.instructions,
+                        source_map: chunk.source_map,
+                    }),
                 }),
-            }));
+            );
 
             keys.push(key);
         }
 
         let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
         let heap_ref = heap.create_ref(*key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
 
         Ok(FunctionRef(heap_ref))
     }
@@ -307,9 +359,20 @@ impl Vm {
         callback: impl Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> + Clone + 'static,
     ) -> FunctionRef {
         let heap = &mut self.execution_data.heap;
-        let key = heap.create(HeapValue::NativeFunction(callback.into()));
+        let gc = &mut self.execution_data.gc;
+        let key = heap.create(gc, HeapValue::NativeFunction(callback.into()));
 
         let heap_ref = heap.create_ref(key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
 
         FunctionRef(heap_ref)
     }
@@ -357,17 +420,53 @@ impl Vm {
     }
 
     pub fn gc_used_memory(&self) -> usize {
-        let heap = &self.execution_data.heap;
-        heap.gc_used_memory()
+        self.execution_data.gc.used_memory()
+    }
+
+    pub fn gc_is_running(&self) -> bool {
+        self.execution_data.gc.is_running()
+    }
+
+    pub fn gc_stop(&mut self) {
+        self.execution_data.gc.stop()
+    }
+
+    pub fn gc_restart(&mut self) {
+        self.execution_data.gc.restart()
+    }
+
+    pub fn gc_step(&mut self, bytes: usize) {
+        let gc = &mut self.execution_data.gc;
+        let heap = &mut self.execution_data.heap;
+
+        gc.modify_used_memory(bytes as _);
+
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
+
+        gc.modify_used_memory(-(bytes as isize));
     }
 
     pub fn gc_collect(&mut self) {
+        let gc = &mut self.execution_data.gc;
         let heap = &mut self.execution_data.heap;
-        heap.gc_collect(
+
+        gc.full_cycle(
             &self.execution_data.metatable_keys,
             &self.execution_data.cache_pools,
             &self.execution_stack,
+            heap,
         );
+    }
+
+    pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
+        &mut self.execution_data.gc.config
     }
 }
 

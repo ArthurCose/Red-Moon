@@ -28,29 +28,83 @@ pub fn impl_basic(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // collectgarbage
     let assert = vm.create_native_function(|args, vm| {
-        let opt: Option<ByteString> = args.unpack_args(vm)?;
+        let (opt, mut rest): (Option<ByteString>, MultiValue) = args.unpack_args(vm)?;
 
-        if let Some(opt) = opt {
+        let result = if let Some(opt) = opt {
             match opt.as_bytes() {
+                b"count" => {
+                    let kibi = vm.gc_used_memory() as f64 / 1024.0;
+                    MultiValue::pack(kibi, vm)
+                }
+                b"isrunning" => {
+                    let running = vm.gc_is_running();
+                    MultiValue::pack(running, vm)
+                }
+                b"stop" => {
+                    vm.gc_stop();
+                    MultiValue::pack((), vm)
+                }
+                b"restart" => {
+                    vm.gc_restart();
+                    MultiValue::pack((), vm)
+                }
+                b"step" => {
+                    let (kibi, new_rest): (Option<f64>, MultiValue) =
+                        rest.unpack_modified_args(vm, 2)?;
+                    rest = new_rest;
+
+                    vm.gc_step(kibi.map(|kibi| (kibi * 1024.0) as _).unwrap_or_default());
+                    MultiValue::pack((), vm)
+                }
                 b"collect" => {
                     vm.gc_collect();
+                    MultiValue::pack((), vm)
                 }
-                b"count" => {
-                    let kibi = vm.gc_used_memory() as f32 / 1024.0;
-                    return MultiValue::pack(kibi, vm);
+                b"incremental" => {
+                    let (pause, step_mul, step_size, new_rest): (
+                        Option<usize>,
+                        Option<usize>,
+                        Option<u32>,
+                        MultiValue,
+                    ) = rest.unpack_modified_args(vm, 2)?;
+
+                    rest = new_rest;
+
+                    let config = vm.gc_config_mut();
+
+                    if let Some(pause) = pause {
+                        if pause > 0 {
+                            config.pause = pause;
+                        }
+                    }
+
+                    if let Some(step_mul) = step_mul {
+                        if step_mul > 0 {
+                            config.step_multiplier = step_mul;
+                        }
+                    }
+
+                    if let Some(step_size) = step_size {
+                        if step_size > 0 {
+                            config.step_size = 2usize.pow(step_size);
+                        }
+                    }
+
+                    MultiValue::pack((), vm)
                 }
-                // todo: stop, restart, step, isrunning, incremental
                 _ => {
                     let message = format!("invalid option '{opt}'");
                     let inner_error = RuntimeError::new_string(message);
-                    return Err(RuntimeError::new_bad_argument(1, inner_error));
+                    Err(RuntimeError::new_bad_argument(1, inner_error))
                 }
             }
         } else {
             vm.gc_collect();
-        }
+            MultiValue::pack((), vm)
+        };
 
-        MultiValue::pack((), vm)
+        vm.store_multi(rest);
+        result
     });
     env.set("collectgarbage", assert, vm)?;
 

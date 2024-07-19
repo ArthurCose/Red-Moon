@@ -33,6 +33,7 @@ impl TableRef {
         metatable_ref: Option<&TableRef>,
         vm: &mut Vm,
     ) -> Result<(), RuntimeError> {
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
         let metatable_key = metatable_ref
             .map(|metatable_ref| {
@@ -46,7 +47,7 @@ impl TableRef {
             })
             .transpose()?;
 
-        let Some(heap_value) = heap.get_mut(self.0.key()) else {
+        let Some(heap_value) = heap.get_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -89,11 +90,12 @@ impl TableRef {
         let value = value.into_value(vm)?;
 
         // need to test validity to make sure invalid data doesn't get stored in the vm
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
         key.test_validity(heap)?;
         value.test_validity(heap)?;
 
-        let Some(HeapValue::Table(table)) = heap.get_mut(self.0.key()) else {
+        let Some(HeapValue::Table(table)) = heap.get_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -105,7 +107,7 @@ impl TableRef {
         table.set(key, value);
 
         let new_size = table.gc_size();
-        heap.modify_used_memory(new_size as isize - original_size as isize);
+        gc.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())
     }
@@ -177,8 +179,9 @@ impl TableRef {
 
     /// Clears all values from the table without invoking metamethods, preserves the metatable.
     pub fn clear(&self, vm: &mut Vm) -> Result<(), RuntimeError> {
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
-        let Some(HeapValue::Table(table)) = heap.get_mut(self.0.key()) else {
+        let Some(HeapValue::Table(table)) = heap.get_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -187,7 +190,7 @@ impl TableRef {
         table.clear();
 
         let new_size = table.gc_size();
-        heap.modify_used_memory(new_size as isize - original_size as isize);
+        gc.modify_used_memory(new_size as isize - original_size as isize);
 
         Ok(())
     }
@@ -204,9 +207,10 @@ impl TableRef {
 
         let value = value.into_value(vm)?;
 
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(table_key) else {
+        let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -218,7 +222,7 @@ impl TableRef {
 
         table.list.insert(index, value.to_stack_value());
 
-        heap.modify_used_memory(Table::LIST_ELEMENT_SIZE as isize);
+        gc.modify_used_memory(Table::LIST_ELEMENT_SIZE as isize);
 
         Ok(())
     }
@@ -228,9 +232,10 @@ impl TableRef {
             return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
         }
 
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(table_key) else {
+        let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -244,7 +249,7 @@ impl TableRef {
 
         table.list.remove(index);
 
-        heap.modify_used_memory(-(Table::LIST_ELEMENT_SIZE as isize));
+        gc.modify_used_memory(-(Table::LIST_ELEMENT_SIZE as isize));
 
         let value = Value::from_stack_value(heap, value);
 

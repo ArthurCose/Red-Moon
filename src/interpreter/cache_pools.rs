@@ -2,7 +2,6 @@ use super::heap::HeapKey;
 use super::value_stack::{StackValue, ValueStack};
 use super::MultiValue;
 use crate::vec_cell::VecCell;
-use std::cell::Cell;
 
 pub(crate) const RECYCLE_LIMIT: usize = 64;
 
@@ -11,7 +10,6 @@ pub(crate) struct CachePools {
     pub(crate) multivalues: VecCell<MultiValue>,
     pub(crate) value_stacks: VecCell<ValueStack>,
     pub(crate) short_value_stacks: VecCell<ValueStack>,
-    pub(crate) gc_work_queue: Cell<Vec<HeapKey>>,
     pub(crate) weak_associations: VecCell<Vec<(HeapKey, StackValue)>>,
 }
 
