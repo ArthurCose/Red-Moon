@@ -53,7 +53,7 @@ impl std::fmt::Display for RuntimeError {
         for frame in frames {
             write!(
                 f,
-                "\n  at {}:{}:{}",
+                "\n\tat {}:{}:{}",
                 frame.source_name, frame.line, frame.col
             )?;
         }
