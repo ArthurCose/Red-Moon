@@ -148,13 +148,11 @@ impl Lua {
             snapshot.count -= n;
 
             if snapshot.count == 0 {
-                let snapshot = self.snapshots.pop().unwrap();
-                *self.vm.get_mut() = snapshot.vm;
-                *self.resources.borrow_mut() = snapshot.resources;
-            } else {
-                self.vm.get_mut().clone_from(&snapshot.vm);
-                self.resources.borrow_mut().clone_from(&snapshot.resources);
+                snapshot.count = 1;
             }
+
+            self.vm.get_mut().clone_from(&snapshot.vm);
+            self.resources.borrow_mut().clone_from(&snapshot.resources);
 
             return;
         }
