@@ -144,8 +144,15 @@ print(recursive(1))
 
 print("\nmethod:")
 local object = {}
-function object:method(a)
-  print(type(self), a)
+function object:method(a, b)
+  print(type(self), a, b)
 end
 
-object:method(2)
+object:method(2, 3)
+
+print("\nfunction property:")
+function object.function_property(a, b)
+  print(a, b)
+end
+
+object.function_property(1, 2)
