@@ -463,7 +463,8 @@ impl<'lua> Table<'lua> {
     pub fn sequence_values<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
         TableSequence {
             table: self,
-            index: Some(1),
+            index: 1,
+            len: None,
             _phantom: PhantomData,
         }
     }
@@ -475,10 +476,16 @@ impl<'lua> Table<'lua> {
     }
 
     #[cfg(feature = "serialize")]
-    pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(self) -> TableSequence<'lua, V> {
+    pub(crate) fn sequence_values_by_len<V: FromLua<'lua>>(
+        self,
+        len: Option<usize>,
+    ) -> TableSequence<'lua, V> {
+        let len = len.unwrap_or_else(|| self.raw_len());
+
         TableSequence {
             table: self,
-            index: Some(1),
+            index: 1,
+            len: Some(len as i64),
             _phantom: PhantomData,
         }
     }
@@ -711,7 +718,7 @@ impl<'a, 'lua> Serialize for SerializableTable<'a, 'lua> {
         let len = self.table.raw_len();
         if len > 0 || self.table.is_array() {
             let mut seq = serializer.serialize_seq(Some(len))?;
-            for value in self.table.clone().sequence_values_by_len::<Value>() {
+            for value in self.table.clone().sequence_values_by_len::<Value>(None) {
                 let value = &value.map_err(serde::ser::Error::custom)?;
                 let skip = check_value_for_skip(value, self.options, &self.visited)
                     .map_err(serde::ser::Error::custom)?;
@@ -798,7 +805,8 @@ where
 /// [`Table::sequence_values`]: crate::Table::sequence_values
 pub struct TableSequence<'lua, V> {
     table: Table<'lua>,
-    index: Option<Integer>,
+    index: Integer,
+    len: Option<i64>,
     _phantom: PhantomData<V>,
 }
 
@@ -809,10 +817,18 @@ where
     type Item = Result<V>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let index = self.index.take()?;
-        self.index = Some(index + 1);
+        let index = self.index;
+        self.index += 1;
 
-        Some(self.table.raw_get(index))
+        if let Some(len) = self.len {
+            if index > len {
+                return None;
+            }
+
+            Some(self.table.raw_get(index))
+        } else {
+            self.table.raw_get::<_, Option<V>>(index).transpose()
+        }
     }
 }
 
