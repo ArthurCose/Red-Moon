@@ -36,7 +36,7 @@ impl Default for GarbageCollectorConfig {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 enum Phase {
     #[default]
     Idle,
@@ -51,7 +51,7 @@ enum Mark {
     Gray,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub(crate) struct GarbageCollector {
     phase: Phase,
     used_memory: usize,
@@ -65,6 +65,33 @@ pub(crate) struct GarbageCollector {
     phase_queue: Vec<HeapKey>,
     /// element_key/value -> Vec<(table_key, element_key)>
     weak_associations: FastHashMap<HeapKey, Vec<(HeapKey, StackValue)>>,
+}
+
+impl Clone for GarbageCollector {
+    fn clone(&self) -> Self {
+        Self {
+            phase: self.phase,
+            used_memory: self.used_memory,
+            accumulated: self.accumulated,
+            config: self.config.clone(),
+            traversed_definitions: self.traversed_definitions.clone(),
+            marked: self.marked.clone(),
+            phase_queue: self.phase_queue.clone(),
+            weak_associations: self.weak_associations.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.phase = source.phase;
+        self.used_memory = source.used_memory;
+        self.accumulated = source.accumulated;
+        self.config.clone_from(&source.config);
+        self.traversed_definitions
+            .clone_from(&source.traversed_definitions);
+        self.marked.clone_from(&source.marked);
+        self.phase_queue.clone_from(&source.phase_queue);
+        self.weak_associations.clone_from(&source.weak_associations);
+    }
 }
 
 impl GarbageCollector {

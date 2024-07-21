@@ -21,7 +21,6 @@ slotmap::new_key_type! {
     pub(crate) struct HeapKey;
 }
 
-#[derive(Clone)]
 pub(crate) struct Heap {
     pub(self) storage: slotmap::SlotMap<HeapKey, HeapValue>,
     pub(self) byte_strings: FastHashMap<ByteString, HeapKey>,
@@ -30,6 +29,27 @@ pub(crate) struct Heap {
     pub(self) recycled_tables: Rc<VecCell<Box<Table>>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef,
+}
+
+impl Clone for Heap {
+    fn clone(&self) -> Self {
+        Self {
+            storage: self.storage.clone(),
+            byte_strings: self.byte_strings.clone(),
+            ref_roots: self.ref_roots.clone(),
+            recycled_tables: self.recycled_tables.clone(),
+            string_metatable_ref: self.string_metatable_ref.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.storage.clone_from(&source.storage);
+        self.byte_strings.clone_from(&source.byte_strings);
+        self.ref_roots.clone_from(&source.ref_roots);
+        self.recycled_tables.clone_from(&source.recycled_tables);
+        self.string_metatable_ref
+            .clone_from(&source.string_metatable_ref);
+    }
 }
 
 impl Heap {

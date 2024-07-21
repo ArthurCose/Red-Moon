@@ -72,6 +72,21 @@ impl Clone for ExecutionAccessibleData {
             instruction_counter: Default::default(),
         }
     }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.limits.clone_from(&source.limits);
+        self.heap.clone_from(&source.heap);
+        self.gc.clone_from(&source.gc);
+        self.metatable_keys.clone_from(&source.metatable_keys);
+        self.cache_pools.clone_from(&source.cache_pools);
+        // reset to 0, since there's no active call on the new vm
+        self.tracked_stack_size = 0;
+
+        #[cfg(feature = "instruction_exec_counts")]
+        {
+            self.instruction_counter.clear();
+        }
+    }
 }
 
 pub struct Vm {
