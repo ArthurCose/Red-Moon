@@ -3,7 +3,9 @@ use red_moon::interpreter::{Chunk, Instruction, Module, MultiValue, ReturnMode, 
 #[test]
 fn instructions_print() {
     let mut vm = Vm::default();
-    let print_ref = vm.create_native_function(|args, vm| {
+    let ctx = &mut vm.context();
+
+    let print_ref = ctx.create_native_function(|args, ctx| {
         let len = args.len();
 
         for (i, arg) in args.to_vec().into_iter().enumerate() {
@@ -15,7 +17,7 @@ fn instructions_print() {
                 Value::Table(_) => print!("table"),
                 Value::Function(_) => print!("function"),
                 Value::String(string_ref) => {
-                    print!("{}", string_ref.fetch(vm).unwrap().to_string_lossy())
+                    print!("{}", string_ref.fetch(ctx).unwrap().to_string_lossy())
                 }
             }
 
@@ -24,15 +26,15 @@ fn instructions_print() {
             }
         }
 
-        MultiValue::pack((), vm)
+        MultiValue::pack((), ctx)
     });
 
-    let env = vm.default_environment();
-    env.raw_set("print", print_ref, &mut vm).unwrap();
+    let env = ctx.default_environment();
+    env.raw_set("print", print_ref, ctx).unwrap();
 
     let byte_strings: Vec<&[u8]> = vec![b"print", b"hello", b"world", b"!"];
 
-    let function_ref = vm
+    let function_ref = ctx
         .load_function(
             "",
             None,
@@ -66,5 +68,5 @@ fn instructions_print() {
         )
         .unwrap();
 
-    function_ref.call::<_, ()>((), &mut vm).unwrap();
+    function_ref.call::<_, ()>((), ctx).unwrap();
 }

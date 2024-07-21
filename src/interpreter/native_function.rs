@@ -1,13 +1,15 @@
 use super::multi::MultiValue;
-use super::vm::Vm;
+use super::VmContext;
 use crate::errors::RuntimeError;
 use std::rc::Rc;
 
-pub trait NativeFunctionTrait: Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> {
+pub trait NativeFunctionTrait:
+    Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
+{
     fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait>;
 }
 
-impl<T: Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> + Clone + 'static>
+impl<T: Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError> + Clone + 'static>
     NativeFunctionTrait for T
 {
     fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait> {
@@ -20,7 +22,11 @@ pub(crate) struct NativeFunction {
 }
 
 impl NativeFunction {
-    pub(crate) fn call(&self, args: MultiValue, vm: &mut Vm) -> Result<MultiValue, RuntimeError> {
+    pub(crate) fn call(
+        &self,
+        args: MultiValue,
+        vm: &mut VmContext,
+    ) -> Result<MultiValue, RuntimeError> {
         (self.callback)(args, vm)
     }
 
@@ -41,7 +47,7 @@ impl Clone for NativeFunction {
 
 impl<F> From<F> for NativeFunction
 where
-    F: Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> + Clone + 'static,
+    F: Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError> + Clone + 'static,
 {
     fn from(value: F) -> Self {
         Self {

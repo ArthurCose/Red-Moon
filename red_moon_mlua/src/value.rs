@@ -130,20 +130,21 @@ impl<'lua> Value<'lua> {
             Value::String(s) => Ok(s.to_str()?.to_string()),
             Value::Table(t) => {
                 let vm = unsafe { t.lua.vm_mut() };
+                let ctx = &mut vm.context();
 
-                if let Ok(Some(metatable)) = t.table_ref.metatable(vm) {
-                    let tostring_key = vm.metatable_keys().tostring.clone();
+                if let Ok(Some(metatable)) = t.table_ref.metatable(ctx) {
+                    let tostring_key = ctx.metatable_keys().tostring.clone();
 
                     if let Ok(function_value) =
-                        metatable.raw_get::<_, red_moon::interpreter::Value>(tostring_key, vm)
+                        metatable.raw_get::<_, red_moon::interpreter::Value>(tostring_key, ctx)
                     {
-                        return Ok(function_value.call(t.table_ref.clone(), vm)?);
+                        return Ok(function_value.call(t.table_ref.clone(), ctx)?);
                     }
 
-                    let name_key = vm.metatable_keys().name.clone();
+                    let name_key = ctx.metatable_keys().name.clone();
 
                     if let Ok(name) =
-                        metatable.raw_get::<_, red_moon::interpreter::ByteString>(name_key, vm)
+                        metatable.raw_get::<_, red_moon::interpreter::ByteString>(name_key, ctx)
                     {
                         return Ok(format!("{name}: 0x{:x}", t.to_pointer() as usize));
                     }
@@ -737,7 +738,8 @@ impl<'lua> MultiValue<'lua> {
         use red_moon::interpreter::IntoMulti;
 
         let vm = unsafe { lua.vm_mut() };
-        let mut red_moon_multi = ().into_multi(vm)?;
+        let ctx = &mut vm.context();
+        let mut red_moon_multi = ().into_multi(ctx)?;
 
         for mlua_value in self.vec.drain(..) {
             let red_moon_value = mlua_value.into_red_moon();

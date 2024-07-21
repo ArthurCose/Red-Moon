@@ -1,6 +1,6 @@
 use super::{LuaToken, LuaTokenLabel};
 use crate::errors::{RuntimeError, RuntimeErrorData, SyntaxError};
-use crate::interpreter::{FromValue, IntoValue, Value, Vm};
+use crate::interpreter::{FromValue, IntoValue, Value, VmContext};
 use std::borrow::Cow;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -19,7 +19,7 @@ impl From<Number> for Value {
 }
 
 impl IntoValue for Number {
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         match self {
             Number::Integer(i) => Ok(Value::Integer(i)),
             Number::Float(f) => Ok(Value::Float(f)),
@@ -28,7 +28,7 @@ impl IntoValue for Number {
 }
 
 impl FromValue for Number {
-    fn from_value(value: Value, _: &mut Vm) -> Result<Number, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Number, RuntimeError> {
         match value {
             Value::Integer(i) => Ok(Number::Integer(i)),
             Value::Float(f) => Ok(Number::Float(f)),

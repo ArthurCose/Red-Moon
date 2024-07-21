@@ -1,7 +1,7 @@
 use super::heap::{HeapRef, HeapValue};
 use super::table::Table;
 use super::value_stack::StackValue;
-use super::{FromValue, IntoValue, Value, Vm};
+use super::{FromValue, IntoValue, Value, VmContext};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
@@ -14,8 +14,8 @@ impl TableRef {
         self.0.key().data().as_ffi()
     }
 
-    pub fn metatable(&self, vm: &mut Vm) -> Result<Option<TableRef>, RuntimeError> {
-        let heap = &mut vm.execution_data.heap;
+    pub fn metatable(&self, ctx: &mut VmContext) -> Result<Option<TableRef>, RuntimeError> {
+        let heap = &mut ctx.vm.execution_data.heap;
         let Some(table_value) = heap.get(self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
@@ -32,10 +32,10 @@ impl TableRef {
     pub fn set_metatable(
         &self,
         metatable_ref: Option<&TableRef>,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<(), RuntimeError> {
-        let gc = &mut vm.execution_data.gc;
-        let heap = &mut vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
         let metatable_key = metatable_ref
             .map(|metatable_ref| {
                 let key = metatable_ref.0.key();
@@ -65,10 +65,10 @@ impl TableRef {
     pub fn raw_get<K: IntoValue, V: FromValue>(
         &self,
         key: K,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<V, RuntimeError> {
-        let key = key.into_value(vm)?.to_stack_value();
-        let heap = &mut vm.execution_data.heap;
+        let key = key.into_value(ctx)?.to_stack_value();
+        let heap = &mut ctx.vm.execution_data.heap;
 
         let Some(HeapValue::Table(table)) = heap.get(self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
@@ -77,7 +77,7 @@ impl TableRef {
         let value = table.get(key);
         let value = Value::from_stack_value(heap, value);
 
-        V::from_value(value, vm)
+        V::from_value(value, ctx)
     }
 
     /// Sets a value on the table without invoking the `__newindex` metamethod.
@@ -85,14 +85,14 @@ impl TableRef {
         &self,
         key: K,
         value: V,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<(), RuntimeError> {
-        let key = key.into_value(vm)?;
-        let value = value.into_value(vm)?;
+        let key = key.into_value(ctx)?;
+        let value = value.into_value(ctx)?;
 
-        // need to test validity to make sure invalid data doesn't get stored in the vm
-        let gc = &mut vm.execution_data.gc;
-        let heap = &mut vm.execution_data.heap;
+        // need to test validity to make sure invalid data doesn't get stored in the ctx
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
         key.test_validity(heap)?;
         value.test_validity(heap)?;
 
@@ -114,8 +114,8 @@ impl TableRef {
     }
 
     /// Gets the length of the sequential part of the table without invoking the `__len` metamethod.
-    pub fn raw_len(&self, vm: &Vm) -> Result<usize, RuntimeError> {
-        let heap = &vm.execution_data.heap;
+    pub fn raw_len(&self, ctx: &VmContext) -> Result<usize, RuntimeError> {
+        let heap = &ctx.vm.execution_data.heap;
         let Some(HeapValue::Table(table)) = heap.get(self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
@@ -124,17 +124,21 @@ impl TableRef {
     }
 
     /// Gets a value from the table, using the `__index` metamethod if available, and falling back to direct access.
-    pub fn get<K: IntoValue, V: FromValue>(&self, key: K, vm: &mut Vm) -> Result<V, RuntimeError> {
+    pub fn get<K: IntoValue, V: FromValue>(
+        &self,
+        key: K,
+        ctx: &mut VmContext,
+    ) -> Result<V, RuntimeError> {
         let table_key = self.0.key();
-        let method_key = vm.metatable_keys().index.0.key();
+        let method_key = ctx.metatable_keys().index.0.key();
 
-        let heap = &mut vm.execution_data.heap;
+        let heap = &mut ctx.vm.execution_data.heap;
         if let Some(function_key) = heap.get_metamethod(table_key, method_key.into()) {
-            return vm.call_function_key(function_key, (self.clone(), key));
+            return ctx.call_function_key(function_key, (self.clone(), key));
         };
 
         // fallback
-        self.raw_get(key, vm)
+        self.raw_get(key, ctx)
     }
 
     /// Sets a value on the table, using the `__newindex` metamethod if available, and falling back to direct access.
@@ -142,46 +146,46 @@ impl TableRef {
         &self,
         key: K,
         value: V,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<(), RuntimeError> {
-        let key = key.into_value(vm)?;
-        let value = value.into_value(vm)?;
+        let key = key.into_value(ctx)?;
+        let value = value.into_value(ctx)?;
 
         let table_key = self.0.key();
-        let method_key = vm.metatable_keys().newindex.0.key();
+        let method_key = ctx.metatable_keys().newindex.0.key();
 
-        let heap = &mut vm.execution_data.heap;
+        let heap = &mut ctx.vm.execution_data.heap;
         if let Some(function_key) = heap.get_metamethod(table_key, method_key.into()) {
-            return vm.call_function_key(function_key, (self.clone(), key, value));
+            return ctx.call_function_key(function_key, (self.clone(), key, value));
         };
 
         // fallback
-        self.raw_set(key, value, vm)
+        self.raw_set(key, value, ctx)
     }
 
     /// Gets the length of the sequential part of the table, using the `__len` metamethod if available, and falling back to direct access.
-    pub fn len(&self, vm: &mut Vm) -> Result<usize, RuntimeError> {
-        let heap = &mut vm.execution_data.heap;
+    pub fn len(&self, ctx: &mut VmContext) -> Result<usize, RuntimeError> {
+        let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
         let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
         let len = table.list_len();
-        let len_key = vm.metatable_keys().len.0.key();
+        let len_key = ctx.metatable_keys().len.0.key();
 
-        let heap = &mut vm.execution_data.heap;
+        let heap = &mut ctx.vm.execution_data.heap;
         let Some(function_key) = heap.get_metamethod(table_key, len_key.into()) else {
             return Ok(len);
         };
 
-        vm.call_function_key(function_key, self.clone())
+        ctx.call_function_key(function_key, self.clone())
     }
 
     /// Clears all values from the table without invoking metamethods, preserves the metatable.
-    pub fn clear(&self, vm: &mut Vm) -> Result<(), RuntimeError> {
-        let gc = &mut vm.execution_data.gc;
-        let heap = &mut vm.execution_data.heap;
+    pub fn clear(&self, ctx: &mut VmContext) -> Result<(), RuntimeError> {
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
         let Some(HeapValue::Table(table)) = heap.get_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
@@ -200,16 +204,16 @@ impl TableRef {
         &self,
         index: i64,
         value: V,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<(), RuntimeError> {
         if index == 0 {
             return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
         }
 
-        let value = value.into_value(vm)?;
+        let value = value.into_value(ctx)?;
 
-        let gc = &mut vm.execution_data.gc;
-        let heap = &mut vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
         let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
@@ -228,13 +232,17 @@ impl TableRef {
         Ok(())
     }
 
-    pub fn raw_remove<V: FromValue>(&self, index: i64, vm: &mut Vm) -> Result<V, RuntimeError> {
+    pub fn raw_remove<V: FromValue>(
+        &self,
+        index: i64,
+        ctx: &mut VmContext,
+    ) -> Result<V, RuntimeError> {
         if index == 0 {
             return Err(RuntimeError::from(RuntimeErrorData::OutOfBounds));
         }
 
-        let gc = &mut vm.execution_data.gc;
-        let heap = &mut vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
         let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
@@ -254,17 +262,17 @@ impl TableRef {
 
         let value = Value::from_stack_value(heap, value);
 
-        V::from_value(value, vm)
+        V::from_value(value, ctx)
     }
 
     pub fn next<P: IntoValue, K: FromValue, V: FromValue>(
         &self,
         previous_key: P,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<Option<(K, V)>, RuntimeError> {
-        let previous_key = previous_key.into_value(vm)?.to_stack_value();
+        let previous_key = previous_key.into_value(ctx)?.to_stack_value();
 
-        let heap = &mut vm.execution_data.heap;
+        let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
         let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
@@ -277,14 +285,14 @@ impl TableRef {
         let k = Value::from_stack_value(heap, k);
         let v = Value::from_stack_value(heap, v);
 
-        let k = K::from_value(k, vm)?;
-        let v = V::from_value(v, vm)?;
+        let k = K::from_value(k, ctx)?;
+        let v = V::from_value(v, ctx)?;
 
         Ok(Some((k, v)))
     }
 
-    pub fn is_map_empty(&self, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        let heap = &mut vm.execution_data.heap;
+    pub fn is_map_empty(&self, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
+        let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
         let Some(HeapValue::Table(table)) = heap.get(table_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());

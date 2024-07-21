@@ -22,8 +22,9 @@ pub struct String<'lua> {
 impl<'lua> String<'lua> {
     fn byte_string(&self) -> &ByteString {
         self.byte_string.get_or_init(|| {
-            let vm = unsafe { self.lua.vm() };
-            self.string_ref.fetch(vm).unwrap().clone()
+            let vm = unsafe { self.lua.vm_mut() };
+            let ctx = &mut vm.context();
+            self.string_ref.fetch(ctx).unwrap().clone()
         })
     }
 

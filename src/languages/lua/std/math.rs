@@ -1,42 +1,42 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{IntoValue, MultiValue, Value, Vm};
+use crate::interpreter::{IntoValue, MultiValue, Value, VmContext};
 use crate::languages::lua::{coerce_integer, parse_number, Number};
 
-pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
-    let math = vm.create_table();
+pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    let math = ctx.create_table();
 
     // abs
-    let abs = vm.create_native_function(|mut args, vm| {
-        let x = coerce_number(&mut args, 1, vm)?;
+    let abs = ctx.create_native_function(|mut args, ctx| {
+        let x = coerce_number(&mut args, 1, ctx)?;
 
         args.push_front(match x {
-            Number::Integer(i) => i.abs().into_value(vm)?,
-            Number::Float(f) => f.abs().into_value(vm)?,
+            Number::Integer(i) => i.abs().into_value(ctx)?,
+            Number::Float(f) => f.abs().into_value(ctx)?,
         });
 
         Ok(args)
     });
-    math.raw_set("abs", abs, vm)?;
+    math.raw_set("abs", abs, ctx)?;
 
     // acos
-    let acos = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let acos = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.acos(), vm)
+        MultiValue::pack(x.acos(), ctx)
     });
-    math.raw_set("acos", acos, vm)?;
+    math.raw_set("acos", acos, ctx)?;
 
     // asin
-    let asin = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let asin = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.asin(), vm)
+        MultiValue::pack(x.asin(), ctx)
     });
-    math.raw_set("asin", asin, vm)?;
+    math.raw_set("asin", asin, ctx)?;
 
     // atan
-    let atan = vm.create_native_function(|args, vm| {
-        let (y, x): (f64, Option<f64>) = args.unpack_args(vm)?;
+    let atan = ctx.create_native_function(|args, ctx| {
+        let (y, x): (f64, Option<f64>) = args.unpack_args(ctx)?;
 
         let output = if let Some(x) = x {
             y.atan2(x)
@@ -44,79 +44,79 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
             y.atan()
         };
 
-        MultiValue::pack(output, vm)
+        MultiValue::pack(output, ctx)
     });
-    math.raw_set("atan", atan, vm)?;
+    math.raw_set("atan", atan, ctx)?;
 
     // ceil
-    let ceil = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let ceil = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.ceil(), vm)
+        MultiValue::pack(x.ceil(), ctx)
     });
-    math.raw_set("ceil", ceil, vm)?;
+    math.raw_set("ceil", ceil, ctx)?;
 
     // cos
-    let cos = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let cos = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.cos(), vm)
+        MultiValue::pack(x.cos(), ctx)
     });
-    math.raw_set("cos", cos, vm)?;
+    math.raw_set("cos", cos, ctx)?;
 
     // deg
-    let deg = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let deg = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.to_degrees(), vm)
+        MultiValue::pack(x.to_degrees(), ctx)
     });
-    math.raw_set("deg", deg, vm)?;
+    math.raw_set("deg", deg, ctx)?;
 
     // exp
-    let exp = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let exp = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.exp(), vm)
+        MultiValue::pack(x.exp(), ctx)
     });
-    math.raw_set("exp", exp, vm)?;
+    math.raw_set("exp", exp, ctx)?;
 
     // floor
-    let floor = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
+    let floor = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.floor(), vm)
+        MultiValue::pack(x.floor(), ctx)
     });
-    math.raw_set("floor", floor, vm)?;
+    math.raw_set("floor", floor, ctx)?;
 
     // fmod
     // todo: lua preserves integers
-    let fmod = vm.create_native_function(|args, vm| {
-        let (x, y): (f64, f64) = args.unpack_args(vm)?;
+    let fmod = ctx.create_native_function(|args, ctx| {
+        let (x, y): (f64, f64) = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x % y, vm)
+        MultiValue::pack(x % y, ctx)
     });
-    math.raw_set("fmod", fmod, vm)?;
+    math.raw_set("fmod", fmod, ctx)?;
 
     // huge
-    let huge = vm.create_native_function(|args, vm| {
-        vm.store_multi(args);
-        MultiValue::pack(f64::INFINITY, vm)
+    let huge = ctx.create_native_function(|args, ctx| {
+        ctx.store_multi(args);
+        MultiValue::pack(f64::INFINITY, ctx)
     });
-    math.raw_set("huge", huge, vm)?;
+    math.raw_set("huge", huge, ctx)?;
 
     // log
-    let log = vm.create_native_function(|args, vm| {
-        let (x, base): (f64, Option<f64>) = args.unpack_args(vm)?;
+    let log = ctx.create_native_function(|args, ctx| {
+        let (x, base): (f64, Option<f64>) = args.unpack_args(ctx)?;
         let base = base.unwrap_or(std::f64::consts::E);
 
-        MultiValue::pack(x.log(base), vm)
+        MultiValue::pack(x.log(base), ctx)
     });
-    math.raw_set("log", log, vm)?;
+    math.raw_set("log", log, ctx)?;
 
     // max
-    let max = vm.create_native_function(|mut args, vm| {
+    let max = ctx.create_native_function(|mut args, ctx| {
         let Some(mut max) = args.pop_front() else {
-            vm.store_multi(args);
+            ctx.store_multi(args);
 
             return Err(RuntimeError::new_bad_argument(
                 1,
@@ -125,7 +125,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         };
 
         while let Some(arg) = args.pop_front() {
-            if arg.is_greater_than(&max, vm)? {
+            if arg.is_greater_than(&max, ctx)? {
                 max = arg;
             }
         }
@@ -133,19 +133,19 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         args.push_front(max);
         Ok(args)
     });
-    math.raw_set("max", max, vm)?;
+    math.raw_set("max", max, ctx)?;
 
     // maxinteger
-    let maxinteger = vm.create_native_function(|args, vm| {
-        vm.store_multi(args);
-        MultiValue::pack(i64::MAX, vm)
+    let maxinteger = ctx.create_native_function(|args, ctx| {
+        ctx.store_multi(args);
+        MultiValue::pack(i64::MAX, ctx)
     });
-    math.raw_set("maxinteger", maxinteger, vm)?;
+    math.raw_set("maxinteger", maxinteger, ctx)?;
 
     // min
-    let min = vm.create_native_function(|mut args, vm| {
+    let min = ctx.create_native_function(|mut args, ctx| {
         let Some(mut min) = args.pop_front() else {
-            vm.store_multi(args);
+            ctx.store_multi(args);
 
             return Err(RuntimeError::new_bad_argument(
                 1,
@@ -154,7 +154,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         };
 
         while let Some(arg) = args.pop_front() {
-            if arg.is_less_than(&min, vm)? {
+            if arg.is_less_than(&min, ctx)? {
                 min = arg;
             }
         }
@@ -162,90 +162,90 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
         args.push_front(min);
         Ok(args)
     });
-    math.raw_set("min", min, vm)?;
+    math.raw_set("min", min, ctx)?;
 
     // mininteger
-    let mininteger = vm.create_native_function(|args, vm| {
-        vm.store_multi(args);
-        MultiValue::pack(i64::MIN, vm)
+    let mininteger = ctx.create_native_function(|args, ctx| {
+        ctx.store_multi(args);
+        MultiValue::pack(i64::MIN, ctx)
     });
-    math.raw_set("mininteger", mininteger, vm)?;
+    math.raw_set("mininteger", mininteger, ctx)?;
 
     // modf
-    let modf = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
-        MultiValue::pack((x.trunc(), x.fract()), vm)
+    let modf = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
+        MultiValue::pack((x.trunc(), x.fract()), ctx)
     });
-    math.raw_set("modf", modf, vm)?;
+    math.raw_set("modf", modf, ctx)?;
 
-    math.raw_set("pi", std::f64::consts::PI, vm)?;
+    math.raw_set("pi", std::f64::consts::PI, ctx)?;
 
     // rad
-    let rad = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
-        MultiValue::pack(x.to_radians(), vm)
+    let rad = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
+        MultiValue::pack(x.to_radians(), ctx)
     });
-    math.raw_set("rad", rad, vm)?;
+    math.raw_set("rad", rad, ctx)?;
 
     // sin
-    let sin = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
-        MultiValue::pack(x.sin(), vm)
+    let sin = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
+        MultiValue::pack(x.sin(), ctx)
     });
-    math.raw_set("sin", sin, vm)?;
+    math.raw_set("sin", sin, ctx)?;
 
     // sqrt
-    let sqrt = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
-        MultiValue::pack(x.sqrt(), vm)
+    let sqrt = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
+        MultiValue::pack(x.sqrt(), ctx)
     });
-    math.raw_set("sqrt", sqrt, vm)?;
+    math.raw_set("sqrt", sqrt, ctx)?;
 
     // tan
-    let tan = vm.create_native_function(|args, vm| {
-        let x: f64 = args.unpack_args(vm)?;
-        MultiValue::pack(x.tan(), vm)
+    let tan = ctx.create_native_function(|args, ctx| {
+        let x: f64 = args.unpack_args(ctx)?;
+        MultiValue::pack(x.tan(), ctx)
     });
-    math.raw_set("tan", tan, vm)?;
+    math.raw_set("tan", tan, ctx)?;
 
     // tointeger
-    let tointeger = vm.create_native_function(|mut args, vm| {
-        let x = coerce_number(&mut args, 1, vm)?;
+    let tointeger = ctx.create_native_function(|mut args, ctx| {
+        let x = coerce_number(&mut args, 1, ctx)?;
 
         args.push_front(match x {
-            Number::Integer(i) => i.into_value(vm)?,
-            Number::Float(f) => coerce_integer(f).into_value(vm)?,
+            Number::Integer(i) => i.into_value(ctx)?,
+            Number::Float(f) => coerce_integer(f).into_value(ctx)?,
         });
 
         Ok(args)
     });
-    math.raw_set("tointeger", tointeger, vm)?;
+    math.raw_set("tointeger", tointeger, ctx)?;
 
     // type
-    let integer_string_ref = vm.intern_string(b"integer");
-    let float_string_ref = vm.intern_string(b"float");
-    let r#type = vm.create_native_function(move |mut args, vm| {
-        let x = coerce_number(&mut args, 1, vm)?;
+    let integer_string_ref = ctx.intern_string(b"integer");
+    let float_string_ref = ctx.intern_string(b"float");
+    let r#type = ctx.create_native_function(move |mut args, ctx| {
+        let x = coerce_number(&mut args, 1, ctx)?;
 
         args.push_front(match x {
-            Number::Integer(_) => integer_string_ref.clone().into_value(vm)?,
-            Number::Float(_) => float_string_ref.clone().into_value(vm)?,
+            Number::Integer(_) => integer_string_ref.clone().into_value(ctx)?,
+            Number::Float(_) => float_string_ref.clone().into_value(ctx)?,
         });
 
         Ok(args)
     });
-    math.raw_set("type", r#type, vm)?;
+    math.raw_set("type", r#type, ctx)?;
 
     // ult
-    let ult = vm.create_native_function(move |args, vm| {
-        let (m, n): (i64, i64) = args.unpack_args(vm)?;
+    let ult = ctx.create_native_function(move |args, ctx| {
+        let (m, n): (i64, i64) = args.unpack_args(ctx)?;
 
-        MultiValue::pack(m < n, vm)
+        MultiValue::pack(m < n, ctx)
     });
-    math.raw_set("ult", ult, vm)?;
+    math.raw_set("ult", ult, ctx)?;
 
-    let env = vm.default_environment();
-    env.set("math", math, vm)?;
+    let env = ctx.default_environment();
+    env.set("math", math, ctx)?;
 
     // todo: random, randomseed
 
@@ -255,7 +255,7 @@ pub fn impl_math(vm: &mut Vm) -> Result<(), RuntimeError> {
 fn coerce_number(
     args: &mut MultiValue,
     position: usize,
-    vm: &mut Vm,
+    ctx: &mut VmContext,
 ) -> Result<Number, RuntimeError> {
     let Some(value) = args.pop_front() else {
         return Err(RuntimeError::new_bad_argument(
@@ -267,7 +267,7 @@ fn coerce_number(
     match value {
         Value::Integer(i) => Ok(Number::Integer(i)),
         Value::Float(f) => Ok(Number::Float(f)),
-        Value::String(s) => parse_number(&s.fetch(vm)?.to_string_lossy()).ok_or_else(|| {
+        Value::String(s) => parse_number(&s.fetch(ctx)?.to_string_lossy()).ok_or_else(|| {
             RuntimeError::new_bad_argument(
                 position,
                 RuntimeError::new_static_string("number expected, got string"),

@@ -55,11 +55,12 @@ pub struct Lua {
 impl Default for Lua {
     fn default() -> Self {
         let mut vm = Vm::default();
-        let array_metatable = vm.create_table();
+        let ctx = &mut vm.context();
+        let array_metatable = ctx.create_table();
         let mut registry = slotmap::SlotMap::default();
         let nil_id = registry.insert(Default::default());
 
-        impl_basic(&mut vm).unwrap();
+        impl_basic(ctx).unwrap();
 
         Self {
             vm: UnsafeCell::new(vm),
@@ -176,12 +177,15 @@ impl Lua {
         self.modified.set(true);
         self.self_ptr.set(self);
 
+        let vm = unsafe { self.vm_mut() };
+        let ctx = &mut vm.context();
+
         if libs.contains(StdLib::TABLE) {
-            impl_table(unsafe { self.vm_mut() })?;
+            impl_table(ctx)?;
         }
 
         if libs.contains(StdLib::MATH) {
-            impl_math(unsafe { self.vm_mut() })?;
+            impl_math(ctx)?;
         }
 
         Ok(())
@@ -285,7 +289,7 @@ impl Lua {
             table_ref.raw_set(
                 k.into_lua(self)?.into_red_moon(),
                 v.into_lua(self)?.into_red_moon(),
-                vm,
+                &mut vm.context(),
             )?;
         }
 
@@ -302,10 +306,11 @@ impl Lua {
         I: IntoIterator<Item = T>,
     {
         let vm = unsafe { self.vm_mut() };
-        let table_ref = vm.create_table();
+        let ctx = &mut vm.context();
+        let table_ref = ctx.create_table();
 
         for (i, v) in iter.into_iter().enumerate() {
-            table_ref.raw_set(i + 1, v.into_lua(self)?.into_red_moon(), vm)?;
+            table_ref.raw_set(i + 1, v.into_lua(self)?.into_red_moon(), ctx)?;
         }
 
         Ok(Table {
@@ -532,8 +537,9 @@ impl Lua {
         self.modified.set(true);
 
         let vm = unsafe { self.vm_mut() };
-        let name = vm.intern_string(name.as_bytes());
-        let name = name.fetch(vm)?.clone();
+        let ctx = &mut vm.context();
+        let name = ctx.intern_string(name.as_bytes());
+        let name = name.fetch(ctx)?.clone();
         let value = t.into_lua(self)?.into_red_moon();
 
         self.resources

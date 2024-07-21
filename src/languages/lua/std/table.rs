@@ -1,14 +1,13 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{ByteString, FromValue, MultiValue, Value};
-use crate::interpreter::{TableRef, Vm};
+use crate::interpreter::{ByteString, FromValue, MultiValue, TableRef, Value, VmContext};
 
-pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
-    let table = vm.create_table();
+pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    let table = ctx.create_table();
 
     // concat
-    let concat = vm.create_native_function(|args, vm| {
+    let concat = ctx.create_native_function(|args, ctx| {
         let (table, separator, start, end): (TableRef, Option<ByteString>, i64, i64) =
-            args.unpack_args(vm)?;
+            args.unpack_args(ctx)?;
 
         let mut bytes = Vec::<u8>::new();
 
@@ -16,11 +15,11 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
 
         if start <= end {
             for index in start..=end {
-                let value = table.raw_get(index, vm)?;
+                let value = table.raw_get(index, ctx)?;
 
                 match value {
                     Value::String(s) => {
-                        bytes.extend(s.fetch(vm)?.as_bytes());
+                        bytes.extend(s.fetch(ctx)?.as_bytes());
                     }
                     Value::Integer(i) => {
                         bytes.extend(i.to_string().as_bytes());
@@ -43,88 +42,88 @@ pub fn impl_table(vm: &mut Vm) -> Result<(), RuntimeError> {
             }
         }
 
-        MultiValue::pack((), vm)
+        MultiValue::pack((), ctx)
     });
-    table.raw_set("concat", concat, vm)?;
+    table.raw_set("concat", concat, ctx)?;
 
     // insert
-    let insert = vm.create_native_function(|args, vm| {
-        let (table, middle, last): (TableRef, Value, Value) = args.unpack_args(vm)?;
+    let insert = ctx.create_native_function(|args, ctx| {
+        let (table, middle, last): (TableRef, Value, Value) = args.unpack_args(ctx)?;
 
         if last.is_nil() {
-            let index = table.raw_len(vm)?;
-            table.raw_insert(index as i64, middle, vm)?;
+            let index = table.raw_len(ctx)?;
+            table.raw_insert(index as i64, middle, ctx)?;
         } else {
             let map_err = |err: RuntimeError| {
                 // assume it's related to the middle arg
                 RuntimeError::new_bad_argument(2, err)
             };
 
-            let index = i64::from_value(middle, vm).map_err(map_err)?;
-            table.raw_insert(index, last, vm).map_err(map_err)?;
+            let index = i64::from_value(middle, ctx).map_err(map_err)?;
+            table.raw_insert(index, last, ctx).map_err(map_err)?;
         }
 
-        MultiValue::pack((), vm)
+        MultiValue::pack((), ctx)
     });
-    table.raw_set("insert", insert, vm)?;
+    table.raw_set("insert", insert, ctx)?;
 
     // remove
-    let remove = vm.create_native_function(|args, vm| {
-        let (table, index): (TableRef, i64) = args.unpack_args(vm)?;
+    let remove = ctx.create_native_function(|args, ctx| {
+        let (table, index): (TableRef, i64) = args.unpack_args(ctx)?;
 
-        let len = table.raw_len(vm)?;
+        let len = table.raw_len(ctx)?;
 
         // lua allows for `#table + 1`
         if index == len as i64 + 1 {
-            return MultiValue::pack((), vm);
+            return MultiValue::pack((), ctx);
         }
 
         // lua allows index to be 0 when the table len is 0
         if len == 0 && index == 0 {
-            return MultiValue::pack((), vm);
+            return MultiValue::pack((), ctx);
         }
 
-        table.raw_remove::<Value>(index, vm)?;
+        table.raw_remove::<Value>(index, ctx)?;
 
-        MultiValue::pack((), vm)
+        MultiValue::pack((), ctx)
     });
-    table.raw_set("remove", remove, vm)?;
+    table.raw_set("remove", remove, ctx)?;
 
     // pack
-    let pack = vm.create_native_function(|mut args, vm| {
-        let table = vm.create_table();
+    let pack = ctx.create_native_function(|mut args, ctx| {
+        let table = ctx.create_table();
 
         let mut index = 1;
 
         while let Some(value) = args.pop_front() {
-            table.raw_insert(index, value, vm)?;
+            table.raw_insert(index, value, ctx)?;
             index += 1;
         }
 
-        MultiValue::pack(table, vm)
+        MultiValue::pack(table, ctx)
     });
-    table.raw_set("pack", pack, vm)?;
+    table.raw_set("pack", pack, ctx)?;
 
     // unpack
-    let unpack = vm.create_native_function(|args, vm| {
-        let table: TableRef = args.unpack_args(vm)?;
+    let unpack = ctx.create_native_function(|args, ctx| {
+        let table: TableRef = args.unpack_args(ctx)?;
 
-        let mut multi = vm.create_multi();
+        let mut multi = ctx.create_multi();
 
-        for index in (1..=table.raw_len(vm)?).rev() {
-            let value = table.raw_get(index, vm)?;
+        for index in (1..=table.raw_len(ctx)?).rev() {
+            let value = table.raw_get(index, ctx)?;
             multi.push_front(value);
         }
 
-        MultiValue::pack(multi, vm)
+        MultiValue::pack(multi, ctx)
     });
-    table.raw_set("unpack", unpack, vm)?;
+    table.raw_set("unpack", unpack, ctx)?;
 
     // todo: table.move() https://www.lua.org/manual/5.4/manual.html#pdf-table.move
     // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort
 
-    let env = vm.default_environment();
-    env.set("table", table, vm)?;
+    let env = ctx.default_environment();
+    env.set("table", table, ctx)?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use clap::{command, Parser};
 use red_moon::errors::{LuaCompilationError, RuntimeError, RuntimeErrorData, SyntaxError};
-use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm};
+use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm, VmContext};
 use red_moon::languages::lua::{std as lua_std, LuaCompiler};
 use rustyline::error::ReadlineError;
 use std::cell::{Cell, RefCell};
@@ -34,20 +34,21 @@ fn main2() -> Result<(), ()> {
 
     let compiler = LuaCompiler::default();
     let mut vm = Vm::default();
+    let ctx = &mut vm.context();
 
-    lua_std::impl_basic(&mut vm).unwrap();
-    lua_std::impl_math(&mut vm).unwrap();
-    lua_std::impl_table(&mut vm).unwrap();
-    lua_std::impl_os(&mut vm).unwrap();
+    lua_std::impl_basic(ctx).unwrap();
+    lua_std::impl_math(ctx).unwrap();
+    lua_std::impl_table(ctx).unwrap();
+    lua_std::impl_os(ctx).unwrap();
 
-    load_args(&mut vm, &options.args);
+    load_args(ctx, &options.args);
 
     // default to true
     let mut interactive = true;
 
     if !options.execute.is_empty() {
         for source in options.execute {
-            execute_source(&mut vm, &compiler, "(command line)", &source, Vec::new())?;
+            execute_source(ctx, &compiler, "(command line)", &source, Vec::new())?;
         }
 
         // only interactive if it's explicitly stated when a script is set
@@ -55,7 +56,7 @@ fn main2() -> Result<(), ()> {
     }
 
     if let Some(path) = options.script {
-        execute_file(&mut vm, &compiler, &path, options.args)?;
+        execute_file(ctx, &compiler, &path, options.args)?;
 
         // only interactive if it's explicitly stated when a script is set
         interactive = options.interactive;
@@ -68,18 +69,18 @@ fn main2() -> Result<(), ()> {
     Ok(())
 }
 
-fn load_args(vm: &mut Vm, args: &[String]) {
-    let table = vm.create_table();
+fn load_args(ctx: &mut VmContext, args: &[String]) {
+    let table = ctx.create_table();
 
     for (i, arg) in args.iter().enumerate() {
-        table.set(i + 1, arg.as_str(), vm).unwrap();
+        table.set(i + 1, arg.as_str(), ctx).unwrap();
     }
 
-    vm.default_environment().set("arg", table, vm).unwrap();
+    ctx.default_environment().set("arg", table, ctx).unwrap();
 }
 
 fn execute_file(
-    vm: &mut Vm,
+    ctx: &mut VmContext,
     compiler: &LuaCompiler,
     path: &str,
     args: Vec<String>,
@@ -92,11 +93,11 @@ fn execute_file(
         }
     };
 
-    execute_source(vm, compiler, path, &source, args)
+    execute_source(ctx, compiler, path, &source, args)
 }
 
 fn execute_source(
-    vm: &mut Vm,
+    ctx: &mut VmContext,
     compiler: &LuaCompiler,
     label: &str,
     source: &str,
@@ -111,23 +112,23 @@ fn execute_source(
         }
     };
 
-    let function_ref = vm.load_function(label, None, module).unwrap();
+    let function_ref = ctx.load_function(label, None, module).unwrap();
 
     // translate args
-    let mut args_multi = vm.create_multi();
+    let mut args_multi = ctx.create_multi();
 
     for arg in args.into_iter().rev() {
-        args_multi.push_front(arg.into_value(vm).unwrap());
+        args_multi.push_front(arg.into_value(ctx).unwrap());
     }
 
     // execute
-    if let Err(err) = function_ref.call::<_, Value>(args_multi, vm) {
+    if let Err(err) = function_ref.call::<_, Value>(args_multi, ctx) {
         println!("{err}");
         return Err(());
     }
 
     #[cfg(feature = "instruction_exec_counts")]
-    print_instruction_exec_counts(vm);
+    print_instruction_exec_counts(ctx);
 
     Ok(())
 }
@@ -137,16 +138,19 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
     let mut input_buffer = String::new();
     let mut request_more = false;
 
-    let print_function: FunctionRef = vm.default_environment().get("print", vm).unwrap();
+    let ctx = &mut vm.context();
+    let print_function: FunctionRef = ctx.default_environment().get("print", ctx).unwrap();
 
     println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
-    let queued_rewind = impl_rewind(vm).unwrap();
+    let queued_rewind = impl_rewind(ctx).unwrap();
 
     loop {
         if let Some(snapshot) = queued_rewind.take() {
             *vm = snapshot;
         }
+
+        let ctx = &mut vm.context();
 
         let prompt = if request_more { ">> " } else { "> " };
         request_more = false;
@@ -196,13 +200,13 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
         // store the original input in the history
         let _ = rl.add_history_entry(&input_buffer);
 
-        let function = vm.load_function("stdin", None, module).unwrap();
+        let function = ctx.load_function("stdin", None, module).unwrap();
 
-        match function.call::<_, MultiValue>((), vm) {
+        match function.call::<_, MultiValue>((), ctx) {
             Err(err) => println!("{err}"),
             Ok(multi) => {
                 if !multi.is_empty() {
-                    if let Err(err) = print_function.call::<_, Value>(multi, vm) {
+                    if let Err(err) = print_function.call::<_, Value>(multi, ctx) {
                         println!("{err}")
                     }
                 }
@@ -210,7 +214,7 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
         }
 
         #[cfg(feature = "instruction_exec_counts")]
-        print_instruction_exec_counts(vm);
+        print_instruction_exec_counts(ctx);
 
         input_buffer.clear();
     }
@@ -218,30 +222,30 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
 
 type QueuedRewind = Rc<Cell<Option<Vm>>>;
 
-fn impl_rewind(vm: &mut Vm) -> Result<QueuedRewind, RuntimeError> {
+fn impl_rewind(ctx: &mut VmContext) -> Result<QueuedRewind, RuntimeError> {
     let snapshots: Rc<RefCell<Vec<Vm>>> = Default::default();
     let queued_rewind = QueuedRewind::default();
 
-    let env = vm.default_environment();
+    let env = ctx.default_environment();
 
     let snapshots_capture = snapshots.clone();
-    let snap = vm.create_native_function(move |_, vm| {
+    let snap = ctx.create_native_function(move |_, ctx| {
         let mut snapshots = snapshots_capture.borrow_mut();
-        snapshots.push(vm.clone());
-        MultiValue::pack((), vm)
+        snapshots.push(ctx.clone_vm());
+        MultiValue::pack((), ctx)
     });
-    env.set("snap", snap, vm)?;
+    env.set("snap", snap, ctx)?;
 
     let queued_rewind_capture = queued_rewind.clone();
-    let rewind = vm.create_native_function(move |args, vm| {
-        let x: Option<i64> = args.unpack(vm)?;
+    let rewind = ctx.create_native_function(move |args, ctx| {
+        let x: Option<i64> = args.unpack(ctx)?;
         let x = x.unwrap_or(-1);
 
         let mut snapshots = snapshots.borrow_mut();
 
         let x = match x.cmp(&0) {
             std::cmp::Ordering::Less => return Err(RuntimeErrorData::OutOfBounds.into()),
-            std::cmp::Ordering::Equal => return MultiValue::pack((), vm),
+            std::cmp::Ordering::Equal => return MultiValue::pack((), ctx),
             std::cmp::Ordering::Greater => {
                 let x = x as usize;
 
@@ -258,17 +262,17 @@ fn impl_rewind(vm: &mut Vm) -> Result<QueuedRewind, RuntimeError> {
         snapshots.truncate(x + 1);
         queued_rewind_capture.set(snapshots.pop());
 
-        MultiValue::pack((), vm)
+        MultiValue::pack((), ctx)
     });
-    env.set("queue_rewind", rewind, vm)?;
+    env.set("queue_rewind", rewind, ctx)?;
 
     Ok(queued_rewind)
 }
 
 #[cfg(feature = "instruction_exec_counts")]
-pub(crate) fn print_instruction_exec_counts(vm: &mut Vm) {
-    let results = vm.instruction_exec_counts();
-    vm.clear_instruction_exec_counts();
+pub(crate) fn print_instruction_exec_counts(ctx: &mut VmContext) {
+    let results = ctx.instruction_exec_counts();
+    ctx.clear_instruction_exec_counts();
 
     // collect data for formatting
     let mut label_max_len = 0;

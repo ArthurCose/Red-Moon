@@ -1,7 +1,8 @@
 use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapValue};
 use super::value_stack::StackValue;
-use super::{ByteString, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef, Vm};
+use super::vm::VmContext;
+use super::{ByteString, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::{parse_number, Number};
 
@@ -74,44 +75,52 @@ impl Value {
     pub fn call<A: IntoMulti, R: FromMulti>(
         &self,
         args: A,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
-        let old_stack_size = vm.execution_data.tracked_stack_size;
+        let old_stack_size = ctx.vm.execution_data.tracked_stack_size;
 
-        let args = args.into_multi(vm)?;
+        let args = args.into_multi(ctx)?;
 
-        // must test validity of every arg, since invalid keys in the vm will cause a panic
+        // must test validity of every arg, since invalid keys in the ctx will cause a panic
         for value in &args.values {
-            value.test_validity(&vm.execution_data.heap)?;
+            value.test_validity(&ctx.vm.execution_data.heap)?;
         }
 
-        let result = ExecutionContext::new_value_call(self.to_stack_value(), args, vm)
+        let result = ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)
             .map_err(RuntimeError::from)
-            .and_then(|context| {
-                vm.execution_stack.push(context);
-                ExecutionContext::resume(vm)
+            .and_then(|exec_ctx| {
+                ctx.vm.execution_stack.push(exec_ctx);
+                ExecutionContext::resume(ctx.vm)
             });
 
-        vm.execution_data.tracked_stack_size = old_stack_size;
+        ctx.vm.execution_data.tracked_stack_size = old_stack_size;
 
         let multi = result?;
-        R::from_multi(multi, vm)
+        R::from_multi(multi, ctx)
     }
 
     #[inline]
-    pub fn is_greater_than(&self, other: &Value, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        other.is_less_than(self, vm)
+    pub fn is_greater_than(
+        &self,
+        other: &Value,
+        ctx: &mut VmContext,
+    ) -> Result<bool, RuntimeError> {
+        other.is_less_than(self, ctx)
     }
 
     #[inline]
-    pub fn is_greater_than_eq(&self, other: &Value, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        other.is_less_than_eq(self, vm)
+    pub fn is_greater_than_eq(
+        &self,
+        other: &Value,
+        ctx: &mut VmContext,
+    ) -> Result<bool, RuntimeError> {
+        other.is_less_than_eq(self, ctx)
     }
 
-    pub fn is_less_than(&self, other: &Value, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        let lt = vm.metatable_keys().lt.0.key();
+    pub fn is_less_than(&self, other: &Value, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
+        let lt = ctx.metatable_keys().lt.0.key();
 
-        if let Some(result) = self.try_binary_metamethods(other, lt, vm) {
+        if let Some(result) = self.try_binary_metamethods(other, lt, ctx) {
             return result;
         };
 
@@ -121,7 +130,7 @@ impl Value {
                     return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
                 };
 
-                return Ok(l.fetch(vm)?.as_bytes() < r.fetch(vm)?.as_bytes());
+                return Ok(l.fetch(ctx)?.as_bytes() < r.fetch(ctx)?.as_bytes());
             }
             (Value::Float(l), Value::Float(r)) => *l < *r,
             (Value::Integer(l), Value::Integer(r)) => *l < *r,
@@ -133,10 +142,14 @@ impl Value {
         Ok(value)
     }
 
-    pub fn is_less_than_eq(&self, other: &Value, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        let le = vm.metatable_keys().le.0.key();
+    pub fn is_less_than_eq(
+        &self,
+        other: &Value,
+        ctx: &mut VmContext,
+    ) -> Result<bool, RuntimeError> {
+        let le = ctx.metatable_keys().le.0.key();
 
-        if let Some(result) = self.try_binary_metamethods(other, le, vm) {
+        if let Some(result) = self.try_binary_metamethods(other, le, ctx) {
             return result;
         };
 
@@ -146,7 +159,7 @@ impl Value {
                     return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
                 };
 
-                return Ok(l.fetch(vm)?.as_bytes() <= r.fetch(vm)?.as_bytes());
+                return Ok(l.fetch(ctx)?.as_bytes() <= r.fetch(ctx)?.as_bytes());
             }
             (Value::Float(l), Value::Float(r)) => *l <= *r,
             (Value::Integer(l), Value::Integer(r)) => *l <= *r,
@@ -158,10 +171,10 @@ impl Value {
         Ok(value)
     }
 
-    pub fn is_eq(&self, other: &Value, vm: &mut Vm) -> Result<bool, RuntimeError> {
-        let eq = vm.metatable_keys().eq.0.key();
+    pub fn is_eq(&self, other: &Value, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
+        let eq = ctx.metatable_keys().eq.0.key();
 
-        if let Some(result) = self.try_binary_metamethods(other, eq, vm) {
+        if let Some(result) = self.try_binary_metamethods(other, eq, ctx) {
             return result;
         };
 
@@ -180,21 +193,21 @@ impl Value {
         &self,
         other: &Value,
         method_name: HeapKey,
-        vm: &mut Vm,
+        ctx: &mut VmContext,
     ) -> Option<Result<T, RuntimeError>> {
         let method_name = method_name.into();
 
         if let Some(key) = self.heap_key() {
-            let heap = &vm.execution_data.heap;
+            let heap = &ctx.vm.execution_data.heap;
             if let Some(key) = heap.get_metamethod(key, method_name) {
-                return Some(vm.call_function_key(key, (self.clone(), other.clone())));
+                return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
             }
         }
 
         if let Some(key) = other.heap_key() {
-            let heap = &vm.execution_data.heap;
+            let heap = &ctx.vm.execution_data.heap;
             if let Some(key) = heap.get_metamethod(key, method_name) {
-                return Some(vm.call_function_key(key, (self.clone(), other.clone())));
+                return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
             }
         }
 
@@ -213,7 +226,7 @@ impl Value {
         }
     }
 
-    /// Expects stack values to made from within the same vm as the heap
+    /// Expects stack values to made from within the same ctx as the heap
     pub(crate) fn from_stack_value(heap: &mut Heap, value: StackValue) -> Value {
         match value {
             StackValue::Nil => Value::Nil,
@@ -221,7 +234,7 @@ impl Value {
             StackValue::Integer(i) => Value::Integer(i),
             StackValue::Float(f) => Value::Float(f),
             StackValue::HeapValue(key) => {
-                // stack values should be made from within the same vm as the heap
+                // stack values should be made from within the same ctx as the heap
                 let value = heap.get(key).unwrap();
 
                 match value {
@@ -293,21 +306,21 @@ impl From<FunctionRef> for Value {
 }
 
 pub trait IntoValue {
-    fn into_value(self, vm: &mut Vm) -> Result<Value, RuntimeError>;
+    fn into_value(self, ctx: &mut VmContext) -> Result<Value, RuntimeError>;
 }
 
 impl IntoValue for Value {
     #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(self)
     }
 }
 
 impl<T: IntoValue> IntoValue for Option<T> {
     #[inline]
-    fn into_value(self, vm: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, ctx: &mut VmContext) -> Result<Value, RuntimeError> {
         match self {
-            Some(v) => v.into_value(vm),
+            Some(v) => v.into_value(ctx),
             None => Ok(Value::Nil),
         }
     }
@@ -315,42 +328,42 @@ impl<T: IntoValue> IntoValue for Option<T> {
 
 impl IntoValue for StringRef {
     #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(Value::String(self))
     }
 }
 
 impl IntoValue for TableRef {
     #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(Value::Table(self))
     }
 }
 
 impl IntoValue for FunctionRef {
     #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(Value::Function(self))
     }
 }
 
 impl IntoValue for String {
     #[inline]
-    fn into_value(self, vm: &mut Vm) -> Result<Value, RuntimeError> {
-        Ok(Value::String(vm.intern_string(self.as_bytes())))
+    fn into_value(self, ctx: &mut VmContext) -> Result<Value, RuntimeError> {
+        Ok(Value::String(ctx.intern_string(self.as_bytes())))
     }
 }
 
 impl<'a> IntoValue for &'a str {
     #[inline]
-    fn into_value(self, vm: &mut Vm) -> Result<Value, RuntimeError> {
-        Ok(Value::String(vm.intern_string(self.as_bytes())))
+    fn into_value(self, ctx: &mut VmContext) -> Result<Value, RuntimeError> {
+        Ok(Value::String(ctx.intern_string(self.as_bytes())))
     }
 }
 
 impl IntoValue for bool {
     #[inline]
-    fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(Value::Bool(self))
     }
 }
@@ -359,7 +372,7 @@ macro_rules! into_int_value {
     ($name:ty) => {
         impl IntoValue for $name {
             #[inline]
-            fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+            fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
                 Ok(Value::Integer(self as _))
             }
         }
@@ -370,7 +383,7 @@ macro_rules! into_float_value {
     ($name:ty) => {
         impl IntoValue for $name {
             #[inline]
-            fn into_value(self, _: &mut Vm) -> Result<Value, RuntimeError> {
+            fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
                 Ok(Value::Float(self as _))
             }
         }
@@ -391,29 +404,29 @@ into_float_value!(f32);
 into_float_value!(f64);
 
 pub trait FromValue: Sized {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError>;
+    fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError>;
 }
 
 impl FromValue for Value {
     #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
         Ok(value)
     }
 }
 
 impl<T: FromValue> FromValue for Option<T> {
     #[inline]
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         match value {
             Value::Nil => Ok(None),
-            _ => Ok(Some(T::from_value(value, vm)?)),
+            _ => Ok(Some(T::from_value(value, ctx)?)),
         }
     }
 }
 
 impl FromValue for StringRef {
     #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
         if let Value::String(string_ref) = value {
             Ok(string_ref)
         } else {
@@ -429,7 +442,7 @@ impl FromValue for StringRef {
 
 impl FromValue for TableRef {
     #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
         if let Value::Table(table_ref) = value {
             Ok(table_ref)
         } else {
@@ -445,7 +458,7 @@ impl FromValue for TableRef {
 
 impl FromValue for FunctionRef {
     #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
         if let Value::Function(function_ref) = value {
             Ok(function_ref)
         } else {
@@ -461,7 +474,7 @@ impl FromValue for FunctionRef {
 
 impl FromValue for String {
     #[inline]
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
             return Err(RuntimeErrorData::FromLuaConversionError {
                 from: value.type_name(),
@@ -471,14 +484,14 @@ impl FromValue for String {
             .into());
         };
 
-        let s = string_ref.fetch(vm)?.to_string_lossy();
+        let s = string_ref.fetch(ctx)?.to_string_lossy();
         Ok(s.into_owned())
     }
 }
 
 impl FromValue for ByteString {
     #[inline]
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
             return Err(RuntimeErrorData::FromLuaConversionError {
                 from: value.type_name(),
@@ -488,13 +501,13 @@ impl FromValue for ByteString {
             .into());
         };
 
-        Ok(string_ref.fetch(vm)?.clone())
+        Ok(string_ref.fetch(ctx)?.clone())
     }
 }
 
 impl FromValue for bool {
     #[inline]
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, RuntimeError> {
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
         Ok(!matches!(value, Value::Nil | Value::Bool(false)))
     }
 }
@@ -503,12 +516,12 @@ macro_rules! number_from_value {
     ($name:ty) => {
         impl FromValue for $name {
             #[inline]
-            fn from_value(value: Value, vm: &mut Vm) -> Result<Self, RuntimeError> {
+            fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
                 match &value {
                     Value::Integer(i) => return Ok(*i as _),
                     Value::Float(f) => return Ok(*f as _),
                     Value::String(s) => {
-                        if let Some(number) = parse_number(&*s.fetch(vm)?.to_string_lossy()) {
+                        if let Some(number) = parse_number(&*s.fetch(ctx)?.to_string_lossy()) {
                             match number {
                                 Number::Integer(i) => return Ok(i as _),
                                 Number::Float(f) => return Ok(f as _),

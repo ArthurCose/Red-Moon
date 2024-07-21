@@ -61,6 +61,7 @@ impl<'lua> Function<'lua> {
     /// ```
     pub fn call<A: IntoLuaMulti<'lua>, R: FromLuaMulti<'lua>>(&self, args: A) -> Result<R> {
         let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
 
         // translate args
         let mlua_multi = A::into_lua_multi(args, self.lua)?;
@@ -68,7 +69,7 @@ impl<'lua> Function<'lua> {
 
         // call function
         let results: red_moon::interpreter::MultiValue =
-            self.function_ref.call(red_moon_args, vm)?;
+            self.function_ref.call(red_moon_args, ctx)?;
 
         // translate results
         let mlua_multi = MultiValue::from_red_moon(self.lua, results);

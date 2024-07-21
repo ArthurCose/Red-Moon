@@ -70,7 +70,7 @@ impl ExecutionContext {
 
         match exec_data.heap.get(function_key).unwrap() {
             HeapValue::NativeFunction(function) => {
-                let results = match function.shallow_clone().call(args, vm) {
+                let results = match function.shallow_clone().call(args, &mut vm.context()) {
                     Ok(result) => result,
                     Err(err) => {
                         vm.execution_data.cache_pools.store_value_stack(value_stack);
@@ -218,7 +218,7 @@ impl ExecutionContext {
                                 old_stack_size + execution.value_stack.len();
 
                             // call the function and handle return values
-                            let mut return_values = match callback.call(args, vm) {
+                            let mut return_values = match callback.call(args, &mut vm.context()) {
                                 Ok(values) => values,
                                 Err(err) => return Err(Self::continue_unwind(vm, err)),
                             };

@@ -95,6 +95,12 @@ impl Clone for Vm {
     }
 }
 
+impl Default for Vm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Vm {
     pub fn new() -> Self {
         let mut gc = GarbageCollector::default();
@@ -356,7 +362,9 @@ impl Vm {
 
     pub fn create_native_function(
         &mut self,
-        callback: impl Fn(MultiValue, &mut Vm) -> Result<MultiValue, RuntimeError> + Clone + 'static,
+        callback: impl Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
+            + Clone
+            + 'static,
     ) -> FunctionRef {
         let heap = &mut self.execution_data.heap;
         let gc = &mut self.execution_data.gc;
@@ -377,60 +385,22 @@ impl Vm {
         FunctionRef(heap_ref)
     }
 
-    pub(crate) fn call_function_key<A: IntoMulti, R: FromMulti>(
-        &mut self,
-        function_key: HeapKey,
-        args: A,
-    ) -> Result<R, RuntimeError> {
-        let args = args.into_multi(self)?;
-
-        // must test validity of every arg, since invalid keys in the vm will cause a panic
-        let heap = &self.execution_data.heap;
-
-        for value in &args.values {
-            value.test_validity(heap)?;
-        }
-
-        let Some(value) = heap.get(function_key) else {
-            return Err(RuntimeErrorData::NotAFunction.into());
-        };
-
-        let old_stack_size = self.execution_data.tracked_stack_size;
-
-        let result = match value {
-            HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
-            HeapValue::Function(func) => {
-                let context =
-                    ExecutionContext::new_function_call(function_key, func.clone(), args, self);
-                self.execution_stack.push(context);
-                ExecutionContext::resume(self)
-            }
-            _ => ExecutionContext::new_value_call(function_key.into(), args, self)
-                .map_err(RuntimeError::from)
-                .and_then(|context| {
-                    self.execution_stack.push(context);
-                    ExecutionContext::resume(self)
-                }),
-        };
-
-        self.execution_data.tracked_stack_size = old_stack_size;
-
-        let multi = result?;
-        R::from_multi(multi, self)
-    }
-
+    #[inline]
     pub fn gc_used_memory(&self) -> usize {
         self.execution_data.gc.used_memory()
     }
 
+    #[inline]
     pub fn gc_is_running(&self) -> bool {
         self.execution_data.gc.is_running()
     }
 
+    #[inline]
     pub fn gc_stop(&mut self) {
         self.execution_data.gc.stop()
     }
 
+    #[inline]
     pub fn gc_restart(&mut self) {
         self.execution_data.gc.restart()
     }
@@ -465,13 +435,213 @@ impl Vm {
         );
     }
 
+    #[inline]
     pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
         &mut self.execution_data.gc.config
     }
+
+    #[inline]
+    pub fn context(&mut self) -> VmContext {
+        VmContext { vm: self }
+    }
 }
 
-impl Default for Vm {
-    fn default() -> Self {
-        Self::new()
+pub struct VmContext<'vm> {
+    pub(crate) vm: &'vm mut Vm,
+}
+
+impl<'vm> VmContext<'vm> {
+    pub fn clone_vm(&self) -> Vm {
+        self.vm.clone()
+    }
+
+    #[inline]
+    pub fn create_multi(&mut self) -> MultiValue {
+        self.vm.create_multi()
+    }
+
+    #[inline]
+    pub fn store_multi(&mut self, multivalue: MultiValue) {
+        self.vm.store_multi(multivalue)
+    }
+
+    #[inline]
+    #[cfg(feature = "instruction_exec_counts")]
+    pub fn instruction_exec_counts(&mut self) -> Vec<(&'static str, usize)> {
+        self.vm.instruction_exec_counts()
+    }
+
+    #[inline]
+    #[cfg(feature = "instruction_exec_counts")]
+    pub fn clear_instruction_exec_counts(&mut self) {
+        self.vm.clear_instruction_exec_counts();
+    }
+
+    #[inline]
+    pub fn limits(&self) -> &VmLimits {
+        self.vm.limits()
+    }
+
+    #[inline]
+    pub fn set_limits(&mut self, limits: VmLimits) {
+        self.vm.set_limits(limits);
+    }
+
+    #[inline]
+    pub fn default_environment(&self) -> TableRef {
+        self.vm.default_environment()
+    }
+
+    #[inline]
+    pub fn environment_up_value(&mut self) -> Option<TableRef> {
+        self.vm.environment_up_value()
+    }
+
+    #[inline]
+    pub fn string_metatable(&self) -> TableRef {
+        self.vm.string_metatable()
+    }
+
+    #[inline]
+    pub fn metatable_keys(&self) -> &MetatableKeys {
+        self.vm.metatable_keys()
+    }
+
+    #[inline]
+    pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {
+        self.vm.set_app_data(value)
+    }
+
+    #[inline]
+    pub fn app_data<T: 'static>(&self) -> Option<&T> {
+        self.vm.app_data()
+    }
+
+    #[inline]
+    pub fn app_data_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.vm.app_data_mut()
+    }
+
+    #[inline]
+    pub fn remove_app_data<T: 'static>(&mut self) -> Option<T> {
+        self.vm.remove_app_data()
+    }
+
+    #[inline]
+    pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
+        self.vm.intern_string(bytes)
+    }
+
+    #[inline]
+    pub fn create_table(&mut self) -> TableRef {
+        self.vm.create_table()
+    }
+
+    #[inline]
+    pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
+        self.vm.create_table_with_capacity(list, map)
+    }
+
+    /// If the environment is unset, the function will use the default environment
+    #[inline]
+    pub fn load_function<'a, Label, ByteStrings, B>(
+        &mut self,
+        label: Label,
+        environment: Option<TableRef>,
+        module: Module<ByteStrings>,
+    ) -> Result<FunctionRef, RuntimeError>
+    where
+        Label: Into<Rc<str>>,
+        B: AsRef<[u8]> + 'a,
+        ByteStrings: IntoIterator<Item = B>,
+    {
+        self.vm.load_function(label, environment, module)
+    }
+
+    #[inline]
+    pub fn create_native_function(
+        &mut self,
+        callback: impl Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
+            + Clone
+            + 'static,
+    ) -> FunctionRef {
+        self.vm.create_native_function(callback)
+    }
+
+    #[inline]
+    pub fn gc_used_memory(&self) -> usize {
+        self.vm.gc_used_memory()
+    }
+
+    #[inline]
+    pub fn gc_is_running(&self) -> bool {
+        self.vm.gc_is_running()
+    }
+
+    #[inline]
+    pub fn gc_stop(&mut self) {
+        self.vm.gc_stop()
+    }
+
+    #[inline]
+    pub fn gc_restart(&mut self) {
+        self.vm.gc_restart()
+    }
+
+    #[inline]
+    pub fn gc_step(&mut self, bytes: usize) {
+        self.vm.gc_step(bytes)
+    }
+
+    #[inline]
+    pub fn gc_collect(&mut self) {
+        self.vm.gc_collect()
+    }
+
+    #[inline]
+    pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
+        self.vm.gc_config_mut()
+    }
+
+    pub(crate) fn call_function_key<A: IntoMulti, R: FromMulti>(
+        &mut self,
+        function_key: HeapKey,
+        args: A,
+    ) -> Result<R, RuntimeError> {
+        let args = args.into_multi(self)?;
+
+        // must test validity of every arg, since invalid keys in the vm will cause a panic
+        let heap = &self.vm.execution_data.heap;
+
+        for value in &args.values {
+            value.test_validity(heap)?;
+        }
+
+        let Some(value) = heap.get(function_key) else {
+            return Err(RuntimeErrorData::NotAFunction.into());
+        };
+
+        let old_stack_size = self.vm.execution_data.tracked_stack_size;
+
+        let result = match value {
+            HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
+            HeapValue::Function(func) => {
+                let context =
+                    ExecutionContext::new_function_call(function_key, func.clone(), args, self.vm);
+                self.vm.execution_stack.push(context);
+                ExecutionContext::resume(self.vm)
+            }
+            _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm)
+                .map_err(RuntimeError::from)
+                .and_then(|context| {
+                    self.vm.execution_stack.push(context);
+                    ExecutionContext::resume(self.vm)
+                }),
+        };
+
+        self.vm.execution_data.tracked_stack_size = old_stack_size;
+
+        let multi = result?;
+        R::from_multi(multi, self)
     }
 }

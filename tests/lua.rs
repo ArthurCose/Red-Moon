@@ -25,14 +25,15 @@ fn valid() {
     let out = Rc::new(RefCell::new(Vec::new()));
 
     let mut vm = Vm::default();
-    impl_basic(&mut vm).unwrap();
+    let ctx = &mut vm.context();
+    impl_basic(ctx).unwrap();
 
-    let env = vm.default_environment();
+    let env = ctx.default_environment();
 
     // override print
     let out_capture = out.clone();
 
-    let print_ref = vm.create_native_function(move |args, vm| {
+    let print_ref = ctx.create_native_function(move |args, vm| {
         let len = args.len();
 
         let mut out = out_capture.borrow_mut();
@@ -63,7 +64,7 @@ fn valid() {
         MultiValue::pack((), vm)
     });
 
-    env.raw_set("print", print_ref, &mut vm).unwrap();
+    env.raw_set("print", print_ref, ctx).unwrap();
 
     // the actual tests
     let compiler = LuaCompiler::default();
@@ -73,9 +74,9 @@ fn valid() {
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         let module = compiler.compile(&source).expect(path);
-        let function_ref = vm.load_function(path, None, module).unwrap();
+        let function_ref = ctx.load_function(path, None, module).unwrap();
 
-        if let Err(err) = function_ref.call::<_, ()>((), &mut vm) {
+        if let Err(err) = function_ref.call::<_, ()>((), ctx) {
             panic!(
                 "{path}: {err}\n\n{}",
                 String::from_utf8_lossy(&out.borrow())
@@ -185,6 +186,7 @@ fn runtime_error() {
         vec![("divide_by_zero.lua.txt", RuntimeErrorData::DivideByZero)];
 
     let mut vm = Vm::new();
+    let ctx = &mut vm.context();
     let compiler = LuaCompiler::default();
 
     for (path, expected) in test_files {
@@ -192,11 +194,11 @@ fn runtime_error() {
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         let module = compiler.compile(&source).unwrap();
-        let function_ref = vm.load_function(path, None, module).unwrap();
+        let function_ref = ctx.load_function(path, None, module).unwrap();
 
         assert_eq!(
             function_ref
-                .call::<_, ()>(MultiValue::pack((), &mut vm).unwrap(), &mut vm)
+                .call::<_, ()>(MultiValue::pack((), ctx).unwrap(), ctx)
                 .err()
                 .map(|err| err.data),
             Some(expected),

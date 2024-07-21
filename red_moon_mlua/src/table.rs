@@ -60,7 +60,8 @@ impl<'lua> Table<'lua> {
         let value = value.into_lua(self.lua)?.into_red_moon();
 
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.set(key, value, vm)?;
+        let ctx = &mut vm.context();
+        self.table_ref.set(key, value, ctx)?;
 
         Ok(())
     }
@@ -93,7 +94,8 @@ impl<'lua> Table<'lua> {
         let key = key.into_lua(self.lua)?.into_red_moon();
 
         let vm = unsafe { self.lua.vm_mut() };
-        let red_moon_value = self.table_ref.get(key, vm)?;
+        let ctx = &mut vm.context();
+        let red_moon_value = self.table_ref.get(key, ctx)?;
 
         let value = Value::from_red_moon(self.lua, red_moon_value);
         V::from_lua(value, self.lua)
@@ -113,8 +115,9 @@ impl<'lua> Table<'lua> {
         let value = value.into_lua(self.lua)?.into_red_moon();
 
         let vm = unsafe { self.lua.vm_mut() };
-        let next_index = self.table_ref.len(vm)?;
-        self.table_ref.set(next_index, value, vm)?;
+        let ctx = &mut vm.context();
+        let next_index = self.table_ref.len(ctx)?;
+        self.table_ref.set(next_index, value, ctx)?;
 
         Ok(())
     }
@@ -129,15 +132,16 @@ impl<'lua> Table<'lua> {
         }
 
         let vm = unsafe { self.lua.vm_mut() };
-        let next_index = self.table_ref.len(vm)?;
+        let ctx = &mut vm.context();
+        let next_index = self.table_ref.len(ctx)?;
 
         if next_index == 0 {
             return V::from_lua(Nil, self.lua);
         }
 
         let index = next_index - 1;
-        let value = Value::from_red_moon(self.lua, self.table_ref.get(index, vm)?);
-        self.table_ref.set(index, Nil.into_red_moon(), vm)?;
+        let value = Value::from_red_moon(self.lua, self.table_ref.get(index, ctx)?);
+        self.table_ref.set(index, Nil.into_red_moon(), ctx)?;
 
         V::from_lua(value, self.lua)
     }
@@ -204,7 +208,8 @@ impl<'lua> Table<'lua> {
         let value = value.into_lua(self.lua)?.into_red_moon();
 
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.raw_set(key, value, vm)?;
+        let ctx = &mut vm.context();
+        self.table_ref.raw_set(key, value, ctx)?;
 
         Ok(())
     }
@@ -215,7 +220,8 @@ impl<'lua> Table<'lua> {
 
         let red_moon_value = {
             let vm = unsafe { self.lua.vm_mut() };
-            self.table_ref.raw_get(key, vm)?
+            let ctx = &mut vm.context();
+            self.table_ref.raw_get(key, ctx)?
         };
 
         let value = Value::from_red_moon(self.lua, red_moon_value);
@@ -232,7 +238,8 @@ impl<'lua> Table<'lua> {
 
         let value = value.into_lua(self.lua)?.into_red_moon();
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.raw_insert(idx, value, vm)?;
+        let ctx = &mut vm.context();
+        self.table_ref.raw_insert(idx, value, ctx)?;
 
         Ok(())
     }
@@ -242,8 +249,9 @@ impl<'lua> Table<'lua> {
         let value = value.into_lua(self.lua)?.into_red_moon();
 
         let vm = unsafe { self.lua.vm_mut() };
-        let next_index = self.table_ref.raw_len(vm)?;
-        self.table_ref.raw_set(next_index, value, vm)?;
+        let ctx = &mut vm.context();
+        let next_index = self.table_ref.raw_len(ctx)?;
+        self.table_ref.raw_set(next_index, value, ctx)?;
 
         Ok(())
     }
@@ -251,15 +259,16 @@ impl<'lua> Table<'lua> {
     /// Removes the last element from the table and returns it, without invoking metamethods.
     pub fn raw_pop<V: FromLua<'lua>>(&self) -> Result<V> {
         let vm = unsafe { self.lua.vm_mut() };
-        let next_index = self.table_ref.len(vm)?;
+        let ctx = &mut vm.context();
+        let next_index = self.table_ref.len(ctx)?;
 
         if next_index == 0 {
             return V::from_lua(Nil, self.lua);
         }
 
         let index = next_index - 1;
-        let value = Value::from_red_moon(self.lua, self.table_ref.raw_get(index, vm)?);
-        self.table_ref.raw_set(index, Nil.into_red_moon(), vm)?;
+        let value = Value::from_red_moon(self.lua, self.table_ref.raw_get(index, ctx)?);
+        self.table_ref.raw_set(index, Nil.into_red_moon(), ctx)?;
 
         V::from_lua(value, self.lua)
     }
@@ -282,8 +291,9 @@ impl<'lua> Table<'lua> {
                 }
 
                 let vm = unsafe { self.lua.vm_mut() };
+                let ctx = &mut vm.context();
                 self.table_ref
-                    .raw_remove::<red_moon::interpreter::Value>(idx, vm)?;
+                    .raw_remove::<red_moon::interpreter::Value>(idx, ctx)?;
 
                 Ok(())
             }
@@ -297,7 +307,8 @@ impl<'lua> Table<'lua> {
     /// This method is useful to clear the table while keeping its capacity.
     pub fn clear(&self) -> Result<()> {
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.clear(vm)?;
+        let ctx = &mut vm.context();
+        self.table_ref.clear(ctx)?;
 
         Ok(())
     }
@@ -309,13 +320,15 @@ impl<'lua> Table<'lua> {
     /// [`raw_len`]: #method.raw_len
     pub fn len(&self) -> Result<Integer> {
         let vm = unsafe { self.lua.vm_mut() };
-        Ok(self.table_ref.len(vm)? as _)
+        let ctx = &mut vm.context();
+        Ok(self.table_ref.len(ctx)? as _)
     }
 
     /// Returns the result of the Lua `#` operator, without invoking the `__len` metamethod.
     pub fn raw_len(&self) -> usize {
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.raw_len(vm).unwrap()
+        let ctx = &mut vm.context();
+        self.table_ref.raw_len(ctx).unwrap()
     }
 
     /// Returns `true` if the table is empty, without invoking metamethods.
@@ -329,7 +342,8 @@ impl<'lua> Table<'lua> {
 
         // Check hash part
         let vm = unsafe { self.lua.vm_mut() };
-        self.table_ref.is_map_empty(vm).unwrap()
+        let ctx = &mut vm.context();
+        self.table_ref.is_map_empty(ctx).unwrap()
     }
 
     /// Returns a reference to the metatable of this table, or `None` if no metatable is set.
@@ -337,7 +351,8 @@ impl<'lua> Table<'lua> {
     /// Unlike the `getmetatable` Lua function, this method ignores the `__metatable` field.
     pub fn get_metatable(&self) -> Option<Table<'lua>> {
         let vm = unsafe { self.lua.vm_mut() };
-        let metatable = self.table_ref.metatable(vm).unwrap();
+        let ctx = &mut vm.context();
+        let metatable = self.table_ref.metatable(ctx).unwrap();
 
         metatable.map(|table_ref| Table {
             lua: self.lua,
@@ -351,8 +366,9 @@ impl<'lua> Table<'lua> {
     /// nothing).
     pub fn set_metatable(&self, metatable: Option<Table<'lua>>) {
         let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
         self.table_ref
-            .set_metatable(metatable.as_ref().map(|t| &t.table_ref), vm)
+            .set_metatable(metatable.as_ref().map(|t| &t.table_ref), ctx)
             .unwrap();
     }
 
@@ -494,8 +510,9 @@ impl<'lua> Table<'lua> {
     pub(crate) fn is_array(&self) -> bool {
         let lua = self.lua;
         let vm = unsafe { lua.vm_mut() };
+        let ctx = &mut vm.context();
 
-        self.table_ref.metatable(vm).unwrap().as_ref() == Some(lua.array_metatable_ref())
+        self.table_ref.metatable(ctx).unwrap().as_ref() == Some(lua.array_metatable_ref())
     }
 
     pub(crate) fn fmt_pretty(
@@ -554,8 +571,9 @@ where
 {
     fn eq(&self, other: &[T]) -> bool {
         let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
 
-        let len = self.table_ref.raw_len(vm).unwrap();
+        let len = self.table_ref.raw_len(ctx).unwrap();
 
         if len != other.len() {
             return false;
@@ -564,7 +582,7 @@ where
         #[allow(clippy::needless_range_loop)]
         for i in 0..len {
             let red_moon_val: red_moon::interpreter::Value =
-                self.table_ref.raw_get(i + 1, vm).unwrap();
+                self.table_ref.raw_get(i + 1, ctx).unwrap();
 
             let val = Value::from_red_moon(self.lua, red_moon_val);
             let Ok(other_val) = other[i].clone().into_lua(self.lua) else {
@@ -778,9 +796,10 @@ where
         let res = (|| -> Result<Option<(K, V)>> {
             let lua = self.table.lua;
             let vm = unsafe { lua.vm_mut() };
+            let ctx = &mut vm.context();
 
             let Some((key, value)): Option<(RedMoonValue, RedMoonValue)> =
-                self.table.table_ref.next(prev_key.into_red_moon(), vm)?
+                self.table.table_ref.next(prev_key.into_red_moon(), ctx)?
             else {
                 return Ok(None);
             };

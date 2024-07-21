@@ -27,4 +27,4 @@ pub use multi::{FromArg, FromArgs, FromMulti, IntoMulti, MultiValue};
 pub use string_ref::StringRef;
 pub use table_ref::TableRef;
 pub use value::{FromValue, IntoValue, Value};
-pub use vm::Vm;
+pub use vm::{Vm, VmContext, VmLimits};

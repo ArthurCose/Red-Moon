@@ -1,27 +1,27 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{IntoValue, Vm};
+use crate::interpreter::{IntoValue, VmContext};
 
 use cpu_time::ProcessTime;
 
-pub fn impl_os(vm: &mut Vm) -> Result<(), RuntimeError> {
-    let os = vm.create_table();
+pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    let os = ctx.create_table();
 
     // clock
-    let clock = vm.create_native_function(|mut args, vm| {
+    let clock = ctx.create_native_function(|mut args, ctx| {
         args.clear();
 
         let duration = ProcessTime::try_now()
             .map(|t| t.as_duration())
             .unwrap_or_default();
 
-        args.push_front(duration.as_secs_f64().into_value(vm)?);
+        args.push_front(duration.as_secs_f64().into_value(ctx)?);
 
         Ok(args)
     });
-    os.raw_set("clock", clock, vm)?;
+    os.raw_set("clock", clock, ctx)?;
 
-    let env = vm.default_environment();
-    env.set("os", os, vm)?;
+    let env = ctx.default_environment();
+    env.set("os", os, ctx)?;
 
     Ok(())
 }
