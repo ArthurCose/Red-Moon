@@ -6,6 +6,7 @@ use red_moon::languages::lua::{coerce_integer, parse_number, LuaCompiler};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::panic::Location;
+use std::rc::Rc;
 use std::sync::Arc;
 
 const MULTIVALUE_POOL_SIZE: usize = 64;
@@ -36,6 +37,10 @@ pub struct Lua {
     /// - Creating a string, creating a table, accessing or setting values, should never use vm longer than a function call and never overlap
     /// - Native function calls pass `&mut VM`` as a parameter, we're safe to use our UnsafeCell in there
     vm: UnsafeCell<Vm>,
+    /// Wildly unsafe,
+    /// we try to place this wherever a value can be obtained from the VM which could chain into grabbing a function that could be called.
+    /// This will usually match places where Lua::modified should be updated, unless a value/table isn't returned.
+    self_ptr: Rc<Cell<*const Lua>>,
     snapshots: Vec<Snapshot>,
     modified: Cell<bool>,
     compiler: LuaCompiler,
@@ -58,6 +63,7 @@ impl Default for Lua {
 
         Self {
             vm: UnsafeCell::new(vm),
+            self_ptr: Rc::new(Cell::new(std::ptr::null())),
             snapshots: Default::default(),
             modified: Cell::new(false),
             compiler: Default::default(),
@@ -168,6 +174,7 @@ impl Lua {
     /// [`StdLib`]: crate::StdLib
     pub fn load_from_std_lib(&self, libs: StdLib) -> Result<()> {
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         if libs.contains(StdLib::TABLE) {
             impl_table(unsafe { self.vm_mut() })?;
@@ -200,6 +207,7 @@ impl Lua {
     #[track_caller]
     pub fn load<'lua, 'a>(&'lua self, chunk: impl AsChunk<'lua, 'a>) -> Chunk<'lua, 'a> {
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         let caller = Location::caller();
 
@@ -213,6 +221,7 @@ impl Lua {
 
     pub fn environment(&self) -> Result<Table> {
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         let vm = unsafe { self.vm_mut() };
         let Some(table_ref) = vm.environment_up_value() else {
@@ -356,12 +365,15 @@ impl Lua {
         R: IntoLuaMulti<'lua>,
         F: Fn(&'lua Lua, A) -> Result<R> + 'static,
     {
+        let self_ptr = self.self_ptr.clone();
+        self_ptr.set(self);
+
         let func = std::rc::Rc::new(func);
 
         let vm = unsafe { self.vm_mut() };
-        let function_ref = vm.create_native_function(move |args, vm| {
-            let lua = vm.app_data::<*const Lua>().unwrap();
-            let lua = unsafe { &**lua };
+        let function_ref = vm.create_native_function(move |args, _| {
+            // wildly unsafe, see Lua::self_ptr's definition
+            let lua = unsafe { &*self_ptr.get() };
 
             // translate args
             let mlua_multi = MultiValue::from_red_moon(lua, args);
@@ -387,6 +399,7 @@ impl Lua {
         let table_ref = vm.default_environment();
 
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         Table {
             lua: self,
@@ -542,6 +555,7 @@ impl Lua {
         T: FromLua<'lua>,
     {
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         let resources = self.resources.borrow();
         let value = resources
@@ -615,6 +629,7 @@ impl Lua {
         }
 
         self.modified.set(true);
+        self.self_ptr.set(self);
 
         let red_moon_value = {
             let resources = self.resources.borrow();
