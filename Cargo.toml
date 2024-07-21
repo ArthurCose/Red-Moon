@@ -33,3 +33,6 @@ debug = "limited"
 [features]
 # separate feature as it slows down the interpreter
 instruction_exec_counts = []
+
+[lints.clippy]
+redundant_closure = "allow"
