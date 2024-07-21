@@ -49,6 +49,9 @@ empty return
 recursion:
 6
 
+mixed tail calls:
+6
+
 method:
 table	2	3
 

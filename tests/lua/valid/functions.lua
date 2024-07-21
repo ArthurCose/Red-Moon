@@ -134,13 +134,19 @@ print(foo())
 
 
 print("\nrecursion:")
-local function recursive(a)
-  if a > 5 then
+local function recursive(a, limit)
+  if a > limit then
     return a
   end
-  return recursive(a + 1)
+  return recursive(a + 1, limit)
 end
-print(recursive(1))
+print(recursive(1, 5))
+
+print("\nmixed tail calls:")
+local function tail_call()
+  return recursive(1, 5)
+end
+print(tail_call())
 
 print("\nmethod:")
 local object = {}

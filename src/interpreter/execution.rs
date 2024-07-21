@@ -316,6 +316,7 @@ impl ExecutionContext {
                                 call.up_values.clone_from(&func.up_values);
                                 call.function_definition = func.definition.clone();
                                 call.next_instruction_index = 0;
+                                call.register_base = call.stack_start + 2 + arg_count as usize;
 
                                 execution.value_stack.chip(
                                     call.stack_start,
