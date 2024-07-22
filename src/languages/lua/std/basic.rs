@@ -158,10 +158,15 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // getmetatable
     let getmetatable = ctx.create_native_function(|args, ctx| {
-        let table: TableRef = args.unpack_args(ctx)?;
-        let metatable = table.metatable(ctx)?;
+        let value: Value = args.unpack_args(ctx)?;
 
-        if let Some(metatable) = table.metatable(ctx)? {
+        let metatable = match value {
+            Value::String(_) => Some(ctx.string_metatable()),
+            Value::Table(table) => table.metatable(ctx)?,
+            _ => return MultiValue::pack(Value::Nil, ctx),
+        };
+
+        if let Some(metatable) = &metatable {
             let metatable_key = ctx.metatable_keys().metatable.clone();
             let metatable_value = metatable.raw_get::<_, Option<Value>>(metatable_key, ctx)?;
 
