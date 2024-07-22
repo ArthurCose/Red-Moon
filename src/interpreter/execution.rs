@@ -126,8 +126,7 @@ impl ExecutionContext {
 
                     // expects the return values to be stored in the same format as args
 
-                    let register_base = call.register_base;
-                    let stack_start = register_base + registry_index;
+                    let stack_start = call.register_base + registry_index;
 
                     let StackValue::HeapValue(heap_key) = execution.value_stack.get(stack_start)
                     else {
@@ -178,7 +177,7 @@ impl ExecutionContext {
                             // handle tail call
                             let mut return_mode = return_mode;
                             let mut stack_start = stack_start;
-                            let mut register_base = register_base;
+                            let mut register_base = call.register_base;
 
                             if return_mode == ReturnMode::TailCall && execution.call_stack.len() > 1
                             {
