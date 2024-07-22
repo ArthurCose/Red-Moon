@@ -38,8 +38,9 @@ fn main2() -> Result<(), ()> {
 
     lua_std::impl_basic(ctx).unwrap();
     lua_std::impl_math(ctx).unwrap();
-    lua_std::impl_table(ctx).unwrap();
     lua_std::impl_os(ctx).unwrap();
+    lua_std::impl_string(ctx).unwrap();
+    lua_std::impl_table(ctx).unwrap();
 
     load_args(ctx, &options.args);
 

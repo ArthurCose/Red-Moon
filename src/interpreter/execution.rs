@@ -6,7 +6,7 @@ use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
 use super::Value;
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
-use crate::languages::lua::{coerce_integer, parse_number};
+use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
 use std::rc::Rc;
 
@@ -1354,21 +1354,19 @@ impl CallContext {
         metamethod_key: StackValue,
         metamethod_params: (Register, StackValue, StackValue),
         value: StackValue,
-        coerce_value: impl Fn(StackValue) -> T,
-        coerce_heap_value: impl Fn(&mut Heap, HeapKey) -> T,
-    ) -> Result<T, CallResult> {
+        coerce_value: impl Fn(StackValue) -> Result<T, RuntimeErrorData>,
+    ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
         match value {
             StackValue::HeapValue(heap_key) => {
-                if let Some(call_result) = self.binary_metamethod(
+                match self.binary_metamethod(
                     heap,
                     value_stack,
                     (heap_key, metamethod_key),
                     metamethod_params,
                 ) {
-                    return Err(call_result);
+                    Some(call_result) => Ok(ValueOrCallResult::CallResult(call_result)),
+                    None => Err(RuntimeErrorData::InvalidArithmetic),
                 }
-
-                Ok(coerce_heap_value(heap, heap_key))
             }
             StackValue::Pointer(heap_key) => {
                 let HeapValue::StackValue(value) = heap.get(heap_key).unwrap() else {
@@ -1383,10 +1381,12 @@ impl CallContext {
                     metamethod_params,
                     value,
                     coerce_value,
-                    coerce_heap_value,
                 )
             }
-            _ => Ok(coerce_value(value)),
+            _ => match coerce_value(value) {
+                Ok(coerced_value) => Ok(ValueOrCallResult::Value(coerced_value)),
+                Err(err) => Err(err),
+            },
         }
     }
 
@@ -1408,11 +1408,10 @@ impl CallContext {
             metamethod_key,
             (dest, value_a, value_b),
             value_a,
-            |value| value,
-            |heap, heap_key| heap_value_as_number(heap, heap_key),
-        ) {
-            Ok(value) => value,
-            Err(call_result) => return Ok(Some(call_result)),
+            |value| Ok(value),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         let resolved_b = match self.resolve_binary_operand(
@@ -1420,11 +1419,10 @@ impl CallContext {
             metamethod_key,
             (dest, value_a, value_b),
             value_b,
-            |value| value,
-            |heap, heap_key| heap_value_as_number(heap, heap_key),
-        ) {
-            Ok(value) => value,
-            Err(call_result) => return Ok(Some(call_result)),
+            |value| Ok(value),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         let value = match (resolved_a, resolved_b) {
@@ -1468,10 +1466,9 @@ impl CallContext {
             (dest, value_a, value_b),
             value_a,
             arithmetic_cast_float,
-            heap_value_as_float,
-        ) {
-            Ok(result) => result?,
-            Err(call_result) => return Ok(Some(call_result)),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         let float_b = match self.resolve_binary_operand(
@@ -1480,10 +1477,9 @@ impl CallContext {
             (dest, value_a, value_b),
             value_b,
             arithmetic_cast_float,
-            heap_value_as_float,
-        ) {
-            Ok(result) => result?,
-            Err(call_result) => return Ok(Some(call_result)),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         value_stack.set(
@@ -1512,10 +1508,9 @@ impl CallContext {
             (dest, value_a, value_b),
             value_a,
             arithmetic_cast_integer,
-            heap_value_as_integer,
-        ) {
-            Ok(result) => result?,
-            Err(call_result) => return Ok(Some(call_result)),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         let int_b = match self.resolve_binary_operand(
@@ -1524,10 +1519,9 @@ impl CallContext {
             (dest, value_a, value_b),
             value_b,
             arithmetic_cast_integer,
-            heap_value_as_integer,
-        ) {
-            Ok(result) => result?,
-            Err(call_result) => return Ok(Some(call_result)),
+        )? {
+            ValueOrCallResult::Value(value) => value,
+            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
         };
 
         value_stack.set(
@@ -1921,7 +1915,6 @@ fn coerce_stack_value_to_integer(
             coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation(float))
         }
         StackValue::Integer(int) => Ok(int),
-        StackValue::HeapValue(key) => cast_integer(heap_value_as_number(heap, key), generate_err),
         StackValue::Pointer(key) => {
             let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
                 unreachable!();
@@ -1929,7 +1922,7 @@ fn coerce_stack_value_to_integer(
 
             coerce_stack_value_to_integer(heap, value, generate_err)
         }
-        StackValue::Nil | StackValue::Bool(_) => Err(generate_err()),
+        StackValue::HeapValue(_) | StackValue::Nil | StackValue::Bool(_) => Err(generate_err()),
     }
 }
 
@@ -1939,29 +1932,6 @@ fn arithmetic_cast_float(value: StackValue) -> Result<f64, RuntimeErrorData> {
 
 fn arithmetic_cast_integer(value: StackValue) -> Result<i64, RuntimeErrorData> {
     cast_integer(value, || RuntimeErrorData::InvalidArithmetic)
-}
-
-fn heap_value_as_number(heap: &Heap, heap_key: HeapKey) -> StackValue {
-    let Some(HeapValue::Bytes(string)) = heap.get(heap_key) else {
-        return StackValue::Nil;
-    };
-
-    let Ok(s) = std::str::from_utf8(string.as_bytes()) else {
-        return StackValue::Nil;
-    };
-
-    match parse_number(s) {
-        Some(n) => n.into(),
-        None => StackValue::Nil,
-    }
-}
-
-fn heap_value_as_float(heap: &mut Heap, heap_key: HeapKey) -> Result<f64, RuntimeErrorData> {
-    arithmetic_cast_float(heap_value_as_number(heap, heap_key))
-}
-
-fn heap_value_as_integer(heap: &mut Heap, heap_key: HeapKey) -> Result<i64, RuntimeErrorData> {
-    arithmetic_cast_integer(heap_value_as_number(heap, heap_key))
 }
 
 // resolves __call metamethod chains and stack values promoted to heap values
@@ -2000,4 +1970,9 @@ fn resolve_call(
             return Err(RuntimeErrorData::MetatableChainTooLong);
         }
     }
+}
+
+enum ValueOrCallResult<T> {
+    Value(T),
+    CallResult(CallResult),
 }

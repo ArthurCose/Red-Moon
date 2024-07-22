@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationError, RuntimeErrorData, SyntaxError};
 use red_moon::interpreter::{MultiValue, Value, Vm};
-use red_moon::languages::lua::std::impl_basic;
+use red_moon::languages::lua::std::{impl_basic, impl_string};
 use red_moon::languages::lua::{LuaCompiler, LuaTokenLabel};
 use std::cell::RefCell;
 use std::io::Write;
@@ -27,6 +27,7 @@ fn valid() {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
     impl_basic(ctx).unwrap();
+    impl_string(ctx).unwrap();
 
     let env = ctx.default_environment();
 
