@@ -164,18 +164,6 @@ pub enum Instruction {
     /// (dest, skip)
     CopyUnsizedVariadic(Register, Register),
 
-    /// Promotes a stack value to a heap value if it's not already
-    ///
-    /// Passes as an up value to the next Closure instruction
-    ///
-    /// (dest, src)
-    Capture(Register, Register),
-
-    /// Copies an up value to the next Closure instruction
-    ///
-    /// (dest, src)
-    CaptureUpValue(Register, Register),
-
     /// Loads a function onto the stack, creates a new function if values were captured
     ///
     /// (dest, function_index)
@@ -339,8 +327,6 @@ impl Instruction {
             Instruction::CopyArgs(_, _) => "CopyArgs",
             Instruction::CopyVariadic(_, _, _) => "CopyVariadic",
             Instruction::CopyUnsizedVariadic(_, _) => "CopyUnsizedVariadic",
-            Instruction::Capture(_, _) => "Capture",
-            Instruction::CaptureUpValue(_, _) => "CaptureUpValue",
             Instruction::Closure(_, _) => "Closure",
             Instruction::ClearUpValue(_) => "ClearUpValue",
             Instruction::CopyUpValue(_, _) => "CopyUpValue",

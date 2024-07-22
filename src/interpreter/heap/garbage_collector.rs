@@ -213,10 +213,6 @@ impl GarbageCollector {
 
         // mark the stack
         for execution in execution_stack {
-            for value in execution.pending_captures.iter() {
-                self.mark_stack_value(value);
-            }
-
             for value in execution.value_stack.iter() {
                 self.mark_stack_value(value);
             }

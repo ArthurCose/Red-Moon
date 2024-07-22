@@ -4,7 +4,7 @@ use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
 use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
-use super::Value;
+use super::{UpValueSource, Value};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
 use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
@@ -19,7 +19,6 @@ enum CallResult {
 pub(crate) struct ExecutionContext {
     pub(crate) call_stack: Vec<CallContext>,
     pub(crate) value_stack: ValueStack,
-    pub(crate) pending_captures: ValueStack,
 }
 
 impl ExecutionContext {
@@ -50,7 +49,6 @@ impl ExecutionContext {
         Self {
             call_stack,
             value_stack,
-            pending_captures: exec_data.cache_pools.create_short_value_stack(),
         }
     }
 
@@ -100,12 +98,9 @@ impl ExecutionContext {
             _ => unreachable!(),
         }
 
-        let exec_data = &mut vm.execution_data;
-
         Ok(Self {
             call_stack,
             value_stack,
-            pending_captures: exec_data.cache_pools.create_short_value_stack(),
         })
     }
 
@@ -117,11 +112,7 @@ impl ExecutionContext {
         let mut exec_data = &mut vm.execution_data;
 
         while let Some(call) = execution.call_stack.last_mut() {
-            let result = match call.resume(
-                &mut execution.value_stack,
-                &mut execution.pending_captures,
-                exec_data,
-            ) {
+            let result = match call.resume(&mut execution.value_stack, exec_data) {
                 Ok(result) => result,
                 Err(err) => return Err(Self::unwind_error(vm, err)),
             };
@@ -539,7 +530,6 @@ impl CallContext {
     fn resume(
         &mut self,
         value_stack: &mut ValueStack,
-        pending_captures: &mut ValueStack,
         exec_data: &mut ExecutionAccessibleData,
     ) -> Result<CallResult, RuntimeErrorData> {
         let definition = &self.function_definition;
@@ -850,38 +840,6 @@ impl CallContext {
                         }
                     }
                 }
-                Instruction::Capture(dest, src) => {
-                    let mut value = value_stack.get(self.register_base + src as usize);
-
-                    if !matches!(value, StackValue::Pointer(_)) {
-                        // move the stack value to the heap
-                        let heap_key = heap.create(gc, HeapValue::StackValue(value));
-                        value = StackValue::Pointer(heap_key);
-                        value_stack.set(self.register_base + src as usize, value);
-                    }
-
-                    pending_captures.set(dest as usize, value);
-
-                    if gc.should_step() {
-                        return Ok(CallResult::StepGc);
-                    }
-                }
-                Instruction::CaptureUpValue(dest, src) => {
-                    let mut value = self.up_values.get(src as usize);
-
-                    if !matches!(value, StackValue::Pointer(_)) {
-                        // move the stack value to the heap
-                        let heap_key = heap.create(gc, HeapValue::StackValue(value));
-                        value = StackValue::Pointer(heap_key);
-                        self.up_values.set(src as usize, value);
-                    }
-
-                    pending_captures.set(dest as usize, value);
-
-                    if gc.should_step() {
-                        return Ok(CallResult::StepGc);
-                    }
-                }
                 Instruction::Closure(dest, function_index) => {
                     let Some(&heap_key) = definition.functions.get(function_index as usize) else {
                         return Err(RuntimeErrorData::IllegalInstruction(
@@ -889,22 +847,58 @@ impl CallContext {
                         ));
                     };
 
-                    if pending_captures.is_empty() {
+                    let HeapValue::Function(func) = heap.get(heap_key).unwrap() else {
+                        unreachable!()
+                    };
+
+                    if func.definition.up_values.is_empty() {
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
                     } else {
-                        let HeapValue::Function(func) = heap.get(heap_key).unwrap() else {
-                            unreachable!()
-                        };
-
                         // copy the function to pass captures
                         let mut func = func.clone();
 
+                        // resolve captures
                         let mut up_values = exec_data.cache_pools.create_short_value_stack();
-                        std::mem::swap(pending_captures, &mut up_values);
+
+                        for capture_source in &func.definition.up_values {
+                            let value = match capture_source {
+                                UpValueSource::Stack(src) => {
+                                    let src_index = self.register_base + *src as usize;
+                                    let mut value = value_stack.get(src_index);
+
+                                    if !matches!(value, StackValue::Pointer(_)) {
+                                        // move the stack value to the heap
+                                        let heap_key =
+                                            heap.create(gc, HeapValue::StackValue(value));
+                                        value = StackValue::Pointer(heap_key);
+                                        value_stack.set(src_index, value);
+                                    }
+
+                                    value
+                                }
+                                UpValueSource::UpValue(src) => {
+                                    let src_index = *src as usize;
+                                    let mut value = self.up_values.get(src_index);
+
+                                    if !matches!(value, StackValue::Pointer(_)) {
+                                        // move the stack value to the heap
+                                        let heap_key =
+                                            heap.create(gc, HeapValue::StackValue(value));
+                                        value = StackValue::Pointer(heap_key);
+                                        self.up_values.set(src_index, value);
+                                    }
+
+                                    value
+                                }
+                            };
+
+                            up_values.push(value);
+                        }
+
                         func.up_values = Rc::new(up_values);
 
+                        // store the new function
                         let heap_key = heap.create(gc, HeapValue::Function(func));
-
                         value_stack.set(self.register_base + dest as usize, heap_key.into());
 
                         if gc.should_step() {

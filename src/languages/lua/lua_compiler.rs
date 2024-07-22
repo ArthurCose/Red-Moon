@@ -3,7 +3,7 @@ use super::lua_parsing::{parse_string, parse_unsigned_number};
 use super::{LuaToken, LuaTokenLabel, Number};
 use crate::errors::{LuaCompilationError, SyntaxError};
 use crate::interpreter::{
-    Chunk, ConstantIndex, Instruction, Module, Register, ReturnMode, SourceMapping,
+    Chunk, ConstantIndex, Instruction, Module, Register, ReturnMode, SourceMapping, UpValueSource,
 };
 use crate::FastHashMap;
 use std::borrow::Cow;
@@ -293,6 +293,7 @@ where
         self.module.main = self.module.chunks.len();
         self.module.chunks.push(Chunk {
             env: Some(0),
+            up_values: Vec::new(),
             dependencies: self.top_function.dependencies,
             byte_strings: self.top_function.strings,
             numbers: self.top_function.numbers,
@@ -1277,8 +1278,9 @@ where
 
         // resolve captures
         let mut env = None;
+        let mut captures = Vec::with_capacity(function.captures.len());
 
-        for (dest, capture) in function.captures.into_iter().enumerate() {
+        for capture in function.captures {
             let up_value_or_stack = if capture.parent == 0 {
                 capture.parent_variable
             } else {
@@ -1290,23 +1292,22 @@ where
                 )?)
             };
 
-            let instructions = &mut self.top_function.instructions;
-            let instruction = match up_value_or_stack {
-                UpValueOrStack::UpValue(src) => Instruction::CaptureUpValue(dest as _, src),
-                UpValueOrStack::Stack(src) => Instruction::Capture(dest as _, src),
-            };
-            instructions.push(instruction);
-
             // identify _ENV
             if capture.token.content == "_ENV" {
-                env = Some(dest);
+                env = Some(captures.len());
             }
+
+            captures.push(match up_value_or_stack {
+                UpValueOrStack::UpValue(src) => UpValueSource::UpValue(src),
+                UpValueOrStack::Stack(src) => UpValueSource::Stack(src),
+            })
         }
 
         // store our processed function in the module
         let chunk_index = self.module.chunks.len();
         self.module.chunks.push(Chunk {
             env,
+            up_values: captures,
             byte_strings: function.strings,
             numbers: function.numbers,
             dependencies: function.dependencies,

@@ -1,5 +1,10 @@
-use super::Instruction;
+use super::{Instruction, Register};
 use crate::languages::line_and_col;
+
+pub enum UpValueSource {
+    Stack(Register),
+    UpValue(Register),
+}
 
 #[derive(Debug, PartialEq)]
 pub struct SourceMapping {
@@ -25,6 +30,7 @@ pub struct Chunk<ByteStrings> {
     /// If this is the main chunk, it will be used to load the initial environment.
     /// On other chunks it will be used to read or overwrite the environment.
     pub env: Option<usize>,
+    pub up_values: Vec<UpValueSource>,
     pub byte_strings: ByteStrings,
     pub numbers: Vec<i64>,
     pub instructions: Vec<Instruction>,

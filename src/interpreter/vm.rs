@@ -347,6 +347,7 @@ impl Vm {
                     definition: Rc::new(FunctionDefinition {
                         label: label.clone(),
                         env: chunk.env,
+                        up_values: chunk.up_values,
                         byte_strings,
                         numbers: chunk.numbers,
                         functions,

@@ -1,13 +1,14 @@
 use super::heap::HeapKey;
 use super::instruction::Instruction;
 use super::value_stack::ValueStack;
-use super::SourceMapping;
+use super::{SourceMapping, UpValueSource};
 use crate::errors::StackTraceFrame;
 use std::rc::Rc;
 
 pub(crate) struct FunctionDefinition {
     pub(crate) label: Rc<str>,
     pub(crate) env: Option<usize>,
+    pub(crate) up_values: Vec<UpValueSource>,
     pub(crate) byte_strings: Vec<HeapKey>,
     pub(crate) numbers: Vec<i64>,
     pub(crate) functions: Vec<HeapKey>,
@@ -20,6 +21,8 @@ impl FunctionDefinition {
         let mut size = std::mem::size_of::<Self>();
         // label: weak count + strong count + data
         size += std::mem::size_of::<usize>() * 2 + self.label.len();
+        // byte_strings
+        size += self.up_values.len() * std::mem::size_of::<UpValueSource>();
         // byte_strings
         size += self.byte_strings.len() * std::mem::size_of::<HeapKey>();
         // numbers

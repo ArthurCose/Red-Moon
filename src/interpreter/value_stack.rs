@@ -86,10 +86,6 @@ impl ValueStack {
         up_values
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-
     pub(crate) fn len(&self) -> usize {
         self.values.len()
     }

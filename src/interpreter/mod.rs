@@ -22,7 +22,7 @@ pub use function_ref::FunctionRef;
 pub use heap::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use lazy_arg::LazyArg;
-pub use module::{Chunk, Module, SourceMapping};
+pub use module::{UpValueSource, Chunk, Module, SourceMapping};
 pub use multi::{FromArg, FromArgs, FromMulti, IntoMulti, MultiValue};
 pub use string_ref::StringRef;
 pub use table_ref::TableRef;
