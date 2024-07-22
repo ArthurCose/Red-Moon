@@ -1068,30 +1068,37 @@ impl CallContext {
                     }
                 }
                 Instruction::IntegerDivision(dest, a, b) => {
+                    let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
-                    match value_b {
-                        StackValue::Integer(0) => return Err(RuntimeErrorData::DivideByZero),
-                        StackValue::Float(float) => {
-                            if float as i64 == 0 {
+                    let value = match (value_a, value_b) {
+                        (StackValue::Integer(a), StackValue::Integer(b)) => {
+                            if b == 0 {
                                 return Err(RuntimeErrorData::DivideByZero);
                             }
+                            StackValue::Integer(a / b)
                         }
-                        _ => {}
-                    }
+                        (StackValue::Float(a), StackValue::Float(b)) => StackValue::Float(a / b),
+                        (StackValue::Float(a), StackValue::Integer(b)) => {
+                            StackValue::Float((a / b as f64).trunc())
+                        }
+                        (StackValue::Integer(a), StackValue::Float(b)) => {
+                            StackValue::Float((a as f64 / b).trunc())
+                        }
+                        _ => {
+                            let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
 
-                    let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
+                            return self
+                                .try_binary_metamethods(
+                                    (heap, value_stack),
+                                    metamethod_key,
+                                    (dest, value_a, value_b),
+                                )
+                                .ok_or_else(|| RuntimeErrorData::InvalidArithmetic);
+                        }
+                    };
 
-                    if let Some(call_result) = self.binary_number_operation(
-                        (heap, value_stack),
-                        (dest, a, b),
-                        metamethod_key,
-                        |a, b| a / b,
-                        // lua seems to preserve floats unlike bitwise operators
-                        |a, b| (a / b).trunc(),
-                    )? {
-                        return Ok(call_result);
-                    }
+                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::Modulus(dest, a, b) => {
                     let metamethod_key = exec_data.metatable_keys.modulus.0.key().into();
