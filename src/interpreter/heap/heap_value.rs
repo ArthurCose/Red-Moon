@@ -18,7 +18,9 @@ impl HeapValue {
         match self {
             HeapValue::StackValue(_) => std::mem::size_of::<Self>(),
             HeapValue::Bytes(bytes) => bytes.heap_size() + std::mem::size_of::<Self>(),
-            HeapValue::Table(table) => table.heap_size() + std::mem::size_of::<Self>(),
+            HeapValue::Table(table) => {
+                table.heap_size() + std::mem::size_of::<Table>() + std::mem::size_of::<Self>()
+            }
             HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
             HeapValue::Function(function) => function.heap_size() + std::mem::size_of::<Self>(),
         }
