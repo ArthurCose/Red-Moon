@@ -76,8 +76,8 @@ impl Clone for ValueStack {
 }
 
 impl ValueStack {
-    pub(crate) fn gc_size(&self) -> usize {
-        std::mem::size_of::<Self>() + self.values.len() * std::mem::size_of::<StackValue>()
+    pub(crate) fn heap_size(&self) -> usize {
+        self.values.len() * std::mem::size_of::<StackValue>()
     }
 
     pub(crate) fn clone_using(&self, short_value_stacks: &VecCell<ValueStack>) -> ValueStack {

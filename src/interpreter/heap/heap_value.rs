@@ -17,14 +17,10 @@ impl HeapValue {
     pub(crate) fn gc_size(&self) -> usize {
         match self {
             HeapValue::StackValue(_) => std::mem::size_of::<Self>(),
-            HeapValue::Bytes(bytes) => {
-                bytes.gc_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(bytes)
-            }
-            HeapValue::Table(table) => table.gc_size() + std::mem::size_of::<Self>(),
+            HeapValue::Bytes(bytes) => bytes.heap_size() + std::mem::size_of::<Self>(),
+            HeapValue::Table(table) => table.heap_size() + std::mem::size_of::<Self>(),
             HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
-            HeapValue::Function(function) => {
-                function.gc_size() + std::mem::size_of::<Self>() - std::mem::size_of_val(function)
-            }
+            HeapValue::Function(function) => function.heap_size() + std::mem::size_of::<Self>(),
         }
     }
 }

@@ -17,8 +17,8 @@ impl Table {
     // index + bucket, could use verification
     pub(crate) const MAP_ELEMENT_SIZE: usize = std::mem::size_of::<usize>() + BUCKET_SIZE;
 
-    pub(crate) fn gc_size(&self) -> usize {
-        let mut size = std::mem::size_of::<Self>();
+    pub(crate) fn heap_size(&self) -> usize {
+        let mut size = 0;
         // map
         size += self.map.len() * Self::MAP_ELEMENT_SIZE;
         // list

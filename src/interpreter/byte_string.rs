@@ -4,8 +4,8 @@ use std::rc::Rc;
 pub struct ByteString(pub(crate) Rc<[u8]>);
 
 impl ByteString {
-    pub(crate) fn gc_size(&self) -> usize {
-        let mut size = std::mem::size_of::<Self>();
+    pub(crate) fn heap_size(&self) -> usize {
+        let mut size = 0;
         // label: weak count + strong count + data
         size += std::mem::size_of::<usize>() * 2 + self.0.len();
         size
