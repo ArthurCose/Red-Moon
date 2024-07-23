@@ -207,8 +207,13 @@ impl ExecutionContext {
                             exec_data.tracked_stack_size =
                                 old_stack_size + execution.value_stack.len();
 
-                            // call the function and handle return values
-                            let mut return_values = match callback.call(args, &mut vm.context()) {
+                            // call the function
+                            let result = callback.call(args, &mut vm.context());
+
+                            // revert tracked stack size before handling the result
+                            vm.execution_data.tracked_stack_size = old_stack_size;
+
+                            let mut return_values = match result {
                                 Ok(values) => values,
                                 Err(err) => return Err(Self::continue_unwind(vm, err)),
                             };
@@ -216,9 +221,6 @@ impl ExecutionContext {
                             // juggling lifetimes
                             execution = vm.execution_stack.last_mut().unwrap();
                             exec_data = &mut vm.execution_data;
-
-                            // revert tracked stack size
-                            exec_data.tracked_stack_size = old_stack_size;
 
                             match return_mode {
                                 ReturnMode::Multi => {

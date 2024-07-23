@@ -637,8 +637,6 @@ impl<'vm> VmContext<'vm> {
             return Err(RuntimeErrorData::NotAFunction.into());
         };
 
-        let old_stack_size = self.vm.execution_data.tracked_stack_size;
-
         let result = match value {
             HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
             HeapValue::Function(func) => {
@@ -654,8 +652,6 @@ impl<'vm> VmContext<'vm> {
                     ExecutionContext::resume(self.vm)
                 }),
         };
-
-        self.vm.execution_data.tracked_stack_size = old_stack_size;
 
         let multi = result?;
         R::from_multi(multi, self)

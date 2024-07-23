@@ -77,8 +77,6 @@ impl Value {
         args: A,
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
-        let old_stack_size = ctx.vm.execution_data.tracked_stack_size;
-
         let args = args.into_multi(ctx)?;
 
         // must test validity of every arg, since invalid keys in the ctx will cause a panic
@@ -86,16 +84,10 @@ impl Value {
             value.test_validity(&ctx.vm.execution_data.heap)?;
         }
 
-        let result = ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)
-            .map_err(RuntimeError::from)
-            .and_then(|exec_ctx| {
-                ctx.vm.execution_stack.push(exec_ctx);
-                ExecutionContext::resume(ctx.vm)
-            });
+        let execution = ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)?;
+        ctx.vm.execution_stack.push(execution);
+        let multi = ExecutionContext::resume(ctx.vm)?;
 
-        ctx.vm.execution_data.tracked_stack_size = old_stack_size;
-
-        let multi = result?;
         R::from_multi(multi, ctx)
     }
 
