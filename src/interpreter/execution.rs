@@ -174,8 +174,6 @@ impl ExecutionContext {
                                 return Err(Self::unwind_error(vm, err.into()));
                             };
 
-                            let arg_count = args.len();
-
                             // handle tail call
                             let mut return_mode = return_mode;
                             let mut stack_start = stack_start;
@@ -195,8 +193,6 @@ impl ExecutionContext {
                                 stack_start = call.stack_start;
                                 execution.value_stack.chip(stack_start, 0);
                             }
-
-                            let register_base = stack_start + arg_count + 2;
 
                             // update tracked stack size in case the native function calls an interpreted function
                             let old_stack_size = exec_data.tracked_stack_size;
@@ -227,7 +223,6 @@ impl ExecutionContext {
                                                 execution,
                                                 return_mode,
                                                 stack_start,
-                                                register_base,
                                             },
                                         );
 
@@ -257,7 +252,6 @@ impl ExecutionContext {
                                     if let Err(err) = execution.handle_external_return(
                                         return_mode,
                                         stack_start,
-                                        register_base,
                                         &mut return_values,
                                     ) {
                                         return Err(Self::unwind_error(vm, err));
@@ -455,7 +449,6 @@ impl ExecutionContext {
         &mut self,
         return_mode: ReturnMode,
         stack_start: usize,
-        register_base: usize,
         return_values: &mut MultiValue,
     ) -> Result<(), RuntimeErrorData> {
         match return_mode {
@@ -506,10 +499,12 @@ impl ExecutionContext {
                 self.value_stack.set(len_register, count_value);
             }
             ReturnMode::UnsizedDestinationPreserve(dest) => {
-                // keep the function and args
-                self.value_stack.chip(register_base, 0);
-
                 let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let dest_index = parent_register_base + dest as usize;
+
+                // clear everything at the destination and beyond before placing values
+                self.value_stack.chip(dest_index, 0);
+
                 let return_count = return_values.len();
 
                 for i in 0..return_count {
@@ -517,10 +512,7 @@ impl ExecutionContext {
                         break;
                     };
 
-                    self.value_stack.set(
-                        parent_register_base + dest as usize + i,
-                        value.to_stack_value(),
-                    );
+                    self.value_stack.set(dest_index + i, value.to_stack_value());
                 }
             }
             ReturnMode::TailCall => {

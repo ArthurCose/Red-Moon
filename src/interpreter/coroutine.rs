@@ -11,7 +11,6 @@ pub(crate) enum Continuation {
         execution: ExecutionContext,
         return_mode: ReturnMode,
         stack_start: usize,
-        register_base: usize,
     },
 }
 
@@ -110,14 +109,9 @@ impl Coroutine {
                     mut execution,
                     return_mode,
                     stack_start,
-                    register_base,
                 } => {
-                    let result = execution.handle_external_return(
-                        return_mode,
-                        stack_start,
-                        register_base,
-                        &mut args,
-                    );
+                    let result =
+                        execution.handle_external_return(return_mode, stack_start, &mut args);
                     vm.store_multi(args);
 
                     vm.execution_stack.push(execution);
