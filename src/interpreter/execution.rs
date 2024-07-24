@@ -1139,7 +1139,9 @@ impl CallContext {
                                 .try_binary_metamethods(
                                     (heap, value_stack),
                                     metamethod_key,
-                                    (dest, value_a, value_b),
+                                    dest,
+                                    value_a,
+                                    value_b,
                                 )
                                 .ok_or_else(|| RuntimeErrorData::InvalidArithmetic);
                         }
@@ -1241,7 +1243,9 @@ impl CallContext {
                     if let Some(call_result) = self.try_binary_metamethods(
                         (heap, value_stack),
                         metamethod_key,
-                        (dest, value_a, value_b),
+                        dest,
+                        value_a,
+                        value_b,
                     ) {
                         return Ok(call_result);
                     }
@@ -1327,7 +1331,9 @@ impl CallContext {
                             .try_binary_metamethods(
                                 (heap, value_stack),
                                 metamethod_key.into(),
-                                (dest, value_a, value_b),
+                                dest,
+                                value_a,
+                                value_b,
                             )
                             .ok_or(RuntimeErrorData::AttemptToConcatInvalid)?;
 
@@ -1402,11 +1408,14 @@ impl CallContext {
     }
 
     /// Resolves stack value pointers, calls metamethods for heap values, calls coerce functions if necessary
+    #[allow(clippy::too_many_arguments)]
     fn resolve_binary_operand<T>(
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         metamethod_key: StackValue,
-        metamethod_params: (Register, StackValue, StackValue),
+        dest: Register,
+        value_a: StackValue,
+        value_b: StackValue,
         value: StackValue,
         coerce_value: impl Fn(StackValue) -> Result<T, RuntimeErrorData>,
     ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
@@ -1416,7 +1425,9 @@ impl CallContext {
                     heap,
                     value_stack,
                     (heap_key, metamethod_key),
-                    metamethod_params,
+                    dest,
+                    value_a,
+                    value_b,
                 ) {
                     Some(call_result) => Ok(ValueOrCallResult::CallResult(call_result)),
                     None => Err(RuntimeErrorData::InvalidArithmetic),
@@ -1432,7 +1443,9 @@ impl CallContext {
                 self.resolve_binary_operand(
                     (heap, value_stack),
                     metamethod_key,
-                    metamethod_params,
+                    dest,
+                    value_a,
+                    value_b,
                     value,
                     coerce_value,
                 )
@@ -1460,7 +1473,9 @@ impl CallContext {
         let resolved_a = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_a,
             |value| Ok(value),
         )? {
@@ -1471,7 +1486,9 @@ impl CallContext {
         let resolved_b = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_b,
             |value| Ok(value),
         )? {
@@ -1517,7 +1534,9 @@ impl CallContext {
         let float_a = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_a,
             arithmetic_cast_float,
         )? {
@@ -1528,7 +1547,9 @@ impl CallContext {
         let float_b = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_b,
             arithmetic_cast_float,
         )? {
@@ -1559,7 +1580,9 @@ impl CallContext {
         let int_a = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_a,
             arithmetic_cast_integer,
         )? {
@@ -1570,7 +1593,9 @@ impl CallContext {
         let int_b = match self.resolve_binary_operand(
             (heap, value_stack),
             metamethod_key,
-            (dest, value_a, value_b),
+            dest,
+            value_a,
+            value_b,
             value_b,
             arithmetic_cast_integer,
         )? {
@@ -1598,11 +1623,9 @@ impl CallContext {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
-        if let Some(call_result) = self.try_binary_metamethods(
-            (heap, value_stack),
-            metamethod_key,
-            (dest, value_a, value_b),
-        ) {
+        if let Some(call_result) =
+            self.try_binary_metamethods((heap, value_stack), metamethod_key, dest, value_a, value_b)
+        {
             return Ok(Some(call_result));
         }
 
@@ -1632,14 +1655,18 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         metamethod_key: StackValue,
-        (dest, value_a, value_b): (Register, StackValue, StackValue),
+        dest: Register,
+        value_a: StackValue,
+        value_b: StackValue,
     ) -> Option<CallResult> {
         if let StackValue::HeapValue(heap_key) = value_a {
             if let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
                 (heap_key, metamethod_key),
-                (dest, value_a, value_b),
+                dest,
+                value_a,
+                value_b,
             ) {
                 return Some(call_result);
             }
@@ -1650,7 +1677,9 @@ impl CallContext {
                 heap,
                 value_stack,
                 (heap_key, metamethod_key),
-                (dest, value_a, value_b),
+                dest,
+                value_a,
+                value_b,
             ) {
                 return Some(call_result);
             }
@@ -1664,7 +1693,9 @@ impl CallContext {
         heap: &mut Heap,
         value_stack: &mut ValueStack,
         (heap_key, metamethod_key): (HeapKey, StackValue),
-        (dest, value_a, value_b): (Register, StackValue, StackValue),
+        dest: Register,
+        value_a: StackValue,
+        value_b: StackValue,
     ) -> Option<CallResult> {
         let function_key = heap.get_metamethod(heap_key, metamethod_key)?;
 
