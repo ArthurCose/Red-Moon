@@ -40,6 +40,10 @@ macro_rules! impl_binary_number_op {
 }
 
 fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
+    // index
+    let key = ctx.metatable_keys().index.clone();
+    metatable.raw_set(key, metatable.clone(), ctx).unwrap();
+
     // basic arithmetic
     impl_binary_number_op!(ctx, metatable, add, +);
     impl_binary_number_op!(ctx, metatable, sub, -);
