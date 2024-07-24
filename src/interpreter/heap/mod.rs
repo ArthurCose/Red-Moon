@@ -158,6 +158,10 @@ impl Heap {
         self.storage.get_mut(heap_key)
     }
 
+    pub(crate) fn get_mut_unmarked(&mut self, heap_key: HeapKey) -> Option<&mut HeapValue> {
+        self.storage.get_mut(heap_key)
+    }
+
     pub(crate) fn set(&mut self, gc: &mut GarbageCollector, heap_key: HeapKey, value: HeapValue) {
         gc.acknowledge_write(heap_key);
         self.storage[heap_key] = value;

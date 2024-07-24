@@ -53,7 +53,6 @@ impl Coroutine {
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
         let vm = &mut *ctx.vm;
-        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
 
         // must test validity of every arg, since invalid keys in the vm will cause a panic
@@ -61,7 +60,7 @@ impl Coroutine {
             value.test_validity(heap)?;
         }
 
-        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut(gc, co_heap_key) else {
+        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
             return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
         };
 
@@ -135,6 +134,8 @@ impl Coroutine {
                     let gc = &mut vm.execution_data.gc;
                     let heap = &mut vm.execution_data.heap;
 
+                    // using get_mut instead of get_mut_unmarked as we may end up adding to the continuation_stack
+                    // otherwise we'll be clearing it, and it won't be too much extra work
                     let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut(gc, co_heap_key)
                     else {
                         unreachable!();
@@ -162,10 +163,10 @@ impl Coroutine {
                             }
                         }
 
-                        let gc = &mut vm.execution_data.gc;
                         let heap = &mut vm.execution_data.heap;
 
-                        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut(gc, co_heap_key)
+                        let Some(HeapValue::Coroutine(coroutine)) =
+                            heap.get_mut_unmarked(co_heap_key)
                         else {
                             unreachable!();
                         };
@@ -177,10 +178,9 @@ impl Coroutine {
             };
 
             let vm = &mut *ctx.vm;
-            let gc = &mut vm.execution_data.gc;
             let heap = &mut vm.execution_data.heap;
 
-            let Some(HeapValue::Coroutine(co)) = heap.get_mut(gc, co_heap_key) else {
+            let Some(HeapValue::Coroutine(co)) = heap.get_mut_unmarked(co_heap_key) else {
                 return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
             };
 
