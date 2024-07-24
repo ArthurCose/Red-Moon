@@ -3,7 +3,7 @@ use super::RuntimeErrorData;
 use crate::interpreter::ByteString;
 use std::borrow::Cow;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RuntimeError {
     pub trace: StackTrace,
     pub data: RuntimeErrorData,

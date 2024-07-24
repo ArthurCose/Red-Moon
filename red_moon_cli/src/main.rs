@@ -37,6 +37,7 @@ fn main2() -> Result<(), ()> {
     let ctx = &mut vm.context();
 
     lua_std::impl_basic(ctx).unwrap();
+    lua_std::impl_coroutine(ctx).unwrap();
     lua_std::impl_math(ctx).unwrap();
     lua_std::impl_os(ctx).unwrap();
     lua_std::impl_string(ctx).unwrap();

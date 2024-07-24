@@ -1,5 +1,7 @@
 mod byte_string;
 mod cache_pools;
+mod coroutine;
+mod coroutine_ref;
 mod execution;
 mod function_ref;
 mod heap;
@@ -18,13 +20,17 @@ mod value_stack;
 mod vm;
 
 pub use byte_string::ByteString;
+pub use coroutine::CoroutineStatus;
+pub use coroutine_ref::CoroutineRef;
 pub use function_ref::FunctionRef;
 pub use heap::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use lazy_arg::LazyArg;
-pub use module::{UpValueSource, Chunk, Module, SourceMapping};
+pub use module::{Chunk, Module, SourceMapping, UpValueSource};
 pub use multi::{FromArg, FromArgs, FromMulti, IntoMulti, MultiValue};
 pub use string_ref::StringRef;
 pub use table_ref::TableRef;
 pub use value::{FromValue, IntoValue, Value};
 pub use vm::{Vm, VmContext, VmLimits};
+
+pub(crate) use coroutine::Continuation;

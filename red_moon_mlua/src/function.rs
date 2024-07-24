@@ -77,7 +77,7 @@ impl<'lua> Function<'lua> {
         R::from_lua_multi(mlua_multi, self.lua)
     }
 
-    /// Converts the string to a generic C pointer.
+    /// Converts the function to a generic C pointer.
     ///
     /// There is no way to convert the pointer back to its original value.
     ///

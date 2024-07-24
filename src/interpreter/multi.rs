@@ -5,7 +5,7 @@ use super::vm::VmContext;
 use super::Value;
 use crate::errors::{IllegalInstruction, RuntimeError};
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MultiValue {
     pub(crate) values: Vec<Value>,
 }

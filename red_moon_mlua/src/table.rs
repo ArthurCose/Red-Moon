@@ -379,7 +379,7 @@ impl<'lua> Table<'lua> {
         self.get_metatable().is_some()
     }
 
-    /// Converts the string to a generic C pointer.
+    /// Converts the table to a generic C pointer.
     ///
     /// There is no way to convert the pointer back to its original value.
     ///

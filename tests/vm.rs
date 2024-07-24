@@ -16,6 +16,7 @@ fn instructions_print() {
                 Value::Float(n) => print!("{n}"),
                 Value::Table(_) => print!("table"),
                 Value::Function(_) => print!("function"),
+                Value::Coroutine(_) => print!("thread"),
                 Value::String(string_ref) => {
                     print!("{}", string_ref.fetch(ctx).unwrap().to_string_lossy())
                 }

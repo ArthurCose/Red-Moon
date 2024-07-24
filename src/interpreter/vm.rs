@@ -1,10 +1,14 @@
 use super::cache_pools::CachePools;
+use super::coroutine::Coroutine;
 use super::execution::ExecutionContext;
 use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapRef, HeapValue};
 use super::metatable_keys::MetatableKeys;
 use super::value_stack::{StackValue, ValueStack};
-use super::{FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef, TableRef};
-use crate::errors::{RuntimeError, RuntimeErrorData};
+use super::{
+    Continuation, CoroutineRef, FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef,
+    TableRef,
+};
+use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
 use crate::FastHashMap;
 use downcast::downcast;
@@ -54,6 +58,8 @@ pub(crate) struct ExecutionAccessibleData {
     pub(crate) metatable_keys: Rc<MetatableKeys>,
     pub(crate) cache_pools: Rc<CachePools>,
     pub(crate) tracked_stack_size: usize,
+    pub(crate) coroutine_stack: Vec<HeapKey>,
+    pub(crate) in_progress_yield: Vec<Continuation>,
     #[cfg(feature = "instruction_exec_counts")]
     pub(crate) instruction_counter: InstructionCounter,
 }
@@ -66,8 +72,10 @@ impl Clone for ExecutionAccessibleData {
             gc: self.gc.clone(),
             metatable_keys: self.metatable_keys.clone(),
             cache_pools: self.cache_pools.clone(),
-            // reset to 0, since there's no active call on the new vm
+            // reset, since there's no active call on the new vm
             tracked_stack_size: 0,
+            coroutine_stack: Default::default(),
+            in_progress_yield: Default::default(),
             #[cfg(feature = "instruction_exec_counts")]
             instruction_counter: Default::default(),
         }
@@ -79,8 +87,10 @@ impl Clone for ExecutionAccessibleData {
         self.gc.clone_from(&source.gc);
         self.metatable_keys.clone_from(&source.metatable_keys);
         self.cache_pools.clone_from(&source.cache_pools);
-        // reset to 0, since there's no active call on the new vm
+        // reset, since there's no active call on the new vm
         self.tracked_stack_size = 0;
+        self.coroutine_stack.clear();
+        self.in_progress_yield.clear();
 
         #[cfg(feature = "instruction_exec_counts")]
         {
@@ -133,6 +143,8 @@ impl Vm {
                 metatable_keys: Rc::new(metatable_keys),
                 cache_pools: Default::default(),
                 tracked_stack_size: 0,
+                coroutine_stack: Default::default(),
+                in_progress_yield: Default::default(),
                 #[cfg(feature = "instruction_exec_counts")]
                 instruction_counter: Default::default(),
             },
@@ -401,6 +413,46 @@ impl Vm {
         FunctionRef(heap_ref)
     }
 
+    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
+        let key = *self.execution_data.coroutine_stack.last()?;
+
+        Some(CoroutineRef(self.execution_data.heap.create_ref(key)))
+    }
+
+    pub fn create_coroutine(
+        &mut self,
+        function: FunctionRef,
+    ) -> Result<CoroutineRef, RuntimeError> {
+        let function_key = function.0.key();
+
+        let heap = &self.execution_data.heap;
+
+        if heap.get(function_key).is_none() {
+            return Err(IllegalInstruction::InvalidHeapKey.into());
+        }
+
+        let coroutine = Box::new(Coroutine::new(function_key));
+
+        // move to the heap
+        let gc = &mut self.execution_data.gc;
+        let heap = &mut self.execution_data.heap;
+
+        let heap_key = heap.create(gc, HeapValue::Coroutine(coroutine));
+        let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.execution_data.metatable_keys,
+                &self.execution_data.cache_pools,
+                &self.execution_stack,
+                heap,
+            );
+        }
+
+        Ok(CoroutineRef(heap_ref))
+    }
+
     #[inline]
     pub fn gc_used_memory(&self) -> usize {
         self.execution_data.gc.used_memory()
@@ -459,6 +511,14 @@ impl Vm {
     #[inline]
     pub fn context(&mut self) -> VmContext {
         VmContext { vm: self }
+    }
+
+    pub(crate) fn verify_yield(&mut self, err: &mut RuntimeErrorData) {
+        if matches!(err, RuntimeErrorData::Yield(_))
+            && self.execution_data.coroutine_stack.is_empty()
+        {
+            *err = RuntimeErrorData::InvalidYield
+        }
     }
 }
 
@@ -585,6 +645,19 @@ impl<'vm> VmContext<'vm> {
     }
 
     #[inline]
+    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
+        self.vm.top_coroutine()
+    }
+
+    #[inline]
+    pub fn create_coroutine(
+        &mut self,
+        function: FunctionRef,
+    ) -> Result<CoroutineRef, RuntimeError> {
+        self.vm.create_coroutine(function)
+    }
+
+    #[inline]
     pub fn gc_used_memory(&self) -> usize {
         self.vm.gc_used_memory()
     }
@@ -638,15 +711,29 @@ impl<'vm> VmContext<'vm> {
         };
 
         let result = match value {
-            HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
+            HeapValue::NativeFunction(func) => {
+                let mut result = func.shallow_clone().call(args, self);
+
+                // verify yield
+                if let Err(err) = &mut result {
+                    self.vm.verify_yield(&mut err.data);
+                }
+
+                result
+            }
             HeapValue::Function(func) => {
+                // no need to verify yield, it's handled within ExecutionContext::resume()
                 let context =
                     ExecutionContext::new_function_call(function_key, func.clone(), args, self.vm);
                 self.vm.execution_stack.push(context);
                 ExecutionContext::resume(self.vm)
             }
             _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm)
-                .map_err(RuntimeError::from)
+                .map_err(|mut err| {
+                    self.vm.verify_yield(&mut err);
+
+                    RuntimeError::from(err)
+                })
                 .and_then(|context| {
                     self.vm.execution_stack.push(context);
                     ExecutionContext::resume(self.vm)

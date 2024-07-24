@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationError, RuntimeErrorData, SyntaxError};
 use red_moon::interpreter::{MultiValue, Value, Vm};
-use red_moon::languages::lua::std::{impl_basic, impl_string};
+use red_moon::languages::lua::std::{impl_basic, impl_coroutine, impl_string};
 use red_moon::languages::lua::{LuaCompiler, LuaTokenLabel};
 use std::cell::RefCell;
 use std::io::Write;
@@ -11,6 +11,7 @@ use std::rc::Rc;
 fn valid() {
     let folder_path = env!("CARGO_MANIFEST_DIR").to_string() + "/tests/lua/valid/";
     let test_files = vec![
+        "coroutines.lua",
         "expressions.lua",
         "functions.lua",
         "garbage_collection.lua",
@@ -28,6 +29,7 @@ fn valid() {
     let ctx = &mut vm.context();
     impl_basic(ctx).unwrap();
     impl_string(ctx).unwrap();
+    impl_coroutine(ctx).unwrap();
 
     let env = ctx.default_environment();
 
@@ -47,6 +49,7 @@ fn valid() {
                 Value::Float(n) => write!(&mut *out, "{n:?}").unwrap(),
                 Value::Table(_) => write!(&mut *out, "table").unwrap(),
                 Value::Function(_) => write!(&mut *out, "function").unwrap(),
+                Value::Coroutine(_) => write!(&mut *out, "thread").unwrap(),
                 Value::String(string_ref) => write!(
                     &mut *out,
                     "{}",

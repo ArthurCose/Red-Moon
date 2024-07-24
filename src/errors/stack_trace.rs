@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StackTraceFrame {
     pub(crate) source_name: Rc<str>,
     pub(crate) line: usize,
@@ -30,7 +30,7 @@ impl StackTraceFrame {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct StackTrace {
     frames: Vec<StackTraceFrame>,
 }

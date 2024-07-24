@@ -1,23 +1,23 @@
-use red_moon::interpreter::{StringRef, Vm};
-use std::cell::RefCell;
+use crate::Lua;
+use red_moon::interpreter::CoroutineRef;
 use std::ffi::c_void;
 use std::fmt;
 
 #[derive(Clone)]
 pub struct Thread<'lua> {
-    pub(crate) vm: &'lua RefCell<Vm>,
-    pub(crate) thread_ref: StringRef,
+    pub(crate) lua: &'lua Lua,
+    pub(crate) coroutine_ref: CoroutineRef,
 }
 
 impl<'lua> Thread<'lua> {
-    /// Converts the string to a generic C pointer.
+    /// Converts the thread to a generic C pointer.
     ///
     /// There is no way to convert the pointer back to its original value.
     ///
     /// Typically this function is used only for hashing and debug information.
     #[inline]
     pub fn to_pointer(&self) -> *const c_void {
-        self.thread_ref.id() as _
+        self.coroutine_ref.id() as _
     }
 }
 

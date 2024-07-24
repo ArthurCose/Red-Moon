@@ -7,6 +7,7 @@ use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::execution::ExecutionContext;
 use crate::interpreter::metatable_keys::MetatableKeys;
 use crate::interpreter::value_stack::StackValue;
+use crate::interpreter::Continuation;
 use crate::{FastHashMap, FastHashSet};
 
 /// Configuration for the incremental garbage collector
@@ -213,14 +214,18 @@ impl GarbageCollector {
 
         // mark the stack
         for execution in execution_stack {
-            for value in execution.value_stack.iter() {
-                self.mark_stack_value(value);
-            }
+            self.mark_execution_context(execution);
+        }
+    }
 
-            for call in &execution.call_stack {
-                for value in call.up_values.iter() {
-                    self.mark_stack_value(value);
-                }
+    fn mark_execution_context(&mut self, execution: &ExecutionContext) {
+        for value in execution.value_stack.iter() {
+            self.mark_stack_value(value);
+        }
+
+        for call in &execution.call_stack {
+            for value in call.up_values.iter() {
+                self.mark_stack_value(value);
             }
         }
     }
@@ -452,6 +457,16 @@ impl GarbageCollector {
 
                     for value in table.map.values() {
                         self.mark_table_value(value);
+                    }
+                }
+            }
+            HeapValue::Coroutine(co) => {
+                for continuation in &co.continuation_stack {
+                    match continuation {
+                        Continuation::Entry(key) => self.mark_heap_key(*key),
+                        Continuation::Execution { execution, .. } => {
+                            self.mark_execution_context(execution)
+                        }
                     }
                 }
             }

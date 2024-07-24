@@ -2,7 +2,7 @@ use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapValue};
 use super::value_stack::StackValue;
 use super::vm::VmContext;
-use super::{ByteString, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef};
+use super::{ByteString, CoroutineRef, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::{parse_number, Number};
 
@@ -15,6 +15,7 @@ pub enum Value {
     String(StringRef),
     Table(TableRef),
     Function(FunctionRef),
+    Coroutine(CoroutineRef),
 }
 
 impl Eq for Value {}
@@ -42,6 +43,7 @@ impl Value {
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
+            Value::Coroutine(_) => "thread",
         }
     }
 
@@ -84,7 +86,15 @@ impl Value {
             value.test_validity(&ctx.vm.execution_data.heap)?;
         }
 
-        let execution = ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)?;
+        let execution = match ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)
+        {
+            Ok(execution) => execution,
+            Err(mut err) => {
+                ctx.vm.verify_yield(&mut err);
+                return Err(err.into());
+            }
+        };
+
         ctx.vm.execution_stack.push(execution);
         let multi = ExecutionContext::resume(ctx.vm)?;
 
@@ -215,6 +225,7 @@ impl Value {
             Value::String(heap_ref) => heap_ref.0.key().into(),
             Value::Table(heap_ref) => heap_ref.0.key().into(),
             Value::Function(heap_ref) => heap_ref.0.key().into(),
+            Value::Coroutine(heap_ref) => heap_ref.0.key().into(),
         }
     }
 
@@ -235,6 +246,7 @@ impl Value {
                     HeapValue::Function(_) | HeapValue::NativeFunction(_) => {
                         Value::Function(FunctionRef(heap.create_ref(key)))
                     }
+                    HeapValue::Coroutine(_) => Value::Coroutine(CoroutineRef(heap.create_ref(key))),
                     HeapValue::StackValue(_) => {
                         // only StackValue::Pointer should point to StackValues
                         unreachable!()
@@ -272,6 +284,7 @@ impl Value {
             Value::String(string_ref) => Some(string_ref.0.key()),
             Value::Table(table_ref) => Some(table_ref.0.key()),
             Value::Function(function_ref) => Some(function_ref.0.key()),
+            Value::Coroutine(coroutine_ref) => Some(coroutine_ref.0.key()),
         }
     }
 }
@@ -294,6 +307,13 @@ impl From<FunctionRef> for Value {
     #[inline]
     fn from(value: FunctionRef) -> Self {
         Self::Function(value)
+    }
+}
+
+impl From<CoroutineRef> for Value {
+    #[inline]
+    fn from(value: CoroutineRef) -> Self {
+        Self::Coroutine(value)
     }
 }
 
@@ -336,6 +356,13 @@ impl IntoValue for FunctionRef {
     #[inline]
     fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
         Ok(Value::Function(self))
+    }
+}
+
+impl IntoValue for CoroutineRef {
+    #[inline]
+    fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
+        Ok(Value::Coroutine(self))
     }
 }
 
@@ -457,6 +484,22 @@ impl FromValue for FunctionRef {
             Err(RuntimeErrorData::FromLuaConversionError {
                 from: value.type_name(),
                 to: "FunctionRef",
+                message: None,
+            }
+            .into())
+        }
+    }
+}
+
+impl FromValue for CoroutineRef {
+    #[inline]
+    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
+        if let Value::Coroutine(coroutine_ref) = value {
+            Ok(coroutine_ref)
+        } else {
+            Err(RuntimeErrorData::FromLuaConversionError {
+                from: value.type_name(),
+                to: "CoroutineRef",
                 message: None,
             }
             .into())

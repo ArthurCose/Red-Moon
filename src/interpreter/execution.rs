@@ -1,3 +1,4 @@
+use super::coroutine::Continuation;
 use super::heap::{Heap, HeapKey, HeapValue};
 use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::{Function, FunctionDefinition};
@@ -16,6 +17,7 @@ enum CallResult {
     StepGc,
 }
 
+#[derive(Clone)]
 pub(crate) struct ExecutionContext {
     pub(crate) call_stack: Vec<CallContext>,
     pub(crate) value_stack: ValueStack,
@@ -177,7 +179,6 @@ impl ExecutionContext {
                             // handle tail call
                             let mut return_mode = return_mode;
                             let mut stack_start = stack_start;
-                            let mut register_base = call.register_base;
 
                             if return_mode == ReturnMode::TailCall && execution.call_stack.len() > 1
                             {
@@ -193,14 +194,9 @@ impl ExecutionContext {
                                 return_mode = call.return_mode;
                                 stack_start = call.stack_start;
                                 execution.value_stack.chip(stack_start, 0);
-
-                                // adopt the register base of the caller's caller
-                                let grand_call = execution
-                                    .call_stack
-                                    .last()
-                                    .expect("a root native call is rewritten as ReturnMode::Multi");
-                                register_base = grand_call.register_base;
                             }
+
+                            let register_base = stack_start + arg_count + 2;
 
                             // update tracked stack size in case the native function calls an interpreted function
                             let old_stack_size = exec_data.tracked_stack_size;
@@ -215,7 +211,31 @@ impl ExecutionContext {
 
                             let mut return_values = match result {
                                 Ok(values) => values,
-                                Err(err) => return Err(Self::continue_unwind(vm, err)),
+                                Err(mut err) => {
+                                    // handle yielding
+                                    if let RuntimeErrorData::Yield(_) = &mut err.data {
+                                        if vm.execution_data.coroutine_stack.is_empty() {
+                                            // we can't yield here
+                                            err.data = RuntimeErrorData::InvalidYield;
+                                            return Err(Self::continue_unwind(vm, err));
+                                        }
+
+                                        let execution = vm.execution_stack.pop().unwrap();
+
+                                        vm.execution_data.in_progress_yield.push(
+                                            Continuation::Execution {
+                                                execution,
+                                                return_mode,
+                                                stack_start,
+                                                register_base,
+                                            },
+                                        );
+
+                                        return Err(err);
+                                    } else {
+                                        return Err(Self::continue_unwind(vm, err));
+                                    }
+                                }
                             };
 
                             // juggling lifetimes
@@ -223,80 +243,25 @@ impl ExecutionContext {
                             exec_data = &mut vm.execution_data;
 
                             match return_mode {
-                                ReturnMode::Multi => {
-                                    execution.value_stack.chip(stack_start, 0);
-                                    return_values.push_stack_multi(&mut execution.value_stack);
-                                }
-                                ReturnMode::Static(return_count) => {
-                                    execution.value_stack.chip(stack_start, 0);
-
-                                    execution.value_stack.extend(
-                                        std::iter::from_fn(|| return_values.pop_front())
-                                            .map(|v| v.to_stack_value())
-                                            .chain(std::iter::repeat(StackValue::default()))
-                                            .take(return_count as usize),
-                                    );
-                                }
-                                ReturnMode::Destination(dest) => {
-                                    execution.value_stack.chip(stack_start, 0);
-
-                                    let value = return_values.pop_front().unwrap_or_default();
-
-                                    let dest_index = register_base + dest as usize;
-                                    execution
-                                        .value_stack
-                                        .set(dest_index, value.to_stack_value());
-                                }
-                                ReturnMode::Extend(len_index) => {
-                                    execution.value_stack.chip(stack_start, 0);
-
-                                    let return_count = return_values.len();
-
-                                    // append return values
-                                    execution.value_stack.extend(std::iter::from_fn(|| {
-                                        return_values.pop_front().map(|v| v.to_stack_value())
-                                    }));
-
-                                    // add the return count
-                                    let len_register = register_base + len_index as usize;
-
-                                    let StackValue::Integer(stored_return_count) =
-                                        execution.value_stack.get(len_register)
-                                    else {
-                                        return Err(Self::unwind_error(
-                                            vm,
-                                            IllegalInstruction::MissingReturnCount.into(),
-                                        ));
-                                    };
-
-                                    let count = stored_return_count + return_count as i64 - 1;
-                                    let count_value = StackValue::Integer(count);
-                                    execution.value_stack.set(len_register, count_value);
-                                }
-                                ReturnMode::UnsizedDestinationPreserve(dest) => {
-                                    // keep the function and args
-                                    execution.value_stack.chip(stack_start + arg_count + 2, 0);
-
-                                    let return_count = return_values.len();
-
-                                    for i in 0..return_count {
-                                        let Some(value) = return_values.pop_front() else {
-                                            break;
-                                        };
-
-                                        execution.value_stack.set(
-                                            register_base + dest as usize + i,
-                                            value.to_stack_value(),
-                                        );
-                                    }
-                                }
                                 ReturnMode::TailCall => {
                                     // we retained the TailCall return mode, this is our final return
                                     let execution = vm.execution_stack.pop().unwrap();
                                     exec_data
                                         .cache_pools
                                         .store_value_stack(execution.value_stack);
+
+                                    // directly returning values instead of temporarily storing in value stack
                                     return Ok(return_values);
+                                }
+                                _ => {
+                                    if let Err(err) = execution.handle_external_return(
+                                        return_mode,
+                                        stack_start,
+                                        register_base,
+                                        &mut return_values,
+                                    ) {
+                                        return Err(Self::unwind_error(vm, err));
+                                    }
                                 }
                             }
 
@@ -486,7 +451,90 @@ impl ExecutionContext {
         Ok(return_values)
     }
 
-    fn unwind_error(vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
+    pub(crate) fn handle_external_return(
+        &mut self,
+        return_mode: ReturnMode,
+        stack_start: usize,
+        register_base: usize,
+        return_values: &mut MultiValue,
+    ) -> Result<(), RuntimeErrorData> {
+        match return_mode {
+            ReturnMode::Multi => {
+                self.value_stack.chip(stack_start, 0);
+                return_values.push_stack_multi(&mut self.value_stack);
+            }
+            ReturnMode::Static(return_count) => {
+                self.value_stack.chip(stack_start, 0);
+
+                self.value_stack.extend(
+                    std::iter::from_fn(|| return_values.pop_front())
+                        .map(|v| v.to_stack_value())
+                        .chain(std::iter::repeat(StackValue::default()))
+                        .take(return_count as usize),
+                );
+            }
+            ReturnMode::Destination(dest) => {
+                self.value_stack.chip(stack_start, 0);
+
+                let value = return_values.pop_front().unwrap_or_default();
+
+                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let dest_index = parent_register_base + dest as usize;
+                self.value_stack.set(dest_index, value.to_stack_value());
+            }
+            ReturnMode::Extend(len_index) => {
+                self.value_stack.chip(stack_start, 0);
+
+                let return_count = return_values.len();
+
+                // append return values
+                self.value_stack.extend(std::iter::from_fn(|| {
+                    return_values.pop_front().map(|v| v.to_stack_value())
+                }));
+
+                // add the return count
+                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let len_register = parent_register_base + len_index as usize;
+
+                let StackValue::Integer(stored_return_count) = self.value_stack.get(len_register)
+                else {
+                    return Err(IllegalInstruction::MissingReturnCount.into());
+                };
+
+                let count = stored_return_count + return_count as i64 - 1;
+                let count_value = StackValue::Integer(count);
+                self.value_stack.set(len_register, count_value);
+            }
+            ReturnMode::UnsizedDestinationPreserve(dest) => {
+                // keep the function and args
+                self.value_stack.chip(register_base, 0);
+
+                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let return_count = return_values.len();
+
+                for i in 0..return_count {
+                    let Some(value) = return_values.pop_front() else {
+                        break;
+                    };
+
+                    self.value_stack.set(
+                        parent_register_base + dest as usize + i,
+                        value.to_stack_value(),
+                    );
+                }
+            }
+            ReturnMode::TailCall => {
+                // we're going to assume this is the final call
+                // the return mode should've been resolved to something else earlier
+                self.value_stack.chip(2, 0);
+                return_values.push_stack_multi(&mut self.value_stack)
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn unwind_error(vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
         Self::continue_unwind(
             vm,
             RuntimeError {
@@ -496,12 +544,13 @@ impl ExecutionContext {
         )
     }
 
-    fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
-        let context = vm.execution_stack.pop().unwrap();
+    pub(crate) fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
+        let execution = vm.execution_stack.pop().unwrap();
+
         let exec_data = &mut vm.execution_data;
 
         // recycle value stacks
-        for call in context.call_stack.into_iter().rev() {
+        for call in execution.call_stack.into_iter().rev() {
             let instruction_index = call.next_instruction_index.saturating_sub(1);
             let definition = call.function_definition;
             let frame = definition.create_stack_trace_frame(instruction_index);
@@ -512,12 +561,15 @@ impl ExecutionContext {
                 .store_short_value_stack(call.up_values);
         }
 
-        exec_data.cache_pools.store_value_stack(context.value_stack);
+        exec_data
+            .cache_pools
+            .store_value_stack(execution.value_stack);
 
         err
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct CallContext {
     pub(crate) up_values: ValueStack,
     pub(crate) function_definition: Rc<FunctionDefinition>,

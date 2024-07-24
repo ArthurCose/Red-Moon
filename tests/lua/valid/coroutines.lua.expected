@@ -1,0 +1,19 @@
+running:	nil	true
+yieldable:	false
+status:	suspended
+running:	thread	false
+yieldable:	true
+status:	running
+true	1
+status:	suspended
+true	2
+true	3
+true	end
+status:	dead
+running:	nil	true
+
+yield from inner call:
+a
+yielded
+b
+c

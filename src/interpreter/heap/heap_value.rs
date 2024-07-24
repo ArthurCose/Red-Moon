@@ -1,3 +1,4 @@
+use crate::interpreter::coroutine::Coroutine;
 use crate::interpreter::interpreted_function::Function;
 use crate::interpreter::native_function::NativeFunction;
 use crate::interpreter::table::Table;
@@ -11,6 +12,7 @@ pub(crate) enum HeapValue {
     Table(Box<Table>),
     NativeFunction(NativeFunction),
     Function(Function),
+    Coroutine(Box<Coroutine>),
 }
 
 impl HeapValue {
@@ -23,6 +25,11 @@ impl HeapValue {
             }
             HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
             HeapValue::Function(function) => function.heap_size() + std::mem::size_of::<Self>(),
+            HeapValue::Coroutine(coroutine) => {
+                coroutine.heap_size()
+                    + std::mem::size_of::<Coroutine>()
+                    + std::mem::size_of::<Self>()
+            }
         }
     }
 }

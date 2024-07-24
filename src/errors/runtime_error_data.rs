@@ -1,6 +1,7 @@
 use super::{IllegalInstruction, NativeError};
-use crate::interpreter::ByteString;
-use std::{borrow::Cow, rc::Rc};
+use crate::interpreter::{ByteString, MultiValue};
+use std::borrow::Cow;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RuntimeErrorData {
@@ -20,6 +21,11 @@ pub enum RuntimeErrorData {
     LimitMustBeNumber,
     StepMustBeNumber,
     OutOfBounds,
+    DeadCoroutine,
+    ResumedNonSuspendedCoroutine,
+    Yield(MultiValue),
+    Yielded,
+    InvalidYield,
     /// Bad argument received from Lua (usually when calling a function).
     ///
     /// This error can help to identify the argument that caused the error
