@@ -6,7 +6,7 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let string = ctx.create_table();
 
     let string_metatable = ctx.string_metatable();
-    string_metatable.set(ctx.metatable_keys().index.clone(), string.clone(), ctx)?;
+    string_metatable.raw_set(ctx.metatable_keys().index.clone(), string.clone(), ctx)?;
 
     let env = ctx.default_environment();
     env.set("string", string, ctx)?;
@@ -35,7 +35,7 @@ macro_rules! impl_binary_number_op {
             MultiValue::pack(value, ctx)
         });
 
-        $metatable.set(key, func, $ctx).unwrap();
+        $metatable.raw_set(key, func, $ctx).unwrap();
     }};
 }
 
@@ -60,7 +60,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a, ctx)
     });
 
-    metatable.set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx).unwrap();
 
     // division
     let key = ctx.metatable_keys().div.clone();
@@ -73,7 +73,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a / b, ctx)
     });
 
-    metatable.set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx).unwrap();
 
     // integer division
     let key = ctx.metatable_keys().idiv.clone();
@@ -100,7 +100,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(value, ctx)
     });
 
-    metatable.set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx).unwrap();
 
     // power
     let key = ctx.metatable_keys().pow.clone();
@@ -113,7 +113,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a.powf(b), ctx)
     });
 
-    metatable.set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx).unwrap();
 }
 
 fn string_to_number(string_ref: StringRef, ctx: &mut VmContext) -> Option<Number> {
