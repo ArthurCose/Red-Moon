@@ -110,15 +110,14 @@ impl Default for LuaLexer {
 
         // reserved words and names
         lexer.add_lexer(move |_, source, start| {
-            let first_char = source.chars().nth(start).unwrap();
+            let first_char = source[start..].chars().next().unwrap();
 
             if !first_char.is_alphabetic() && first_char != '_' {
                 return None;
             }
 
-            let word_len = source
+            let word_len = source[start + 1..]
                 .chars()
-                .skip(start + 1)
                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                 .count()
                 + 1;
@@ -157,7 +156,7 @@ impl Default for LuaLexer {
                 })
                 .count();
 
-            let last_char = source_substr.chars().nth(string_length + 1);
+            let last_char = source_substr[string_length + 1..].chars().next();
 
             if let Some(last_char) = last_char {
                 if last_char != first_char {
@@ -224,9 +223,8 @@ impl Default for LuaLexer {
 
         // whitespace
         lexer.add_ignorer(|source, start| {
-            source
+            source[start..]
                 .chars()
-                .skip(start)
                 .take_while(|c| c.is_whitespace())
                 .count()
         });
