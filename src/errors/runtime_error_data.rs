@@ -24,8 +24,9 @@ pub enum RuntimeErrorData {
     DeadCoroutine,
     ResumedNonSuspendedCoroutine,
     Yield(MultiValue),
-    Yielded,
     InvalidYield,
+    UnhandledYield,
+    YieldMissingContinuation,
     /// Bad argument received from Lua (usually when calling a function).
     ///
     /// This error can help to identify the argument that caused the error

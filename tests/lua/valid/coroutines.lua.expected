@@ -17,3 +17,18 @@ a
 yielded
 b
 c
+
+yield from pcall:
+a
+b
+c
+pcall result:	false
+
+multiple boundaries:
+a
+b
+c
+
+error in multiple boundaries:
+success a:	false
+success b:	false

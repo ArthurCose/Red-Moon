@@ -461,9 +461,10 @@ impl GarbageCollector {
                 }
             }
             HeapValue::Coroutine(co) => {
-                for continuation in &co.continuation_stack {
+                for (continuation, _) in &co.continuation_stack {
                     match continuation {
                         Continuation::Entry(key) => self.mark_heap_key(*key),
+                        Continuation::Callback(_) => {}
                         Continuation::Execution { execution, .. } => {
                             self.mark_execution_context(execution)
                         }

@@ -3,14 +3,14 @@ use crate::interpreter::interpreted_function::Function;
 use crate::interpreter::native_function::NativeFunction;
 use crate::interpreter::table::Table;
 use crate::interpreter::value_stack::StackValue;
-use crate::interpreter::ByteString;
+use crate::interpreter::{ByteString, MultiValue};
 
 #[derive(Clone)]
 pub(crate) enum HeapValue {
     StackValue(StackValue),
     Bytes(ByteString),
     Table(Box<Table>),
-    NativeFunction(NativeFunction),
+    NativeFunction(NativeFunction<MultiValue>),
     Function(Function),
     Coroutine(Box<Coroutine>),
 }

@@ -86,14 +86,7 @@ impl Value {
             value.test_validity(&ctx.vm.execution_data.heap)?;
         }
 
-        let execution = match ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)
-        {
-            Ok(execution) => execution,
-            Err(mut err) => {
-                ctx.vm.verify_yield(&mut err);
-                return Err(err.into());
-            }
-        };
+        let execution = ExecutionContext::new_value_call(self.to_stack_value(), args, ctx.vm)?;
 
         ctx.vm.execution_stack.push(execution);
         let multi = ExecutionContext::resume(ctx.vm)?;

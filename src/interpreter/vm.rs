@@ -1,5 +1,5 @@
 use super::cache_pools::CachePools;
-use super::coroutine::Coroutine;
+use super::coroutine::{ContinuationCallback, Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
 use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapRef, HeapValue};
 use super::metatable_keys::MetatableKeys;
@@ -51,6 +51,16 @@ impl Clone for Box<dyn AppData> {
 
 downcast!(dyn AppData);
 
+#[derive(Default)]
+pub(crate) struct CoroutineData {
+    pub(crate) yield_permissions: YieldPermissions,
+    pub(crate) continuation_set: bool,
+    pub(crate) continuation_callbacks: Vec<ContinuationCallback>,
+    pub(crate) coroutine_stack: Vec<HeapKey>,
+    /// Vec<Continuation, parent_allows_yield>
+    pub(crate) in_progress_yield: Vec<(Continuation, bool)>,
+}
+
 pub(crate) struct ExecutionAccessibleData {
     pub(crate) limits: VmLimits,
     pub(crate) heap: Heap,
@@ -58,8 +68,6 @@ pub(crate) struct ExecutionAccessibleData {
     pub(crate) metatable_keys: Rc<MetatableKeys>,
     pub(crate) cache_pools: Rc<CachePools>,
     pub(crate) tracked_stack_size: usize,
-    pub(crate) coroutine_stack: Vec<HeapKey>,
-    pub(crate) in_progress_yield: Vec<Continuation>,
     #[cfg(feature = "instruction_exec_counts")]
     pub(crate) instruction_counter: InstructionCounter,
 }
@@ -74,8 +82,6 @@ impl Clone for ExecutionAccessibleData {
             cache_pools: self.cache_pools.clone(),
             // reset, since there's no active call on the new vm
             tracked_stack_size: 0,
-            coroutine_stack: Default::default(),
-            in_progress_yield: Default::default(),
             #[cfg(feature = "instruction_exec_counts")]
             instruction_counter: Default::default(),
         }
@@ -89,8 +95,6 @@ impl Clone for ExecutionAccessibleData {
         self.cache_pools.clone_from(&source.cache_pools);
         // reset, since there's no active call on the new vm
         self.tracked_stack_size = 0;
-        self.coroutine_stack.clear();
-        self.in_progress_yield.clear();
 
         #[cfg(feature = "instruction_exec_counts")]
         {
@@ -102,6 +106,7 @@ impl Clone for ExecutionAccessibleData {
 pub struct Vm {
     pub(crate) execution_data: ExecutionAccessibleData,
     pub(crate) execution_stack: Vec<ExecutionContext>,
+    pub(crate) coroutine_data: CoroutineData,
     default_environment: HeapRef,
     pub(crate) environment_up_value: Option<HeapKey>,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
@@ -113,6 +118,7 @@ impl Clone for Vm {
             execution_data: self.execution_data.clone(),
             // we can clear the execution stack on the copy
             execution_stack: Default::default(),
+            coroutine_data: Default::default(),
             default_environment: self.default_environment.clone(),
             environment_up_value: self.environment_up_value,
             app_data: self.app_data.clone(),
@@ -143,12 +149,11 @@ impl Vm {
                 metatable_keys: Rc::new(metatable_keys),
                 cache_pools: Default::default(),
                 tracked_stack_size: 0,
-                coroutine_stack: Default::default(),
-                in_progress_yield: Default::default(),
                 #[cfg(feature = "instruction_exec_counts")]
                 instruction_counter: Default::default(),
             },
             execution_stack: Default::default(),
+            coroutine_data: Default::default(),
             default_environment,
             environment_up_value: None,
             app_data: Default::default(),
@@ -413,12 +418,6 @@ impl Vm {
         FunctionRef(heap_ref)
     }
 
-    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
-        let key = *self.execution_data.coroutine_stack.last()?;
-
-        Some(CoroutineRef(self.execution_data.heap.create_ref(key)))
-    }
-
     pub fn create_coroutine(
         &mut self,
         function: FunctionRef,
@@ -514,14 +513,6 @@ impl Vm {
     #[inline]
     pub fn context(&mut self) -> VmContext {
         VmContext { vm: self }
-    }
-
-    pub(crate) fn verify_yield(&mut self, err: &mut RuntimeErrorData) {
-        if matches!(err, RuntimeErrorData::Yield(_))
-            && self.execution_data.coroutine_stack.is_empty()
-        {
-            *err = RuntimeErrorData::InvalidYield
-        }
     }
 }
 
@@ -647,9 +638,57 @@ impl<'vm> VmContext<'vm> {
         self.vm.create_native_function(callback)
     }
 
+    /// Returns true if the calling context allows yielding (Coroutine or resumable)
+    #[inline]
+    pub fn is_yieldable(&self) -> bool {
+        self.vm.coroutine_data.yield_permissions.parent_allows_yield
+    }
+
+    /// Marks the currently executing function as resumable to allow anything called within the scope of the current function to yield.
+    /// An error will be passed down the stack if a yield occurs and [VmContext::set_resume_callback] is never used.
+    #[inline]
+    pub fn set_resumable(&mut self, resumable: bool) {
+        self.vm.coroutine_data.yield_permissions.allows_yield =
+            resumable && self.vm.coroutine_data.yield_permissions.parent_allows_yield;
+    }
+
+    /// Sets the function to be called to resume the current function if a coroutine yield occurs.
+    /// Automatically marks the calling function as resumable ([VmContext::set_resumable]).
+    ///
+    /// Ignored if the context isn't yieldable.
+    #[inline]
+    pub fn set_resume_callback(
+        &mut self,
+        callback: impl Fn(Result<MultiValue, RuntimeError>, &mut VmContext) -> Result<MultiValue, RuntimeError>
+            + Clone
+            + 'static,
+    ) -> Result<(), RuntimeError> {
+        if !self.vm.coroutine_data.yield_permissions.parent_allows_yield {
+            return Ok(());
+        }
+
+        self.vm.coroutine_data.yield_permissions.allows_yield = true;
+
+        let coroutine_data = &mut self.vm.coroutine_data;
+
+        if !coroutine_data.continuation_set {
+            // push a new continuation
+            coroutine_data.continuation_callbacks.push(callback.into());
+            coroutine_data.continuation_set = true;
+        } else {
+            // update the last pushed continuation
+            let stored_callback = coroutine_data.continuation_callbacks.last_mut().unwrap();
+            *stored_callback = callback.into();
+        }
+
+        Ok(())
+    }
+
     #[inline]
     pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
-        self.vm.top_coroutine()
+        let key = *self.vm.coroutine_data.coroutine_stack.last()?;
+
+        Some(CoroutineRef(self.vm.execution_data.heap.create_ref(key)))
     }
 
     #[inline]
@@ -714,16 +753,7 @@ impl<'vm> VmContext<'vm> {
         };
 
         let result = match value {
-            HeapValue::NativeFunction(func) => {
-                let mut result = func.shallow_clone().call(args, self);
-
-                // verify yield
-                if let Err(err) = &mut result {
-                    self.vm.verify_yield(&mut err.data);
-                }
-
-                result
-            }
+            HeapValue::NativeFunction(func) => func.shallow_clone().call(args, self),
             HeapValue::Function(func) => {
                 // no need to verify yield, it's handled within ExecutionContext::resume()
                 let context =
@@ -732,11 +762,7 @@ impl<'vm> VmContext<'vm> {
                 ExecutionContext::resume(self.vm)
             }
             _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm)
-                .map_err(|mut err| {
-                    self.vm.verify_yield(&mut err);
-
-                    RuntimeError::from(err)
-                })
+                .map_err(RuntimeError::from)
                 .and_then(|context| {
                     self.vm.execution_stack.push(context);
                     ExecutionContext::resume(self.vm)

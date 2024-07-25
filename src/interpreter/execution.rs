@@ -210,7 +210,7 @@ impl ExecutionContext {
                                 Err(mut err) => {
                                     // handle yielding
                                     if let RuntimeErrorData::Yield(_) = &mut err.data {
-                                        if vm.execution_data.coroutine_stack.is_empty() {
+                                        if !vm.coroutine_data.yield_permissions.allows_yield {
                                             // we can't yield here
                                             err.data = RuntimeErrorData::InvalidYield;
                                             return Err(Self::continue_unwind(vm, err));
@@ -218,13 +218,14 @@ impl ExecutionContext {
 
                                         let execution = vm.execution_stack.pop().unwrap();
 
-                                        vm.execution_data.in_progress_yield.push(
+                                        vm.coroutine_data.in_progress_yield.push((
                                             Continuation::Execution {
                                                 execution,
                                                 return_mode,
                                                 stack_start,
                                             },
-                                        );
+                                            true,
+                                        ));
 
                                         return Err(err);
                                     } else {

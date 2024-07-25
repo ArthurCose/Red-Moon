@@ -1,5 +1,7 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{ByteString, FromValue, LazyArg, MultiValue, TableRef, Value, VmContext};
+use crate::interpreter::{
+    ByteString, FromValue, FunctionRef, LazyArg, MultiValue, TableRef, Value, VmContext,
+};
 use crate::languages::lua::parse_number;
 
 pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
@@ -440,8 +442,76 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     env.set("tonumber", tonumber, ctx)?;
 
-    // todo: pcall
-    // todo: xpcall
+    // pcall
+    fn pcall_continuation(
+        result: Result<MultiValue, RuntimeError>,
+        ctx: &mut VmContext,
+    ) -> Result<MultiValue, RuntimeError> {
+        ctx.set_resumable(true);
+
+        match result {
+            Ok(mut values) => {
+                values.push_front(Value::Bool(true));
+                Ok(values)
+            }
+            Err(err) => {
+                if matches!(err.data, RuntimeErrorData::Yield(_)) {
+                    ctx.set_resume_callback(pcall_continuation)?;
+
+                    Err(err)
+                } else {
+                    MultiValue::pack((false, err.to_string()), ctx)
+                }
+            }
+        }
+    }
+
+    let pcall = ctx.create_native_function(move |args, ctx| {
+        let (function, args): (FunctionRef, MultiValue) = args.unpack_args(ctx)?;
+
+        ctx.set_resumable(true);
+        pcall_continuation(function.call::<_, MultiValue>(args, ctx), ctx)
+    });
+    env.set("pcall", pcall, ctx)?;
+
+    // xpcall
+    fn create_xpcall_continuation(
+        handler: FunctionRef,
+    ) -> impl Fn(Result<MultiValue, RuntimeError>, &mut VmContext) -> Result<MultiValue, RuntimeError>
+           + Clone {
+        move |result: Result<MultiValue, RuntimeError>, ctx: &mut VmContext| {
+            ctx.set_resumable(true);
+
+            match result {
+                Ok(values) => Ok(values),
+                Err(err) => {
+                    if matches!(err.data, RuntimeErrorData::Yield(_)) {
+                        ctx.set_resume_callback(create_xpcall_continuation(handler.clone()))?;
+                    } else {
+                        let mut err_message = err.to_string();
+
+                        if let Err(handler_err) = handler.call::<_, ()>(err_message, ctx) {
+                            err_message = handler_err.to_string();
+                            // pass our handler's error into itself, give up on future errors (lua does not specify max retries)
+                            let _ = handler.call::<_, ()>(err_message, ctx);
+                        }
+                    }
+
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    let xpcall = ctx.create_native_function(|args, ctx| {
+        let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
+            args.unpack_args(ctx)?;
+
+        ctx.set_resumable(true);
+        create_xpcall_continuation(handler)(function.call::<_, MultiValue>(args, ctx), ctx)
+    });
+    env.set("xpcall", xpcall, ctx)?;
+
     // todo: warn
 
     Ok(())

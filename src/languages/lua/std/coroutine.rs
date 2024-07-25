@@ -18,6 +18,11 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let isyieldable = ctx.create_native_function(|args, ctx| {
         let (co, mut args): (Option<CoroutineRef>, MultiValue) = args.unpack(ctx)?;
 
+        if !ctx.is_yieldable() {
+            args.push_front(Value::Bool(false));
+            return Ok(args);
+        }
+
         let top_coroutine = ctx.top_coroutine();
         let yieldable = if co.is_some() {
             top_coroutine == co
@@ -100,7 +105,10 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("wrap", wrap, ctx)?;
 
     // yield
-    let r#yield = ctx.create_native_function(|args, _| Err(RuntimeErrorData::Yield(args).into()));
+    let r#yield = ctx.create_native_function(|args, ctx| {
+        ctx.set_resume_callback(|result, _| result)?;
+        Err(RuntimeErrorData::Yield(args).into())
+    });
     coroutine.raw_set("yield", r#yield, ctx)?;
 
     let env = ctx.default_environment();
