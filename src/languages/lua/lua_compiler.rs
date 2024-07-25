@@ -1782,7 +1782,6 @@ where
                 *result_register =
                     self.resolve_expression(top_register, return_mode, unary_priority())?;
                 while self.resolve_operation(top_register, result_register, unary_priority())? {}
-                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
@@ -1790,13 +1789,14 @@ where
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::UnaryMinus(top_register, *result_register));
                 *result_register = top_register;
+
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Not => {
                 // not
                 *result_register =
                     self.resolve_expression(top_register, return_mode, unary_priority())?;
                 while self.resolve_operation(top_register, result_register, unary_priority())? {}
-                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
@@ -1804,13 +1804,14 @@ where
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::Not(top_register, *result_register));
                 *result_register = top_register;
+
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::Tilde => {
                 // bitwise not
                 *result_register =
                     self.resolve_expression(top_register, return_mode, unary_priority())?;
                 while self.resolve_operation(top_register, result_register, unary_priority())? {}
-                while self.resolve_operation(top_register, result_register, operation_priority)? {}
 
                 self.top_function
                     .map_following_instructions(self.source, token.offset);
@@ -1818,6 +1819,8 @@ where
                 let instructions = &mut self.top_function.instructions;
                 instructions.push(Instruction::BitwiseNot(top_register, *result_register));
                 *result_register = top_register;
+
+                while self.resolve_operation(top_register, result_register, operation_priority)? {}
             }
             LuaTokenLabel::OpenParen | LuaTokenLabel::Name => {
                 // variable or function

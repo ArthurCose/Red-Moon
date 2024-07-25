@@ -5,6 +5,9 @@ hi	hello	world	true	1.0	2	false	255	nil
 short circuit:
 1	2	3	false	false
 
+unary:
+3
+
 arithmetic:
 5	7	6	3.0	4	-6	1.4142135623730951
 

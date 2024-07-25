@@ -5,6 +5,9 @@ print("hi", 'hello', [[world]], true, 1.0, 2, false, 0xFF, nil)
 print("\nshort circuit:")
 print(false or 1, 2 or false, true and 3, false and 4, true and false)
 
+print("\nunary:")
+print(not false and 3)
+
 print("\narithmetic:")
 print(1 + 2 * 2, 3 * 2 + 1, (1 + 2) * 2, 1. + 2, 1. << 2, 2 * -3, 2 ^ 2 ^ -1)
 
