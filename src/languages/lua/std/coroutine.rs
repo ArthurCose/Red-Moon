@@ -68,13 +68,20 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // status
     let suspended_string = ctx.intern_string(b"suspended");
     let running_string = ctx.intern_string(b"running");
+    let normal_string = ctx.intern_string(b"normal");
     let dead_string = ctx.intern_string(b"dead");
 
     let status = ctx.create_native_function(move |args, ctx| {
         let co: CoroutineRef = args.unpack_args(ctx)?;
         let status = match co.status(ctx)? {
             CoroutineStatus::Suspended => suspended_string.clone(),
-            CoroutineStatus::Running => running_string.clone(),
+            CoroutineStatus::Running => {
+                if ctx.top_coroutine() != Some(co) {
+                    normal_string.clone()
+                } else {
+                    running_string.clone()
+                }
+            }
             CoroutineStatus::Dead => dead_string.clone(),
         };
         MultiValue::pack(status, ctx)
