@@ -11,7 +11,7 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let env = ctx.default_environment();
     env.set("string", string, ctx)?;
 
-    impl_string_metamethods(string_metatable, ctx);
+    impl_string_metamethods(string_metatable, ctx)?;
 
     Ok(())
 }
@@ -35,14 +35,14 @@ macro_rules! impl_binary_number_op {
             MultiValue::pack(value, ctx)
         });
 
-        $metatable.raw_set(key, func, $ctx).unwrap();
+        $metatable.raw_set(key, func, $ctx)?;
     }};
 }
 
-fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
+fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // index
     let key = ctx.metatable_keys().index.clone();
-    metatable.raw_set(key, metatable.clone(), ctx).unwrap();
+    metatable.raw_set(key, metatable.clone(), ctx)?;
 
     // basic arithmetic
     impl_binary_number_op!(ctx, metatable, add, +);
@@ -64,7 +64,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a, ctx)
     });
 
-    metatable.raw_set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx)?;
 
     // division
     let key = ctx.metatable_keys().div.clone();
@@ -77,7 +77,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a / b, ctx)
     });
 
-    metatable.raw_set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx)?;
 
     // integer division
     let key = ctx.metatable_keys().idiv.clone();
@@ -104,7 +104,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(value, ctx)
     });
 
-    metatable.raw_set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx)?;
 
     // power
     let key = ctx.metatable_keys().pow.clone();
@@ -117,7 +117,9 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) {
         MultiValue::pack(a.powf(b), ctx)
     });
 
-    metatable.raw_set(key, func, ctx).unwrap();
+    metatable.raw_set(key, func, ctx)?;
+
+    Ok(())
 }
 
 fn string_to_number(string_ref: StringRef, ctx: &mut VmContext) -> Option<Number> {
