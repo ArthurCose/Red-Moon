@@ -427,7 +427,10 @@ impl Vm {
 
         let heap = &self.execution_data.heap;
 
-        if heap.get(function_key).is_none() {
+        if !matches!(
+            heap.get(function_key),
+            Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
+        ) {
             return Err(IllegalInstruction::InvalidHeapKey.into());
         }
 

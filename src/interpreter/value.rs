@@ -264,15 +264,22 @@ impl Value {
     }
 
     pub(crate) fn test_validity(&self, heap: &Heap) -> Result<(), RuntimeErrorData> {
-        let Some(key) = self.heap_key() else {
-            return Ok(());
+        let valid = match self {
+            Value::String(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Bytes(_))),
+            Value::Table(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Table(_))),
+            Value::Function(r) => matches!(
+                heap.get(r.0.key()),
+                Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
+            ),
+            Value::Coroutine(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Coroutine(_))),
+            Value::Nil | Value::Bool(_) | Value::Integer(_) | Value::Float(_) => return Ok(()),
         };
 
-        if heap.get(key).is_none() {
-            return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey));
+        if valid {
+            Ok(())
+        } else {
+            Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey))
         }
-
-        Ok(())
     }
 
     pub(crate) fn heap_key(&self) -> Option<HeapKey> {
