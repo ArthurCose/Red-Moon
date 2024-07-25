@@ -204,25 +204,6 @@ impl Vm {
     }
 
     #[inline]
-    pub fn environment_up_value(&mut self) -> Option<TableRef> {
-        let context = self.execution_stack.last()?;
-        let call = context.call_stack.last()?;
-        let env_index = call.function_definition.env?;
-        let StackValue::HeapValue(env_key) = call.up_values.get(env_index) else {
-            return None;
-        };
-
-        let heap = &mut self.execution_data.heap;
-
-        if !matches!(heap.get(env_key), Some(HeapValue::Table(_))) {
-            // not a table or was garbage collected
-            return None;
-        }
-
-        Some(TableRef(heap.create_ref(env_key)))
-    }
-
-    #[inline]
     pub fn string_metatable(&self) -> TableRef {
         let heap = &self.execution_data.heap;
         TableRef(heap.string_metatable_ref().clone())
@@ -564,7 +545,21 @@ impl<'vm> VmContext<'vm> {
 
     #[inline]
     pub fn environment_up_value(&mut self) -> Option<TableRef> {
-        self.vm.environment_up_value()
+        let context = self.vm.execution_stack.last()?;
+        let call = context.call_stack.last()?;
+        let env_index = call.function_definition.env?;
+        let StackValue::HeapValue(env_key) = call.up_values.get(env_index) else {
+            return None;
+        };
+
+        let heap = &mut self.vm.execution_data.heap;
+
+        if !matches!(heap.get(env_key), Some(HeapValue::Table(_))) {
+            // not a table or was garbage collected
+            return None;
+        }
+
+        Some(TableRef(heap.create_ref(env_key)))
     }
 
     #[inline]

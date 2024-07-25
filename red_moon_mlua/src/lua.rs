@@ -228,7 +228,7 @@ impl Lua {
         self.self_ptr.set(self);
 
         let vm = unsafe { self.vm_mut() };
-        let Some(table_ref) = vm.environment_up_value() else {
+        let Some(table_ref) = vm.context().environment_up_value() else {
             return Ok(self.globals());
         };
 
