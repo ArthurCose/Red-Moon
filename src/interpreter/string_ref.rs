@@ -1,7 +1,7 @@
 use super::heap::{HeapRef, HeapValue};
 use super::vm::VmContext;
 use super::ByteString;
-use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
+use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -16,7 +16,7 @@ impl StringRef {
     pub fn fetch<'vm>(&self, ctx: &'vm VmContext<'vm>) -> Result<&'vm ByteString, RuntimeError> {
         let heap = &ctx.vm.execution_data.heap;
         let Some(HeapValue::Bytes(bytes)) = heap.get(self.0.key()) else {
-            return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
+            return Err(RuntimeErrorData::InvalidRef.into());
         };
 
         Ok(bytes)

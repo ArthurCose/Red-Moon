@@ -2,7 +2,7 @@ use super::heap::HeapKey;
 use super::native_function::NativeFunction;
 use super::{execution::ExecutionContext, heap::HeapValue};
 use super::{MultiValue, ReturnMode, Vm, VmContext};
-use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
+use crate::errors::{RuntimeError, RuntimeErrorData};
 use std::rc::Rc;
 
 pub(crate) type ContinuationCallback = NativeFunction<Result<MultiValue, RuntimeError>>;
@@ -71,7 +71,7 @@ impl Coroutine {
         }
 
         let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
-            return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
+            return Err(RuntimeErrorData::InvalidRef.into());
         };
 
         let mut coroutine = coroutine;
@@ -180,7 +180,7 @@ impl Coroutine {
             let heap = &mut vm.execution_data.heap;
 
             let Some(HeapValue::Coroutine(co)) = heap.get_mut_unmarked(co_heap_key) else {
-                return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
+                return Err(RuntimeErrorData::InvalidRef.into());
             };
 
             coroutine = co;
@@ -191,7 +191,7 @@ impl Coroutine {
         let heap = &mut vm.execution_data.heap;
 
         let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
-            return Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey).into());
+            return Err(RuntimeErrorData::InvalidRef.into());
         };
         let new_size = coroutine.heap_size();
 

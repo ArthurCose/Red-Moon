@@ -653,7 +653,7 @@ impl CallContext {
                     }
                 }
                 Instruction::FlushToTable(dest, total, index_offset) => {
-                    let err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
+                    let err = RuntimeErrorData::InvalidRef;
 
                     // get the table
                     let dest_index = self.register_base + dest as usize;
@@ -700,7 +700,7 @@ impl CallContext {
                     }
                 }
                 Instruction::VariadicToTable(dest, src_start, index_offset) => {
-                    let table_err: RuntimeErrorData = IllegalInstruction::InvalidHeapKey.into();
+                    let table_err = RuntimeErrorData::InvalidRef;
 
                     // grab the table
                     let dest_index = self.register_base + dest as usize;

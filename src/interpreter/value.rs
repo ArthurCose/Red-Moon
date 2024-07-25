@@ -3,7 +3,7 @@ use super::heap::{Heap, HeapKey, HeapValue};
 use super::value_stack::StackValue;
 use super::vm::VmContext;
 use super::{ByteString, CoroutineRef, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef};
-use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
+use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::languages::lua::{parse_number, Number};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -271,7 +271,7 @@ impl Value {
         if valid {
             Ok(())
         } else {
-            Err(RuntimeErrorData::from(IllegalInstruction::InvalidHeapKey))
+            Err(RuntimeErrorData::InvalidRef)
         }
     }
 

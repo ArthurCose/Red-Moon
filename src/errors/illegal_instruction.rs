@@ -9,6 +9,5 @@ pub enum IllegalInstruction {
     MissingByteStringConstant(ConstantIndex),
     MissingNumberConstant(ConstantIndex),
     MissingFunctionConstant(ConstantIndex),
-    InvalidHeapKey,
     UnexpectedConstant,
 }

@@ -6,6 +6,7 @@ use std::rc::Rc;
 #[derive(Debug, PartialEq, Clone)]
 pub enum RuntimeErrorData {
     IllegalInstruction(IllegalInstruction),
+    InvalidRef,
     MissingMain,
     StackOverflow,
     NotAFunction,

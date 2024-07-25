@@ -8,7 +8,7 @@ use super::{
     Continuation, CoroutineRef, FromMulti, FunctionRef, IntoMulti, Module, MultiValue, StringRef,
     TableRef,
 };
-use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
+use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
 use crate::FastHashMap;
 use downcast::downcast;
@@ -411,7 +411,7 @@ impl Vm {
             heap.get(function_key),
             Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
         ) {
-            return Err(IllegalInstruction::InvalidHeapKey.into());
+            return Err(RuntimeErrorData::InvalidRef.into());
         }
 
         let coroutine = Box::new(Coroutine::new(function_key));
