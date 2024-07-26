@@ -35,14 +35,9 @@ pub enum RuntimeErrorData {
         /// Underlying error returned when converting argument to a Lua value.
         reason: Rc<RuntimeErrorData>,
     },
-    /// A Lua value could not be converted to the expected Rust type.
-    FromLuaConversionError {
-        /// Name of the Lua type that could not be converted.
-        from: &'static str,
-        /// Name of the Rust type that could not be created.
-        to: &'static str,
-        /// A string containing more detailed error information.
-        message: Option<String>,
+    ExpectedType {
+        expected: &'static str,
+        received: &'static str,
     },
     NativeError(NativeError),
     String(Cow<'static, str>),

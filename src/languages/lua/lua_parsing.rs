@@ -32,10 +32,9 @@ impl FromValue for Number {
         match value {
             Value::Integer(i) => Ok(Number::Integer(i)),
             Value::Float(f) => Ok(Number::Float(f)),
-            _ => Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "Number",
-                message: None,
+            _ => Err(RuntimeErrorData::ExpectedType {
+                expected: "number",
+                received: value.type_name(),
             }
             .into()),
         }

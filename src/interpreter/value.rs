@@ -29,11 +29,6 @@ impl Default for Value {
 
 impl Value {
     #[inline]
-    pub fn is_nil(&self) -> bool {
-        matches!(self, Self::Nil)
-    }
-
-    #[inline]
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::Nil => "nil",
@@ -44,6 +39,20 @@ impl Value {
             Value::Table(_) => "table",
             Value::Function(_) => "function",
             Value::Coroutine(_) => "thread",
+        }
+    }
+
+    #[inline]
+    pub fn is_nil(&self) -> bool {
+        matches!(self, Self::Nil)
+    }
+
+    #[inline]
+    pub fn as_number(&self) -> Option<Number> {
+        match self {
+            Value::Integer(i) => Some(Number::Integer(*i)),
+            Value::Float(f) => Some(Number::Float(*f)),
+            _ => None,
         }
     }
 
@@ -69,6 +78,51 @@ impl Value {
     pub fn as_function_ref(&self) -> Option<&FunctionRef> {
         if let Value::Function(function_ref) = self {
             Some(function_ref)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn as_coroutine_ref(&self) -> Option<&CoroutineRef> {
+        if let Value::Coroutine(coroutine_ref) = self {
+            Some(coroutine_ref)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn into_string_ref(self) -> Option<StringRef> {
+        if let Value::String(string_ref) = self {
+            Some(string_ref)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn into_table_ref(self) -> Option<TableRef> {
+        if let Value::Table(table_ref) = self {
+            Some(table_ref)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn into_function_ref(self) -> Option<FunctionRef> {
+        if let Value::Function(function_ref) = self {
+            Some(function_ref)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn into_coroutine_ref(self) -> Option<CoroutineRef> {
+        if let Value::Coroutine(coroutine_ref) = self {
+            Some(coroutine_ref)
         } else {
             None
         }
@@ -449,10 +503,9 @@ impl FromValue for StringRef {
         if let Value::String(string_ref) = value {
             Ok(string_ref)
         } else {
-            Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "StringRef",
-                message: None,
+            Err(RuntimeErrorData::ExpectedType {
+                expected: "string",
+                received: value.type_name(),
             }
             .into())
         }
@@ -465,10 +518,9 @@ impl FromValue for TableRef {
         if let Value::Table(table_ref) = value {
             Ok(table_ref)
         } else {
-            Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "TableRef",
-                message: None,
+            Err(RuntimeErrorData::ExpectedType {
+                expected: "table",
+                received: value.type_name(),
             }
             .into())
         }
@@ -481,10 +533,9 @@ impl FromValue for FunctionRef {
         if let Value::Function(function_ref) = value {
             Ok(function_ref)
         } else {
-            Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "FunctionRef",
-                message: None,
+            Err(RuntimeErrorData::ExpectedType {
+                expected: "function",
+                received: value.type_name(),
             }
             .into())
         }
@@ -497,10 +548,9 @@ impl FromValue for CoroutineRef {
         if let Value::Coroutine(coroutine_ref) = value {
             Ok(coroutine_ref)
         } else {
-            Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "CoroutineRef",
-                message: None,
+            Err(RuntimeErrorData::ExpectedType {
+                expected: "thread",
+                received: value.type_name(),
             }
             .into())
         }
@@ -511,10 +561,9 @@ impl FromValue for String {
     #[inline]
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
-            return Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "String",
-                message: None,
+            return Err(RuntimeErrorData::ExpectedType {
+                expected: "string",
+                received: value.type_name(),
             }
             .into());
         };
@@ -528,10 +577,9 @@ impl FromValue for ByteString {
     #[inline]
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
-            return Err(RuntimeErrorData::FromLuaConversionError {
-                from: value.type_name(),
-                to: "String",
-                message: None,
+            return Err(RuntimeErrorData::ExpectedType {
+                expected: "string",
+                received: value.type_name(),
             }
             .into());
         };
@@ -566,10 +614,9 @@ macro_rules! number_from_value {
                     _ => {}
                 };
 
-                Err(RuntimeErrorData::FromLuaConversionError {
-                    from: value.type_name(),
-                    to: stringify!($name),
-                    message: None,
+                Err(RuntimeErrorData::ExpectedType {
+                    expected: "number",
+                    received: value.type_name(),
                 }
                 .into())
             }
