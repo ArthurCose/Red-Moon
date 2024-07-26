@@ -108,7 +108,6 @@ pub struct Vm {
     pub(crate) execution_stack: Vec<ExecutionContext>,
     pub(crate) coroutine_data: CoroutineData,
     default_environment: HeapRef,
-    pub(crate) environment_up_value: Option<HeapKey>,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
 }
 
@@ -120,7 +119,6 @@ impl Clone for Vm {
             execution_stack: Default::default(),
             coroutine_data: Default::default(),
             default_environment: self.default_environment.clone(),
-            environment_up_value: self.environment_up_value,
             app_data: self.app_data.clone(),
         }
     }
@@ -155,7 +153,6 @@ impl Vm {
             execution_stack: Default::default(),
             coroutine_data: Default::default(),
             default_environment,
-            environment_up_value: None,
             app_data: Default::default(),
         }
     }
