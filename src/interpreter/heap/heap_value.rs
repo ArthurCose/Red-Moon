@@ -18,20 +18,18 @@ pub(crate) enum HeapValue {
 
 impl HeapValue {
     pub(crate) fn gc_size(&self) -> usize {
-        match self {
-            HeapValue::StackValue(_) => std::mem::size_of::<Self>(),
-            HeapValue::Bytes(bytes) => bytes.heap_size() + std::mem::size_of::<Self>(),
-            HeapValue::Table(table) => {
-                table.heap_size() + std::mem::size_of::<Table>() + std::mem::size_of::<Self>()
-            }
-            HeapValue::NativeFunction(_) => std::mem::size_of::<Self>(),
-            HeapValue::Function(function) => function.heap_size() + std::mem::size_of::<Self>(),
+        let heap_size = match self {
+            HeapValue::StackValue(_) => 0,
+            HeapValue::Bytes(bytes) => bytes.heap_size(),
+            HeapValue::Table(table) => table.heap_size() + std::mem::size_of::<Table>(),
+            HeapValue::NativeFunction(_) => 0,
+            HeapValue::Function(function) => function.heap_size(),
             HeapValue::Coroutine(coroutine) => {
-                coroutine.heap_size()
-                    + std::mem::size_of::<Coroutine>()
-                    + std::mem::size_of::<Self>()
+                coroutine.heap_size() + std::mem::size_of::<Coroutine>()
             }
-        }
+        };
+
+        std::mem::size_of::<Self>() + heap_size
     }
 
     pub(crate) fn type_name(&self, heap: &Heap) -> TypeName {
