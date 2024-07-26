@@ -24,10 +24,24 @@ pub(crate) struct NativeFunction<A> {
 
 impl<A> NativeFunction<A> {
     pub(crate) fn call(&self, args: A, ctx: &mut VmContext) -> Result<MultiValue, RuntimeError> {
-        if ctx.vm.coroutine_data.yield_permissions.allows_yield {
-            return self.yieldable_call(args, ctx);
+        let result = if ctx.vm.coroutine_data.yield_permissions.allows_yield {
+            self.yieldable_call(args, ctx)
+        } else {
+            self.non_yielding_call(args, ctx)
+        };
+
+        if let Ok(return_values) = &result {
+            let heap = &ctx.vm.execution_data.heap;
+
+            for value in &return_values.values {
+                value.test_validity(heap)?;
+            }
         }
 
+        result
+    }
+
+    fn non_yielding_call(&self, args: A, ctx: &mut VmContext) -> Result<MultiValue, RuntimeError> {
         (self.callback)(args, ctx).map_err(|mut err| {
             if matches!(err.data, RuntimeErrorData::Yield(_)) {
                 err.data = RuntimeErrorData::InvalidYield
