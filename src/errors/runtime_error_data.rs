@@ -9,20 +9,21 @@ pub enum RuntimeErrorData {
     InvalidRef,
     MissingMain,
     StackOverflow,
-    NotAFunction,
-    MetatableChainTooLong,
-    AttemptToIndexInvalid,
-    AttemptToConcatInvalid,
-    NoLength,
-    InvalidCompare,
-    InvalidArithmetic,
+    InvalidCall(TypeName),
+    MetatableIndexChainTooLong,
+    MetatableCallChainTooLong,
+    AttemptToIndex(TypeName),
+    AttemptToConcat(TypeName),
+    NoLength(TypeName),
+    InvalidCompare(TypeName, TypeName),
+    InvalidArithmetic(TypeName),
     DivideByZero,
-    NoIntegerRepresentation(f64),
-    InitialValueMustBeNumber,
-    LimitMustBeNumber,
-    StepMustBeNumber,
+    NoIntegerRepresentation,
+    InvalidForInitialValue(TypeName),
+    InvalidForLimit(TypeName),
+    InvalidForStep(TypeName),
     OutOfBounds,
-    DeadCoroutine,
+    ResumedDeadCoroutine,
     ResumedNonSuspendedCoroutine,
     Yield(MultiValue),
     InvalidYield,
@@ -47,5 +48,80 @@ pub enum RuntimeErrorData {
 impl From<IllegalInstruction> for RuntimeErrorData {
     fn from(value: IllegalInstruction) -> Self {
         Self::IllegalInstruction(value)
+    }
+}
+
+impl std::fmt::Display for RuntimeErrorData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeErrorData::IllegalInstruction(instruction) => {
+                write!(f, "illegal instruction, {instruction}")
+            }
+            RuntimeErrorData::InvalidRef => write!(f, "invalid ref"),
+            RuntimeErrorData::MissingMain => write!(f, "module missing main chunk"),
+            RuntimeErrorData::StackOverflow => write!(f, "stack overflow"),
+            RuntimeErrorData::InvalidCall(type_name) => {
+                write!(f, "attempt to call a {type_name} value")
+            }
+            RuntimeErrorData::MetatableIndexChainTooLong => {
+                write!(f, "'__index' chain too long; possible loop")
+            }
+            RuntimeErrorData::MetatableCallChainTooLong => {
+                write!(f, "'__call' chain too long; possible loop")
+            }
+            RuntimeErrorData::AttemptToIndex(type_name) => {
+                write!(f, "attempt to index a {type_name} value")
+            }
+            RuntimeErrorData::AttemptToConcat(type_name) => {
+                write!(f, "attempt to concatinate a {type_name} value")
+            }
+            RuntimeErrorData::NoLength(type_name) => {
+                write!(f, "attempt to get length of a {type_name} value")
+            }
+            RuntimeErrorData::InvalidCompare(type_name_a, type_name_b) => {
+                write!(f, "attempt to compare {type_name_a} with {type_name_b}")
+            }
+            RuntimeErrorData::InvalidArithmetic(type_name) => {
+                write!(f, "attempt to perform arithmetic on a {type_name} value")
+            }
+            RuntimeErrorData::DivideByZero => write!(f, "attempt to divide by zero"),
+            RuntimeErrorData::NoIntegerRepresentation => {
+                write!(f, "number has no integer representation")
+            }
+            RuntimeErrorData::InvalidForInitialValue(type_name) => {
+                write!(
+                    f,
+                    "bad 'for' initial value (number expected, got {type_name})"
+                )
+            }
+            RuntimeErrorData::InvalidForLimit(type_name) => {
+                write!(f, "bad 'for' limit (number expected, got {type_name})")
+            }
+            RuntimeErrorData::InvalidForStep(type_name) => {
+                write!(f, "bad 'for' step (number expected, got {type_name})")
+            }
+            RuntimeErrorData::OutOfBounds => write!(f, "position out of bounds"),
+            RuntimeErrorData::ResumedDeadCoroutine => write!(f, "cannot resume dead coroutine"),
+            RuntimeErrorData::ResumedNonSuspendedCoroutine => {
+                write!(f, "cannot resume non-suspended coroutine")
+            }
+            RuntimeErrorData::Yield(_) => write!(f, "in progress yield"),
+            RuntimeErrorData::InvalidYield => {
+                write!(f, "attempt to yield from outside a coroutine")
+            }
+            RuntimeErrorData::UnhandledYield => write!(f, "unhandled yield"),
+            RuntimeErrorData::YieldMissingContinuation => {
+                write!(f, "yield missing continuation callback")
+            }
+            RuntimeErrorData::BadArgument { position, reason } => {
+                write!(f, "bad argument #{position} ({reason})")
+            }
+            RuntimeErrorData::ExpectedType { expected, received } => {
+                write!(f, "{expected} expected, got {received}")
+            }
+            RuntimeErrorData::NativeError(err) => write!(f, "{err}"),
+            RuntimeErrorData::String(s) => write!(f, "{s}"),
+            RuntimeErrorData::ByteString(s) => write!(f, "{s}"),
+        }
     }
 }

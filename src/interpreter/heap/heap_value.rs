@@ -1,9 +1,10 @@
+use super::Heap;
 use crate::interpreter::coroutine::Coroutine;
 use crate::interpreter::interpreted_function::Function;
 use crate::interpreter::native_function::NativeFunction;
 use crate::interpreter::table::Table;
 use crate::interpreter::value_stack::StackValue;
-use crate::interpreter::{ByteString, MultiValue};
+use crate::interpreter::{ByteString, MultiValue, TypeName};
 
 #[derive(Clone)]
 pub(crate) enum HeapValue {
@@ -30,6 +31,16 @@ impl HeapValue {
                     + std::mem::size_of::<Coroutine>()
                     + std::mem::size_of::<Self>()
             }
+        }
+    }
+
+    pub(crate) fn type_name(&self, heap: &Heap) -> TypeName {
+        match self {
+            HeapValue::StackValue(v) => v.type_name(heap),
+            HeapValue::Bytes(_) => TypeName::String,
+            HeapValue::Table(_) => TypeName::Table,
+            HeapValue::NativeFunction(_) | HeapValue::Function(_) => TypeName::Function,
+            HeapValue::Coroutine(_) => TypeName::Thread,
         }
     }
 }

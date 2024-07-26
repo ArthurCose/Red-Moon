@@ -48,7 +48,7 @@ impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let frames = self.trace.frames();
 
-        write!(f, "error: {:?}", self.data)?;
+        write!(f, "error: {}", self.data)?;
 
         for frame in frames {
             write!(

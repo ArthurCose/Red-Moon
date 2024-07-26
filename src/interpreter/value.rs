@@ -208,7 +208,10 @@ impl Value {
         let value = match (self, other) {
             (Value::String(l), _) => {
                 let Value::String(r) = other else {
-                    return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
+                    return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
+                        self.type_name(),
+                        other.type_name(),
+                    )));
                 };
 
                 return Ok(l.fetch(ctx)?.as_bytes() < r.fetch(ctx)?.as_bytes());
@@ -217,7 +220,12 @@ impl Value {
             (Value::Integer(l), Value::Integer(r)) => *l < *r,
             (Value::Float(l), Value::Integer(r)) => *l < (*r as f64),
             (Value::Integer(l), Value::Float(r)) => (*l as f64) < *r,
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
+            _ => {
+                return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
+                    self.type_name(),
+                    other.type_name(),
+                )))
+            }
         };
 
         Ok(value)
@@ -237,7 +245,10 @@ impl Value {
         let value = match (self, other) {
             (Value::String(l), _) => {
                 let Value::String(r) = other else {
-                    return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare));
+                    return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
+                        self.type_name(),
+                        other.type_name(),
+                    )));
                 };
 
                 return Ok(l.fetch(ctx)?.as_bytes() <= r.fetch(ctx)?.as_bytes());
@@ -246,7 +257,12 @@ impl Value {
             (Value::Integer(l), Value::Integer(r)) => *l <= *r,
             (Value::Float(l), Value::Integer(r)) => *l <= (*r as f64),
             (Value::Integer(l), Value::Float(r)) => (*l as f64) <= *r,
-            _ => return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare)),
+            _ => {
+                return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
+                    self.type_name(),
+                    other.type_name(),
+                )))
+            }
         };
 
         Ok(value)

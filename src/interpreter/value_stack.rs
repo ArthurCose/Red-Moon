@@ -1,5 +1,5 @@
 use super::heap::{Heap, HeapKey, HeapValue};
-use super::Number;
+use super::{Number, TypeName};
 use crate::vec_cell::VecCell;
 use std::ops::Range;
 
@@ -56,6 +56,17 @@ impl StackValue {
         };
 
         *value
+    }
+
+    pub(crate) fn type_name(self, heap: &Heap) -> TypeName {
+        match self {
+            StackValue::Nil => TypeName::Nil,
+            StackValue::Bool(_) => TypeName::Bool,
+            StackValue::Integer(_) | StackValue::Float(_) => TypeName::Number,
+            StackValue::HeapValue(key) | StackValue::Pointer(key) => {
+                heap.get(key).unwrap().type_name(heap)
+            }
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
 use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
-use super::{UpValueSource, Value};
+use super::{TypeName, UpValueSource, Value};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
 use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
@@ -130,9 +130,13 @@ impl ExecutionContext {
 
                     let stack_start = call.register_base + registry_index;
 
-                    let StackValue::HeapValue(heap_key) = execution.value_stack.get(stack_start)
-                    else {
-                        return Err(Self::unwind_error(vm, RuntimeErrorData::NotAFunction));
+                    let function_value = execution.value_stack.get(stack_start);
+                    let StackValue::HeapValue(heap_key) = function_value else {
+                        let type_name = function_value.type_name(&exec_data.heap);
+                        return Err(Self::unwind_error(
+                            vm,
+                            RuntimeErrorData::InvalidCall(type_name),
+                        ));
                     };
 
                     let StackValue::Integer(mut arg_count) =
@@ -158,7 +162,9 @@ impl ExecutionContext {
                         Err(err) => return Err(Self::unwind_error(vm, err)),
                     };
 
-                    match exec_data.heap.get(function_key) {
+                    let function_value = exec_data.heap.get(function_key);
+
+                    match function_value {
                         Some(HeapValue::NativeFunction(callback)) => {
                             let callback = callback.shallow_clone();
 
@@ -289,7 +295,14 @@ impl ExecutionContext {
                             }
                         }
                         _ => {
-                            return Err(Self::unwind_error(vm, RuntimeErrorData::NotAFunction));
+                            let type_name = function_value
+                                .map(|value| value.type_name(&exec_data.heap))
+                                .unwrap_or(TypeName::Nil);
+
+                            return Err(Self::unwind_error(
+                                vm,
+                                RuntimeErrorData::InvalidCall(type_name),
+                            ));
                         }
                     }
                 }
@@ -1000,7 +1013,7 @@ impl CallContext {
                     let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
                     let StackValue::HeapValue(heap_key) = value_a else {
-                        return Err(RuntimeErrorData::NoLength);
+                        return Err(RuntimeErrorData::NoLength(value_a.type_name(heap)));
                     };
 
                     // default behavior
@@ -1008,7 +1021,7 @@ impl CallContext {
                     let len = match heap_value {
                         HeapValue::Table(table) => table.list_len(),
                         HeapValue::Bytes(bytes) => bytes.len(),
-                        _ => return Err(RuntimeErrorData::NoLength),
+                        _ => return Err(RuntimeErrorData::NoLength(heap_value.type_name(heap))),
                     };
 
                     // try metamethod before using the default value
@@ -1033,11 +1046,11 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        || RuntimeErrorData::InvalidArithmetic,
-                        |value| match value {
+                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        |heap, value| match value {
                             StackValue::Integer(n) => Ok(StackValue::Integer(-n)),
                             StackValue::Float(n) => Ok(StackValue::Float(-n)),
-                            _ => Err(RuntimeErrorData::InvalidArithmetic),
+                            _ => Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
                         },
                     )? {
                         return Ok(call_result);
@@ -1050,8 +1063,10 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        || RuntimeErrorData::InvalidArithmetic,
-                        |value| Ok(StackValue::Integer(-arithmetic_cast_integer(value)?)),
+                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        |heap, value| {
+                            Ok(StackValue::Integer(-arithmetic_cast_integer(heap, value)?))
+                        },
                     )? {
                         return Ok(call_result);
                     }
@@ -1136,7 +1151,14 @@ impl CallContext {
                                     value_a,
                                     value_b,
                                 )
-                                .ok_or_else(|| RuntimeErrorData::InvalidArithmetic);
+                                .ok_or_else(|| match (value_a, value_b) {
+                                    (StackValue::Integer(_) | StackValue::Float(_), _) => {
+                                        RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap))
+                                    }
+                                    _ => {
+                                        RuntimeErrorData::InvalidArithmetic(value_a.type_name(heap))
+                                    }
+                                });
                         }
                     };
 
@@ -1262,13 +1284,11 @@ impl CallContext {
                         metamethod_key,
                         |a, b| a < b,
                         |a, b| a < b,
-                        |heap, a, b| {
-                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) =
-                                (heap.get(a).unwrap(), heap.get(b).unwrap())
-                            {
-                                Ok(bytes_a < bytes_b)
+                        |a, b| {
+                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) = (a, b) {
+                                Some(bytes_a < bytes_b)
                             } else {
-                                Err(RuntimeErrorData::InvalidCompare)
+                                None
                             }
                         },
                     )? {
@@ -1284,13 +1304,11 @@ impl CallContext {
                         metamethod_key,
                         |a, b| a <= b,
                         |a, b| a <= b,
-                        |heap, a, b| {
-                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) =
-                                (heap.get(a).unwrap(), heap.get(b).unwrap())
-                            {
-                                Ok(bytes_a <= bytes_b)
+                        |a, b| {
+                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) = (a, b) {
+                                Some(bytes_a <= bytes_b)
                             } else {
-                                Err(RuntimeErrorData::InvalidCompare)
+                                None
                             }
                         },
                     )? {
@@ -1328,7 +1346,16 @@ impl CallContext {
                                 value_a,
                                 value_b,
                             )
-                            .ok_or(RuntimeErrorData::AttemptToConcatInvalid)?;
+                            .ok_or_else(|| {
+                                let type_name_a = value_a.type_name(heap);
+
+                                match type_name_a {
+                                    TypeName::String => {
+                                        RuntimeErrorData::AttemptToConcat(value_b.type_name(heap))
+                                    }
+                                    _ => RuntimeErrorData::AttemptToConcat(type_name_a),
+                                }
+                            })?;
 
                         return Ok(call_result);
                     }
@@ -1349,17 +1376,17 @@ impl CallContext {
                     let limit = coerce_stack_value_to_integer(
                         heap,
                         value_stack.get(self.register_base + src as usize),
-                        || RuntimeErrorData::LimitMustBeNumber,
+                        |type_name| RuntimeErrorData::InvalidForLimit(type_name),
                     )?;
                     let step = coerce_stack_value_to_integer(
                         heap,
                         value_stack.get(self.register_base + src as usize + 1),
-                        || RuntimeErrorData::StepMustBeNumber,
+                        |type_name| RuntimeErrorData::InvalidForStep(type_name),
                     )?;
                     let mut value = coerce_stack_value_to_integer(
                         heap,
                         value_stack.get(self.register_base + local as usize),
-                        || RuntimeErrorData::InitialValueMustBeNumber,
+                        |type_name| RuntimeErrorData::InvalidForInitialValue(type_name),
                     )?;
 
                     if for_loop_jump {
@@ -1410,7 +1437,7 @@ impl CallContext {
         value_a: StackValue,
         value_b: StackValue,
         value: StackValue,
-        coerce_value: impl Fn(StackValue) -> Result<T, RuntimeErrorData>,
+        coerce_value: impl Fn(&Heap, StackValue) -> Result<T, RuntimeErrorData>,
     ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
         match value {
             StackValue::HeapValue(heap_key) => {
@@ -1423,7 +1450,7 @@ impl CallContext {
                     value_b,
                 ) {
                     Some(call_result) => Ok(ValueOrCallResult::CallResult(call_result)),
-                    None => Err(RuntimeErrorData::InvalidArithmetic),
+                    None => Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
                 }
             }
             StackValue::Pointer(heap_key) => {
@@ -1443,7 +1470,7 @@ impl CallContext {
                     coerce_value,
                 )
             }
-            _ => match coerce_value(value) {
+            _ => match coerce_value(heap, value) {
                 Ok(coerced_value) => Ok(ValueOrCallResult::Value(coerced_value)),
                 Err(err) => Err(err),
             },
@@ -1470,7 +1497,7 @@ impl CallContext {
             value_a,
             value_b,
             value_a,
-            |value| Ok(value),
+            |_, value| Ok(value),
         )? {
             ValueOrCallResult::Value(value) => value,
             ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
@@ -1483,7 +1510,7 @@ impl CallContext {
             value_a,
             value_b,
             value_b,
-            |value| Ok(value),
+            |_, value| Ok(value),
         )? {
             ValueOrCallResult::Value(value) => value,
             ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
@@ -1502,8 +1529,15 @@ impl CallContext {
             (StackValue::Integer(a), StackValue::Float(b)) => {
                 StackValue::Float(float_operation(a as f64, b))
             }
+            (StackValue::Integer(_) | StackValue::Float(_), _) => {
+                return Err(RuntimeErrorData::InvalidArithmetic(
+                    resolved_b.type_name(heap),
+                ));
+            }
             _ => {
-                return Err(RuntimeErrorData::InvalidArithmetic);
+                return Err(RuntimeErrorData::InvalidArithmetic(
+                    resolved_a.type_name(heap),
+                ));
             }
         };
 
@@ -1611,7 +1645,7 @@ impl CallContext {
         metamethod_key: StackValue,
         integer_comparison: impl Fn(i64, i64) -> bool,
         float_comparison: impl Fn(f64, f64) -> bool,
-        heap_comparison: impl Fn(&mut Heap, HeapKey, HeapKey) -> Result<bool, RuntimeErrorData>,
+        heap_comparison: impl Fn(&HeapValue, &HeapValue) -> Option<bool>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1634,9 +1668,24 @@ impl CallContext {
                 float_comparison(float_a, float_b)
             }
             (StackValue::HeapValue(key_a), StackValue::HeapValue(key_b)) => {
-                heap_comparison(heap, key_a, key_b)?
+                let a = heap.get(key_a).unwrap();
+                let b = heap.get(key_b).unwrap();
+
+                let Some(result) = heap_comparison(a, b) else {
+                    return Err(RuntimeErrorData::InvalidCompare(
+                        a.type_name(heap),
+                        b.type_name(heap),
+                    ));
+                };
+
+                result
             }
-            _ => return Err(RuntimeErrorData::InvalidCompare),
+            _ => {
+                return Err(RuntimeErrorData::InvalidCompare(
+                    value_a.type_name(heap),
+                    value_b.type_name(heap),
+                ))
+            }
         };
 
         value_stack.set(self.register_base + dest as usize, StackValue::Bool(result));
@@ -1712,8 +1761,8 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a): (Register, Register),
         metamethod_key: StackValue,
-        generate_error: impl Fn() -> RuntimeErrorData,
-        operation: impl Fn(StackValue) -> Result<StackValue, RuntimeErrorData>,
+        generate_error: impl Fn(TypeName) -> RuntimeErrorData,
+        operation: impl Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
 
@@ -1726,12 +1775,12 @@ impl CallContext {
                         (heap_key, metamethod_key),
                         (dest, value_a),
                     )
-                    .ok_or_else(generate_error)?,
+                    .ok_or_else(|| generate_error(value_a.type_name(heap)))?,
                 ));
             }
             // already resolved the pointer
             StackValue::Pointer(_) => unreachable!(),
-            _ => operation(value_a)?,
+            _ => operation(heap, value_a)?,
         };
 
         value_stack.set(self.register_base + dest as usize, result);
@@ -1767,13 +1816,20 @@ impl CallContext {
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         // initial test
         let StackValue::HeapValue(base_heap_key) = base else {
-            return Err(RuntimeErrorData::AttemptToIndexInvalid);
+            return Err(RuntimeErrorData::AttemptToIndex(
+                base.type_name(&exec_data.heap),
+            ));
         };
 
-        let mut value = match exec_data.heap.get(base_heap_key).unwrap() {
+        let heap_value = exec_data.heap.get(base_heap_key).unwrap();
+        let mut value = match heap_value {
             HeapValue::Table(table) => table.get(key),
             HeapValue::Bytes(_) => StackValue::Nil,
-            _ => return Err(RuntimeErrorData::AttemptToIndexInvalid),
+            _ => {
+                return Err(RuntimeErrorData::AttemptToIndex(
+                    heap_value.type_name(&exec_data.heap),
+                ))
+            }
         };
 
         let mut index_base = base;
@@ -1790,7 +1846,9 @@ impl CallContext {
                 index_base = next_index_base;
 
                 let StackValue::HeapValue(heap_key) = index_base else {
-                    return Err(RuntimeErrorData::AttemptToIndexInvalid);
+                    return Err(RuntimeErrorData::AttemptToIndex(
+                        index_base.type_name(&exec_data.heap),
+                    ));
                 };
 
                 let heap_value = exec_data.heap.get(heap_key).unwrap();
@@ -1819,7 +1877,7 @@ impl CallContext {
                 chain_depth += 1;
 
                 if chain_depth > max_chain_depth {
-                    return Err(RuntimeErrorData::MetatableChainTooLong);
+                    return Err(RuntimeErrorData::MetatableIndexChainTooLong);
                 }
             }
         }
@@ -1838,7 +1896,9 @@ impl CallContext {
         src: u8,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let StackValue::HeapValue(heap_key) = table_stack_value else {
-            return Err(RuntimeErrorData::AttemptToIndexInvalid);
+            return Err(RuntimeErrorData::AttemptToIndex(
+                table_stack_value.type_name(&exec_data.heap),
+            ));
         };
 
         let metamethod_key = exec_data.metatable_keys.newindex.0.key().into();
@@ -1865,7 +1925,9 @@ impl CallContext {
             let table_value = heap.get_mut(gc, heap_key).unwrap();
 
             let HeapValue::Table(table) = table_value else {
-                return Err(RuntimeErrorData::AttemptToIndexInvalid);
+                let value = heap.get(heap_key).unwrap();
+                let type_name = value.type_name(heap);
+                return Err(RuntimeErrorData::AttemptToIndex(type_name));
             };
 
             let original_size = table.heap_size();
@@ -1960,37 +2022,39 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
 }
 
 fn cast_integer(
+    heap: &Heap,
     value: StackValue,
-    generate_err: impl FnOnce() -> RuntimeErrorData,
+    generate_err: impl FnOnce(TypeName) -> RuntimeErrorData,
 ) -> Result<i64, RuntimeErrorData> {
     match value {
         StackValue::Float(float) => {
-            coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation(float))
+            coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation)
         }
         StackValue::Integer(int) => Ok(int),
-        _ => Err(generate_err()),
+        _ => Err(generate_err(value.type_name(heap))),
     }
 }
 
 fn cast_float(
+    heap: &Heap,
     value: StackValue,
-    generate_err: impl FnOnce() -> RuntimeErrorData,
+    generate_err: impl FnOnce(TypeName) -> RuntimeErrorData,
 ) -> Result<f64, RuntimeErrorData> {
     match value {
         StackValue::Integer(int) => Ok(int as f64),
         StackValue::Float(float) => Ok(float),
-        _ => Err(generate_err()),
+        _ => Err(generate_err(value.type_name(heap))),
     }
 }
 
 fn coerce_stack_value_to_integer(
     heap: &Heap,
     value: StackValue,
-    generate_err: impl FnOnce() -> RuntimeErrorData,
+    generate_err: impl FnOnce(TypeName) -> RuntimeErrorData,
 ) -> Result<i64, RuntimeErrorData> {
     match value {
         StackValue::Float(float) => {
-            coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation(float))
+            coerce_integer(float).ok_or(RuntimeErrorData::NoIntegerRepresentation)
         }
         StackValue::Integer(int) => Ok(int),
         StackValue::Pointer(key) => {
@@ -2000,16 +2064,22 @@ fn coerce_stack_value_to_integer(
 
             coerce_stack_value_to_integer(heap, value, generate_err)
         }
-        StackValue::HeapValue(_) | StackValue::Nil | StackValue::Bool(_) => Err(generate_err()),
+        StackValue::HeapValue(_) | StackValue::Nil | StackValue::Bool(_) => {
+            Err(generate_err(value.type_name(heap)))
+        }
     }
 }
 
-fn arithmetic_cast_float(value: StackValue) -> Result<f64, RuntimeErrorData> {
-    cast_float(value, || RuntimeErrorData::InvalidArithmetic)
+fn arithmetic_cast_float(heap: &Heap, value: StackValue) -> Result<f64, RuntimeErrorData> {
+    cast_float(heap, value, |type_name| {
+        RuntimeErrorData::InvalidArithmetic(type_name)
+    })
 }
 
-fn arithmetic_cast_integer(value: StackValue) -> Result<i64, RuntimeErrorData> {
-    cast_integer(value, || RuntimeErrorData::InvalidArithmetic)
+fn arithmetic_cast_integer(heap: &Heap, value: StackValue) -> Result<i64, RuntimeErrorData> {
+    cast_integer(heap, value, |type_name| {
+        RuntimeErrorData::InvalidArithmetic(type_name)
+    })
 }
 
 // resolves __call metamethod chains and stack values promoted to heap values
@@ -2024,11 +2094,13 @@ fn resolve_call(
 
     loop {
         let StackValue::HeapValue(heap_key) = value else {
-            return Err(RuntimeErrorData::NotAFunction);
+            return Err(RuntimeErrorData::InvalidCall(
+                value.type_name(&exec_data.heap),
+            ));
         };
 
         let Some(heap_value) = exec_data.heap.get(heap_key) else {
-            return Err(RuntimeErrorData::NotAFunction);
+            return Err(RuntimeErrorData::InvalidRef);
         };
 
         if matches!(
@@ -2045,7 +2117,7 @@ fn resolve_call(
         chain_depth += 1;
 
         if chain_depth > max_chain_depth {
-            return Err(RuntimeErrorData::MetatableChainTooLong);
+            return Err(RuntimeErrorData::MetatableCallChainTooLong);
         }
     }
 }

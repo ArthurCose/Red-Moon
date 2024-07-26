@@ -744,7 +744,7 @@ impl<'vm> VmContext<'vm> {
         }
 
         let Some(value) = heap.get(function_key) else {
-            return Err(RuntimeErrorData::NotAFunction.into());
+            return Err(RuntimeErrorData::InvalidRef.into());
         };
 
         let result = match value {
