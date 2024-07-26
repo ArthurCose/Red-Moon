@@ -1,5 +1,5 @@
 use super::heap::HeapRef;
-use super::{FromMulti, IntoMulti, TableRef, VmContext};
+use super::{FromMulti, IntoMulti, VmContext};
 use crate::errors::RuntimeError;
 use slotmap::Key;
 
@@ -18,12 +18,5 @@ impl FunctionRef {
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
         ctx.call_function_key(self.0.key(), args)
-    }
-}
-
-impl From<TableRef> for FunctionRef {
-    #[inline]
-    fn from(value: TableRef) -> Self {
-        Self(value.0)
     }
 }

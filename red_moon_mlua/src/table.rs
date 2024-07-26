@@ -1,6 +1,7 @@
 use crate::private::Sealed;
 use crate::{
-    Error, FromLua, FromLuaMulti, Function, Integer, IntoLua, IntoLuaMulti, Lua, Nil, Result, Value,
+    Error, FromLua, FromLuaMulti, Function, Integer, IntoLua, IntoLuaMulti, Lua, MultiValue, Nil,
+    Result, Value,
 };
 use red_moon::interpreter::TableRef;
 use std::collections::HashSet;
@@ -659,12 +660,21 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         A: IntoLuaMulti<'lua>,
         R: FromLuaMulti<'lua>,
     {
-        // Convert table to a function and call via pcall that respects the `__call` metamethod.
-        Function {
-            lua: self.lua,
-            function_ref: self.table_ref.clone().into(),
-        }
-        .call(args)
+        let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
+
+        // translate args
+        let mlua_multi = A::into_lua_multi(args, self.lua)?;
+        let red_moon_args = mlua_multi.into_red_moon(self.lua)?;
+
+        // call function
+        let results: red_moon::interpreter::MultiValue =
+            red_moon::interpreter::Value::Table(self.table_ref.clone()).call(red_moon_args, ctx)?;
+
+        // translate results
+        let mlua_multi = MultiValue::from_red_moon(self.lua, results);
+
+        R::from_lua_multi(mlua_multi, self.lua)
     }
 
     fn call_method<A, R>(&self, name: &str, args: A) -> Result<R>
