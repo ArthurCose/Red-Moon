@@ -225,6 +225,7 @@ impl_from_multi! { A B C D E F G H I J }
 impl_from_multi! { A B C D E F G H I J K }
 impl_from_multi! { A B C D E F G H I J K L }
 
+/// This trait is automatically implemented by any type implementing [FromValue].
 pub trait FromArg: Sized {
     /// `position` is the argument position, starts at 1
     fn from_arg(value: Value, position: usize, ctx: &mut VmContext) -> Result<Self, RuntimeError>;
