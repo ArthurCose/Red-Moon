@@ -3,7 +3,11 @@ use super::value_stack::StackValue;
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Table {
     pub(crate) metatable: Option<HeapKey>,
     pub(crate) map: IndexMap<StackValue, StackValue, FxBuildHasher>,

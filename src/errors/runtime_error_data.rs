@@ -3,7 +3,11 @@ use crate::interpreter::{ByteString, MultiValue, TypeName};
 use std::borrow::Cow;
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum RuntimeErrorData {
     IllegalInstruction(IllegalInstruction),
     InvalidRef,
@@ -25,6 +29,8 @@ pub enum RuntimeErrorData {
     OutOfBounds,
     ResumedDeadCoroutine,
     ResumedNonSuspendedCoroutine,
+    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_multi"))]
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_multi"))]
     Yield(MultiValue),
     InvalidYield,
     UnhandledYield,
@@ -34,16 +40,53 @@ pub enum RuntimeErrorData {
         /// Argument position (usually starts from 1).
         position: usize,
         /// Underlying error returned when converting argument to a Lua value.
+        #[cfg_attr(feature = "serde", serde(with = "serde_runtime_error_data_rc"))]
         reason: Rc<RuntimeErrorData>,
     },
     ExpectedType {
         expected: TypeName,
         received: TypeName,
     },
+    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_native_err"))]
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_native_err"))]
     NativeError(NativeError),
     String(Cow<'static, str>),
     ByteString(ByteString),
+    #[cfg_attr(feature = "serde", serde(other))]
+    LostInSerialization,
 }
+
+#[cfg(feature = "serde")]
+use crate::serde_util::{
+    impl_serde_deserialize_stub_fn, impl_serde_rc, impl_serde_serialize_stub_fn,
+};
+
+#[cfg(feature = "serde")]
+impl_serde_rc!(
+    serde_runtime_error_data_rc,
+    Rc<RuntimeErrorData>,
+    RuntimeErrorData
+);
+
+#[cfg(feature = "serde")]
+impl_serde_serialize_stub_fn!(serialize_multi, MultiValue);
+#[cfg(feature = "serde")]
+impl_serde_deserialize_stub_fn!(
+    deserialize_multi,
+    MultiValue,
+    MultiValue {
+        values: Default::default()
+    }
+);
+
+#[cfg(feature = "serde")]
+impl_serde_serialize_stub_fn!(serialize_native_err, NativeError);
+#[cfg(feature = "serde")]
+impl_serde_deserialize_stub_fn!(
+    deserialize_native_err,
+    NativeError,
+    super::RuntimeError::from(RuntimeErrorData::LostInSerialization).into()
+);
 
 impl From<IllegalInstruction> for RuntimeErrorData {
     fn from(value: IllegalInstruction) -> Self {
@@ -122,6 +165,9 @@ impl std::fmt::Display for RuntimeErrorData {
             RuntimeErrorData::NativeError(err) => write!(f, "{err}"),
             RuntimeErrorData::String(s) => write!(f, "{s}"),
             RuntimeErrorData::ByteString(s) => write!(f, "{s}"),
+            RuntimeErrorData::LostInSerialization => {
+                write!(f, "error information lost during serialization")
+            }
         }
     }
 }

@@ -1,5 +1,8 @@
 mod vec_cell;
 
+#[cfg(feature = "serde")]
+mod serde_util;
+
 pub mod errors;
 pub mod interpreter;
 pub mod languages;

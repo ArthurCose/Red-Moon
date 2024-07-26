@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use super::HeapValue;
 use super::{Heap, HeapKey};
 use crate::interpreter::cache_pools::CachePools;
@@ -9,9 +7,14 @@ use crate::interpreter::metatable_keys::MetatableKeys;
 use crate::interpreter::value_stack::StackValue;
 use crate::interpreter::Continuation;
 use crate::{FastHashMap, FastHashSet};
+use std::rc::Rc;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// Configuration for the incremental garbage collector
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GarbageCollectorConfig {
     /// used_memory_at_last_collection * pause / 100 = threshold for starting GcPhase::Mark
     ///
@@ -53,18 +56,24 @@ enum Mark {
 }
 
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct GarbageCollector {
+    #[cfg_attr(feature = "serde", serde(skip))]
     phase: Phase,
     used_memory: usize,
     /// how many bytes we've accumulated since the last step
     accumulated: usize,
     pub(crate) config: GarbageCollectorConfig,
+    #[cfg_attr(feature = "serde", serde(skip))]
     traversed_definitions: FastHashSet<usize>,
     /// gray + black, excluded keys are white
+    #[cfg_attr(feature = "serde", serde(skip))]
     marked: slotmap::SecondaryMap<HeapKey, Mark>,
     /// gray or pending sweep
+    #[cfg_attr(feature = "serde", serde(skip))]
     phase_queue: Vec<HeapKey>,
     /// element_key/value -> Vec<(table_key, element_key)>
+    #[cfg_attr(feature = "serde", serde(skip))]
     weak_associations: FastHashMap<HeapKey, Vec<(HeapKey, StackValue)>>,
 }
 

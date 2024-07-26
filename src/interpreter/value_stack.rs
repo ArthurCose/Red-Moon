@@ -3,7 +3,11 @@ use super::{Number, TypeName};
 use crate::vec_cell::VecCell;
 use std::ops::Range;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) enum StackValue {
     #[default]
     Nil,
@@ -71,6 +75,7 @@ impl StackValue {
 }
 
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct ValueStack {
     values: Vec<StackValue>,
 }

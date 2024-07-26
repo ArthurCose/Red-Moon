@@ -5,7 +5,15 @@ use super::{SourceMapping, UpValueSource};
 use crate::errors::StackTraceFrame;
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use {
+    crate::serde_util::impl_serde_rc,
+    serde::{Deserialize, Serialize},
+};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct FunctionDefinition {
+    #[cfg_attr(feature = "serde", serde(with = "serde_rc"))]
     pub(crate) label: Rc<str>,
     pub(crate) env: Option<usize>,
     pub(crate) up_values: Vec<UpValueSource>,
@@ -15,6 +23,9 @@ pub(crate) struct FunctionDefinition {
     pub(crate) instructions: Vec<Instruction>,
     pub(crate) source_map: Vec<SourceMapping>,
 }
+
+#[cfg(feature = "serde")]
+impl_serde_rc!(serde_rc, Rc<str>, &str);
 
 impl FunctionDefinition {
     pub(crate) fn heap_size(&self) -> usize {

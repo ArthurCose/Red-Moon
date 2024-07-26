@@ -8,7 +8,11 @@ use super::{
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::languages::lua::parse_number;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TypeName {
     Nil,
     Bool,

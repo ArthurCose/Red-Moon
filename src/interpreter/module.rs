@@ -1,12 +1,17 @@
 use super::{Instruction, Register};
 use crate::languages::line_and_col;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UpValueSource {
     Stack(Register),
     UpValue(Register),
 }
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SourceMapping {
     pub line: usize,
     pub col: usize,

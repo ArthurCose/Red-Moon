@@ -1,7 +1,17 @@
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use {
+    crate::serde_util::impl_serde_rc,
+    serde::{Deserialize, Serialize},
+};
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ByteString(pub(crate) Rc<[u8]>);
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ByteString(#[cfg_attr(feature = "serde", serde(with = "serde_rc"))] pub(crate) Rc<[u8]>);
+
+#[cfg(feature = "serde")]
+impl_serde_rc!(serde_rc, Rc<[u8]>, &[u8]);
 
 impl ByteString {
     pub(crate) fn heap_size(&self) -> usize {
