@@ -154,7 +154,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let value: Value = args.unpack_args(ctx)?;
         let type_name = value.type_name();
 
-        MultiValue::pack(type_name, ctx)
+        MultiValue::pack(type_name.as_str(), ctx)
     });
     env.set("type", type_name, ctx)?;
 

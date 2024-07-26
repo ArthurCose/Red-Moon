@@ -1,3 +1,4 @@
+use super::TypeName;
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::{FromValue, IntoValue, Value, VmContext};
 
@@ -31,7 +32,7 @@ impl FromValue for Number {
             Value::Integer(i) => Ok(Number::Integer(i)),
             Value::Float(f) => Ok(Number::Float(f)),
             _ => Err(RuntimeErrorData::ExpectedType {
-                expected: "number",
+                expected: TypeName::Number,
                 received: value.type_name(),
             }
             .into()),

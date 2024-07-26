@@ -1,5 +1,5 @@
 use super::{IllegalInstruction, NativeError};
-use crate::interpreter::{ByteString, MultiValue};
+use crate::interpreter::{ByteString, MultiValue, TypeName};
 use std::borrow::Cow;
 use std::rc::Rc;
 
@@ -36,8 +36,8 @@ pub enum RuntimeErrorData {
         reason: Rc<RuntimeErrorData>,
     },
     ExpectedType {
-        expected: &'static str,
-        received: &'static str,
+        expected: TypeName,
+        received: TypeName,
     },
     NativeError(NativeError),
     String(Cow<'static, str>),

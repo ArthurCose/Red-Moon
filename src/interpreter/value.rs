@@ -8,6 +8,37 @@ use super::{
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::languages::lua::parse_number;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeName {
+    Nil,
+    Bool,
+    Number,
+    String,
+    Table,
+    Function,
+    Thread,
+}
+
+impl TypeName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TypeName::Nil => "nil",
+            TypeName::Bool => "boolean",
+            TypeName::Number => "number",
+            TypeName::String => "string",
+            TypeName::Table => "table",
+            TypeName::Function => "function",
+            TypeName::Thread => "thread",
+        }
+    }
+}
+
+impl std::fmt::Display for TypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Nil,
@@ -31,16 +62,15 @@ impl Default for Value {
 
 impl Value {
     #[inline]
-    pub fn type_name(&self) -> &'static str {
+    pub fn type_name(&self) -> TypeName {
         match self {
-            Value::Nil => "nil",
-            Value::Bool(_) => "boolean",
-            Value::Integer(_) => "number",
-            Value::Float(_) => "number",
-            Value::String(_) => "string",
-            Value::Table(_) => "table",
-            Value::Function(_) => "function",
-            Value::Coroutine(_) => "thread",
+            Value::Nil => TypeName::Nil,
+            Value::Bool(_) => TypeName::Bool,
+            Value::Integer(_) | Value::Float(_) => TypeName::Number,
+            Value::String(_) => TypeName::String,
+            Value::Table(_) => TypeName::Table,
+            Value::Function(_) => TypeName::Function,
+            Value::Coroutine(_) => TypeName::Thread,
         }
     }
 
@@ -506,7 +536,7 @@ impl FromValue for StringRef {
             Ok(string_ref)
         } else {
             Err(RuntimeErrorData::ExpectedType {
-                expected: "string",
+                expected: TypeName::String,
                 received: value.type_name(),
             }
             .into())
@@ -521,7 +551,7 @@ impl FromValue for TableRef {
             Ok(table_ref)
         } else {
             Err(RuntimeErrorData::ExpectedType {
-                expected: "table",
+                expected: TypeName::Table,
                 received: value.type_name(),
             }
             .into())
@@ -536,7 +566,7 @@ impl FromValue for FunctionRef {
             Ok(function_ref)
         } else {
             Err(RuntimeErrorData::ExpectedType {
-                expected: "function",
+                expected: TypeName::Function,
                 received: value.type_name(),
             }
             .into())
@@ -551,7 +581,7 @@ impl FromValue for CoroutineRef {
             Ok(coroutine_ref)
         } else {
             Err(RuntimeErrorData::ExpectedType {
-                expected: "thread",
+                expected: TypeName::Thread,
                 received: value.type_name(),
             }
             .into())
@@ -564,7 +594,7 @@ impl FromValue for String {
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
             return Err(RuntimeErrorData::ExpectedType {
-                expected: "string",
+                expected: TypeName::String,
                 received: value.type_name(),
             }
             .into());
@@ -580,7 +610,7 @@ impl FromValue for ByteString {
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
         let Value::String(string_ref) = value else {
             return Err(RuntimeErrorData::ExpectedType {
-                expected: "string",
+                expected: TypeName::String,
                 received: value.type_name(),
             }
             .into());
@@ -617,7 +647,7 @@ macro_rules! number_from_value {
                 };
 
                 Err(RuntimeErrorData::ExpectedType {
-                    expected: "number",
+                    expected: TypeName::Number,
                     received: value.type_name(),
                 }
                 .into())

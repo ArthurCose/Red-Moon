@@ -32,7 +32,7 @@ pub use multi::{FromArg, FromArgs, FromMulti, IntoMulti, MultiValue};
 pub use number::Number;
 pub use string_ref::StringRef;
 pub use table_ref::TableRef;
-pub use value::{FromValue, IntoValue, Value};
+pub use value::{FromValue, IntoValue, TypeName, Value};
 pub use vm::{Vm, VmContext, VmLimits};
 
 pub(crate) use coroutine::Continuation;
