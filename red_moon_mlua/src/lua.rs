@@ -463,7 +463,7 @@ impl Lua {
     /// representation as an integer, or a string that can be converted to an integer. Refer to the
     /// Lua manual for details.
     pub fn coerce_integer(&self, v: Value) -> Result<Option<Integer>> {
-        use red_moon::languages::lua::Number;
+        use red_moon::interpreter::Number;
 
         Ok(match v {
             Value::Integer(i) => Some(i),
@@ -486,7 +486,7 @@ impl Lua {
     /// To succeed, the value must be a number or a string that can be converted to a number. Refer
     /// to the Lua manual for details.
     pub fn coerce_number(&self, v: Value) -> Result<Option<Number>> {
-        use red_moon::languages::lua::Number;
+        use red_moon::interpreter::Number;
 
         Ok(match v {
             Value::Number(n) => Some(n),

@@ -1,6 +1,6 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{MultiValue, StringRef, TableRef, Value, VmContext};
-use crate::languages::lua::{parse_number, Number};
+use crate::interpreter::{MultiValue, Number, StringRef, TableRef, Value, VmContext};
+use crate::languages::lua::parse_number;
 
 pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let string = ctx.create_table();

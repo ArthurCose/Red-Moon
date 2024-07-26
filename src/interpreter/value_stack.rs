@@ -1,5 +1,6 @@
 use super::heap::{Heap, HeapKey, HeapValue};
-use crate::{languages::lua::Number, vec_cell::VecCell};
+use super::Number;
+use crate::vec_cell::VecCell;
 use std::ops::Range;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]

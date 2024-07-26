@@ -1,9 +1,10 @@
 use super::lua_lexer::LuaLexer;
 use super::lua_parsing::{parse_string, parse_unsigned_number};
-use super::{LuaToken, LuaTokenLabel, Number};
+use super::{LuaToken, LuaTokenLabel};
 use crate::errors::{LuaCompilationError, SyntaxError};
 use crate::interpreter::{
-    Chunk, ConstantIndex, Instruction, Module, Register, ReturnMode, SourceMapping, UpValueSource,
+    Chunk, ConstantIndex, Instruction, Module, Number, Register, ReturnMode, SourceMapping,
+    UpValueSource,
 };
 use crate::FastHashMap;
 use std::borrow::Cow;

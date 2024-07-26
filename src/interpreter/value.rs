@@ -2,9 +2,11 @@ use super::execution::ExecutionContext;
 use super::heap::{Heap, HeapKey, HeapValue};
 use super::value_stack::StackValue;
 use super::vm::VmContext;
-use super::{ByteString, CoroutineRef, FromMulti, FunctionRef, IntoMulti, StringRef, TableRef};
+use super::{
+    ByteString, CoroutineRef, FromMulti, FunctionRef, IntoMulti, Number, StringRef, TableRef,
+};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::languages::lua::{parse_number, Number};
+use crate::languages::lua::parse_number;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

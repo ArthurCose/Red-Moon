@@ -1,6 +1,6 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{IntoValue, MultiValue, Value, VmContext};
-use crate::languages::lua::{coerce_integer, parse_number, Number};
+use crate::interpreter::{IntoValue, MultiValue, Number, Value, VmContext};
+use crate::languages::lua::{coerce_integer, parse_number};
 
 pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let math = ctx.create_table();
