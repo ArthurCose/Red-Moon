@@ -1832,14 +1832,13 @@ impl CallContext {
             }
         };
 
-        let mut index_base = base;
-
         if value == StackValue::Nil {
             // resolve using __index
             let metamethod_key = exec_data.metatable_keys.index.0.key().into();
             let max_chain_depth = exec_data.limits.metatable_chain_depth;
             let mut chain_depth = 0;
 
+            let mut index_base = base;
             let mut next_index_base = index_base;
 
             while next_index_base != StackValue::Nil {
