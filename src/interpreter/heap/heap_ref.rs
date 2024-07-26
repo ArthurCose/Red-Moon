@@ -1,10 +1,10 @@
-use super::{HeapKey, StrongRef};
+use super::{CounterRef, HeapKey};
 
 #[derive(Clone)]
 pub(crate) struct HeapRef {
     pub(super) key: HeapKey,
     #[allow(dead_code)]
-    pub(super) strong_ref: StrongRef,
+    pub(super) counter_ref: CounterRef,
 }
 
 impl HeapRef {

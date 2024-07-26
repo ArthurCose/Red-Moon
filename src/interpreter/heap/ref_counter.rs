@@ -1,33 +1,24 @@
 use std::rc::{Rc, Weak};
 
+pub(super) struct CounterRef(Weak<()>);
+
+impl Clone for CounterRef {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 #[derive(Default, Clone)]
-pub(super) struct StrongRef {
+pub(super) struct RefCounter {
     rc: Rc<()>,
 }
 
-#[derive(Clone)]
-pub(super) struct RefCounter {
-    weak: Weak<()>,
-}
-
 impl RefCounter {
-    pub(super) fn from_strong(strong_ref: &StrongRef) -> Self {
-        Self {
-            weak: Rc::downgrade(&strong_ref.rc),
-        }
-    }
-
-    pub(super) fn create_strong(&mut self) -> StrongRef {
-        let rc = self.weak.upgrade().unwrap_or_else(|| {
-            let rc = Default::default();
-            self.weak = Rc::downgrade(&rc);
-            rc
-        });
-
-        StrongRef { rc }
+    pub(super) fn create_counter_ref(&self) -> CounterRef {
+        CounterRef(Rc::downgrade(&self.rc))
     }
 
     pub(super) fn count(&self) -> usize {
-        self.weak.strong_count()
+        Rc::weak_count(&self.rc)
     }
 }

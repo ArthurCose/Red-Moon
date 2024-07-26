@@ -62,12 +62,13 @@ impl Heap {
         let string_metatable_key = storage.insert(string_metatable_heap_value);
 
         let mut ref_roots = IndexMap::<HeapKey, RefCounter, FxBuildHasher>::default();
-        let strong_ref = StrongRef::default();
-        ref_roots.insert(string_metatable_key, RefCounter::from_strong(&strong_ref));
+        let ref_counter = RefCounter::default();
+        let counter_ref = ref_counter.create_counter_ref();
+        ref_roots.insert(string_metatable_key, ref_counter.clone());
 
         let string_metatable_ref = HeapRef {
             key: string_metatable_key,
-            strong_ref,
+            counter_ref,
         };
 
         Self {
@@ -107,19 +108,20 @@ impl Heap {
     }
 
     pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> HeapRef {
-        let strong_ref = match self.ref_roots.entry(heap_key) {
-            indexmap::map::Entry::Occupied(mut entry) => entry.get_mut().create_strong(),
+        let counter_ref = match self.ref_roots.entry(heap_key) {
+            indexmap::map::Entry::Occupied(mut entry) => entry.get_mut().create_counter_ref(),
             indexmap::map::Entry::Vacant(entry) => {
                 debug_assert!(self.storage.contains_key(heap_key));
-                let strong_ref = StrongRef::default();
-                entry.insert(RefCounter::from_strong(&strong_ref));
-                strong_ref
+                let ref_counter = RefCounter::default();
+                let counter_ref = ref_counter.create_counter_ref();
+                entry.insert(ref_counter);
+                counter_ref
             }
         };
 
         HeapRef {
             key: heap_key,
-            strong_ref,
+            counter_ref,
         }
     }
 
