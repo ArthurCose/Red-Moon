@@ -1,11 +1,12 @@
 #![cfg(feature = "serde")]
 
 use red_moon::errors::RuntimeError;
-use red_moon::interpreter::{TableRef, Vm};
+use red_moon::interpreter::{FunctionRef, MultiValue, TableRef, Vm};
 
 fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
+    let env = ctx.default_environment();
 
     // create garbage for making holes
     ctx.create_table();
@@ -17,9 +18,15 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     table_b.set("a", table_a.clone(), ctx)?;
     table_b.set(1, 2, ctx)?;
 
-    ctx.default_environment().set("a", table_a, ctx)?;
+    env.set("a", table_a, ctx)?;
 
-    // create holes
+    // create function
+    let f = ctx.create_function(|args, _| Ok(args));
+
+    assert!(!f.hydrate("hydrated_fn", ctx)?);
+    env.set("native_fn", f, ctx)?;
+
+    // create holes and make sure the hydration tag doesn't get collected
     ctx.gc_collect();
 
     Ok(vm)
@@ -27,9 +34,10 @@ fn create_vm() -> Result<Vm, RuntimeError> {
 
 fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     let ctx = &mut vm.context();
+    let env = ctx.default_environment();
 
     // test strings and tables
-    let table_a: TableRef = ctx.default_environment().get("a", ctx)?;
+    let table_a: TableRef = env.get("a", ctx)?;
     let table_b: TableRef = table_a.get("b", ctx)?;
 
     // test cycle
@@ -38,6 +46,15 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // test number
     assert_eq!(table_b.get::<_, i32>(1, ctx)?, 2);
+
+    // test dehydrated function
+    let f: FunctionRef = env.get("native_fn", ctx)?;
+    assert_eq!(f.call::<_, MultiValue>(1, ctx)?, ctx.create_multi());
+
+    // hydrate
+    let f = ctx.create_function(|args, _| Ok(args));
+    assert!(f.hydrate("hydrated_fn", ctx)?);
+    assert_eq!(f.call::<_, MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
 
     Ok(())
 }

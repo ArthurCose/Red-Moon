@@ -12,6 +12,54 @@ impl FunctionRef {
         self.0.key().data().as_ffi()
     }
 
+    #[cfg(feature = "serde")]
+    pub fn hydrate<T: super::IntoValue>(
+        &self,
+        tag: T,
+        ctx: &mut VmContext,
+    ) -> Result<bool, RuntimeError> {
+        use super::heap::HeapValue;
+        use super::Value;
+        use crate::errors::RuntimeErrorData;
+
+        let tag = tag.into_value(ctx)?;
+
+        let heap = &mut ctx.vm.execution_data.heap;
+        tag.test_validity(heap)?;
+
+        if !matches!(
+            tag,
+            Value::Nil | Value::Bool(_) | Value::Integer(_) | Value::Float(_) | Value::String(_)
+        ) {
+            return Err(RuntimeErrorData::InvalidTag.into());
+        }
+
+        let tag = tag.to_stack_value();
+        let new_key = self.0.key();
+
+        let Some(old_key) = heap.tags.insert(tag, new_key) else {
+            return Ok(false);
+        };
+
+        let Some(heap_value) = heap.get(new_key) else {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        };
+
+        if !matches!(
+            heap_value,
+            HeapValue::NativeFunction(_) | HeapValue::Function(_),
+        ) {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        }
+
+        let heap_value = heap_value.clone();
+
+        let gc = &mut ctx.vm.execution_data.gc;
+        heap.set(gc, old_key, heap_value);
+
+        Ok(true)
+    }
+
     pub fn call<A: IntoMulti, R: FromMulti>(
         &self,
         args: A,

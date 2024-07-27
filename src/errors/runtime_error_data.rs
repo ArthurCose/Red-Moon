@@ -52,7 +52,10 @@ pub enum RuntimeErrorData {
     NativeError(NativeError),
     String(Cow<'static, str>),
     ByteString(ByteString),
-    #[cfg_attr(feature = "serde", serde(other))]
+    #[cfg(feature = "serde")]
+    InvalidTag,
+    #[cfg(feature = "serde")]
+    #[serde(other)]
     LostInSerialization,
 }
 
@@ -165,6 +168,11 @@ impl std::fmt::Display for RuntimeErrorData {
             RuntimeErrorData::NativeError(err) => write!(f, "{err}"),
             RuntimeErrorData::String(s) => write!(f, "{s}"),
             RuntimeErrorData::ByteString(s) => write!(f, "{s}"),
+            #[cfg(feature = "serde")]
+            RuntimeErrorData::InvalidTag => {
+                write!(f, "invalid tag, expecting string or primitive")
+            }
+            #[cfg(feature = "serde")]
             RuntimeErrorData::LostInSerialization => {
                 write!(f, "error information lost during serialization")
             }

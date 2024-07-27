@@ -25,6 +25,8 @@ pub(crate) struct Heap {
     pub(crate) storage: slotmap::SlotMap<HeapKey, HeapValue>,
     pub(crate) byte_strings: FastHashMap<ByteString, HeapKey>,
     pub(crate) ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
+    #[cfg(feature = "serde")]
+    pub(crate) tags: IndexMap<StackValue, HeapKey, FxBuildHasher>,
     pub(crate) recycled_tables: Rc<VecCell<Box<Table>>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef,
@@ -36,6 +38,8 @@ impl Clone for Heap {
             storage: self.storage.clone(),
             byte_strings: self.byte_strings.clone(),
             ref_roots: self.ref_roots.clone(),
+            #[cfg(feature = "serde")]
+            tags: self.tags.clone(),
             recycled_tables: self.recycled_tables.clone(),
             string_metatable_ref: self.string_metatable_ref.clone(),
         }
@@ -45,6 +49,8 @@ impl Clone for Heap {
         self.storage.clone_from(&source.storage);
         self.byte_strings.clone_from(&source.byte_strings);
         self.ref_roots.clone_from(&source.ref_roots);
+        #[cfg(feature = "serde")]
+        self.tags.clone_from(&source.tags);
         self.recycled_tables.clone_from(&source.recycled_tables);
         self.string_metatable_ref
             .clone_from(&source.string_metatable_ref);
@@ -74,6 +80,8 @@ impl Heap {
             storage,
             byte_strings: Default::default(),
             ref_roots,
+            #[cfg(feature = "serde")]
+            tags: Default::default(),
             recycled_tables: Default::default(),
             string_metatable_ref,
         }

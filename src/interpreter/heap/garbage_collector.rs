@@ -221,6 +221,12 @@ impl GarbageCollector {
             keep
         });
 
+        // mark tags, we don't want to delete a string required for hydration
+        #[cfg(feature = "serde")]
+        for tag_value in heap.tags.keys() {
+            self.mark_stack_value(tag_value);
+        }
+
         // mark the stack
         for execution in execution_stack {
             self.mark_execution_context(execution);

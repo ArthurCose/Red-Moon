@@ -129,10 +129,11 @@ impl Serialize for Vm {
         // serialize
         let result = (|| {
             use serde::ser::SerializeStruct;
-            let mut state = serializer.serialize_struct("Vm", 4)?;
+            let mut state = serializer.serialize_struct("Vm", 5)?;
             state.serialize_field("limits", &self.execution_data.limits)?;
             state.serialize_field("gc", &self.execution_data.gc)?;
             state.serialize_field("heap_storage", &self.execution_data.heap.storage)?;
+            state.serialize_field("tags", &self.execution_data.heap.tags)?;
             state.serialize_field("byte_strings", &self.execution_data.heap.byte_strings)?;
             state.end()
         })();
@@ -153,6 +154,8 @@ impl<'de> Deserialize<'de> for Vm {
         D: serde::Deserializer<'de>,
     {
         use crate::interpreter::ByteString;
+        use indexmap::IndexMap;
+        use rustc_hash::FxBuildHasher;
         use slotmap::SlotMap;
 
         #[derive(Deserialize)]
@@ -161,6 +164,7 @@ impl<'de> Deserialize<'de> for Vm {
             limits: VmLimits,
             gc: GarbageCollector,
             heap_storage: SlotMap<HeapKey, HeapValue>,
+            tags: IndexMap<StackValue, HeapKey, FxBuildHasher>,
             byte_strings: FastHashMap<ByteString, HeapKey>,
         }
 
@@ -184,6 +188,7 @@ impl<'de> Deserialize<'de> for Vm {
         vm.execution_data.limits = data.limits;
         vm.execution_data.gc = data.gc;
         vm.execution_data.heap.storage = data.heap_storage;
+        vm.execution_data.heap.tags = data.tags;
         vm.execution_data.heap.byte_strings = data.byte_strings;
 
         Ok(vm)
