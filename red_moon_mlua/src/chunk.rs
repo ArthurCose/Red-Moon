@@ -180,10 +180,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         let environment = self.env?.map(|table| table.table_ref);
 
         let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
 
         Ok(Function {
             lua: self.lua,
-            function_ref: vm.load_function(self.name.as_str(), environment, module)?,
+            function_ref: ctx.load_function(self.name.as_str(), environment, module)?,
         })
     }
 
@@ -198,10 +199,11 @@ impl<'lua, 'a> Chunk<'lua, 'a> {
         let environment = self.env.clone()?.map(|table| table.table_ref.clone());
 
         let vm = unsafe { self.lua.vm_mut() };
+        let ctx = &mut vm.context();
 
         Ok(Function {
             lua: self.lua,
-            function_ref: vm.load_function(self.name.as_str(), environment, module)?,
+            function_ref: ctx.load_function(self.name.as_str(), environment, module)?,
         })
     }
 

@@ -241,7 +241,8 @@ impl Lua {
     #[inline]
     pub fn create_string(&self, s: impl AsRef<[u8]>) -> Result<String> {
         let vm = unsafe { self.vm_mut() };
-        let string_ref = vm.intern_string(s.as_ref());
+        let ctx = &mut vm.context();
+        let string_ref = ctx.intern_string(s.as_ref());
 
         Ok(String {
             lua: self,
@@ -253,7 +254,8 @@ impl Lua {
     /// Creates and returns a new empty table.
     pub fn create_table(&self) -> Result<Table> {
         let vm = unsafe { self.vm_mut() };
-        let table_ref = vm.create_table();
+        let ctx = &mut vm.context();
+        let table_ref = ctx.create_table();
 
         Ok(Table {
             lua: self,
@@ -267,7 +269,8 @@ impl Lua {
     /// Lua may use these hints to preallocate memory for the new table.
     pub fn create_table_with_capacity(&self, narr: usize, nrec: usize) -> Result<Table> {
         let vm = unsafe { self.vm_mut() };
-        let table_ref = vm.create_table_with_capacity(narr, nrec);
+        let ctx = &mut vm.context();
+        let table_ref = ctx.create_table_with_capacity(narr, nrec);
 
         Ok(Table {
             lua: self,
@@ -283,13 +286,14 @@ impl Lua {
         I: IntoIterator<Item = (K, V)>,
     {
         let vm = unsafe { self.vm_mut() };
-        let table_ref = vm.create_table();
+        let ctx = &mut vm.context();
+        let table_ref = ctx.create_table();
 
         for (k, v) in iter.into_iter() {
             table_ref.raw_set(
                 k.into_lua(self)?.into_red_moon(),
                 v.into_lua(self)?.into_red_moon(),
-                &mut vm.context(),
+                ctx,
             )?;
         }
 
@@ -376,7 +380,8 @@ impl Lua {
         let func = std::rc::Rc::new(func);
 
         let vm = unsafe { self.vm_mut() };
-        let function_ref = vm.create_native_function(move |args, _| {
+        let ctx = &mut vm.context();
+        let function_ref = ctx.create_native_function(move |args, _| {
             // wildly unsafe, see Lua::self_ptr's definition
             let lua = unsafe { &*self_ptr.get() };
 

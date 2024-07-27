@@ -314,204 +314,6 @@ impl Vm {
             .map(|b| *b.downcast::<T>().unwrap())
     }
 
-    pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-        let heap_key = heap.intern_bytes(gc, bytes);
-        let heap_ref = heap.create_ref(heap_key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        StringRef(heap_ref)
-    }
-
-    pub fn create_table(&mut self) -> TableRef {
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-        let heap_key = heap.create_table(gc, 0, 0);
-        let heap_ref = heap.create_ref(heap_key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        TableRef(heap_ref)
-    }
-
-    pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-        let heap_key = heap.create_table(gc, list, map);
-        let heap_ref = heap.create_ref(heap_key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        TableRef(heap_ref)
-    }
-
-    /// If the environment is unset, the function will use the default environment
-    pub fn load_function<'a, Label, ByteStrings, B>(
-        &mut self,
-        label: Label,
-        environment: Option<TableRef>,
-        module: Module<ByteStrings>,
-    ) -> Result<FunctionRef, RuntimeError>
-    where
-        Label: Into<Rc<str>>,
-        B: AsRef<[u8]> + 'a,
-        ByteStrings: IntoIterator<Item = B>,
-    {
-        let label = label.into();
-
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-        let environment = environment
-            .map(|table| table.0.key().into())
-            .unwrap_or(self.default_environment.key().into());
-
-        let mut keys = Vec::with_capacity(module.chunks.len());
-
-        for (i, chunk) in module.chunks.into_iter().enumerate() {
-            let byte_strings = chunk
-                .byte_strings
-                .into_iter()
-                .map(|bytes| heap.intern_bytes(gc, bytes.as_ref()))
-                .collect();
-
-            let functions = chunk
-                .dependencies
-                .into_iter()
-                .map(|index| keys[index])
-                .collect();
-
-            let mut up_values = ValueStack::default();
-
-            if i == module.main {
-                if let Some(index) = chunk.env {
-                    up_values.set(index, environment);
-                }
-            }
-
-            let key = heap.create(
-                gc,
-                HeapValue::Function(Function {
-                    up_values: up_values.into(),
-                    definition: Rc::new(FunctionDefinition {
-                        label: label.clone(),
-                        env: chunk.env,
-                        up_values: chunk.up_values,
-                        byte_strings,
-                        numbers: chunk.numbers,
-                        functions,
-                        instructions: chunk.instructions,
-                        source_map: chunk.source_map,
-                    }),
-                }),
-            );
-
-            keys.push(key);
-        }
-
-        let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
-        let heap_ref = heap.create_ref(*key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        Ok(FunctionRef(heap_ref))
-    }
-
-    pub fn create_native_function(
-        &mut self,
-        callback: impl Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
-            + Clone
-            + 'static,
-    ) -> FunctionRef {
-        let heap = &mut self.execution_data.heap;
-        let gc = &mut self.execution_data.gc;
-        let key = heap.create(gc, HeapValue::NativeFunction(callback.into()));
-
-        let heap_ref = heap.create_ref(key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        FunctionRef(heap_ref)
-    }
-
-    pub fn create_coroutine(
-        &mut self,
-        function: FunctionRef,
-    ) -> Result<CoroutineRef, RuntimeError> {
-        let function_key = function.0.key();
-
-        let heap = &self.execution_data.heap;
-
-        if !matches!(
-            heap.get(function_key),
-            Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
-        ) {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        }
-
-        let coroutine = Box::new(Coroutine::new(function_key));
-
-        // move to the heap
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-
-        let heap_key = heap.create(gc, HeapValue::Coroutine(coroutine));
-        let heap_ref = heap.create_ref(heap_key);
-
-        // test after creating ref to avoid immediately collecting the generated value
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                &self.execution_stack,
-                heap,
-            );
-        }
-
-        Ok(CoroutineRef(heap_ref))
-    }
-
     #[inline]
     pub fn gc_used_memory(&self) -> usize {
         self.execution_data.gc.used_memory()
@@ -668,23 +470,64 @@ impl<'vm> VmContext<'vm> {
         self.vm.remove_app_data()
     }
 
-    #[inline]
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
-        self.vm.intern_string(bytes)
+        let gc = &mut self.vm.execution_data.gc;
+        let heap = &mut self.vm.execution_data.heap;
+        let heap_key = heap.intern_bytes(gc, bytes);
+        let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        StringRef(heap_ref)
     }
 
-    #[inline]
     pub fn create_table(&mut self) -> TableRef {
-        self.vm.create_table()
+        let gc = &mut self.vm.execution_data.gc;
+        let heap = &mut self.vm.execution_data.heap;
+        let heap_key = heap.create_table(gc, 0, 0);
+        let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        TableRef(heap_ref)
     }
 
-    #[inline]
     pub fn create_table_with_capacity(&mut self, list: usize, map: usize) -> TableRef {
-        self.vm.create_table_with_capacity(list, map)
+        let gc = &mut self.vm.execution_data.gc;
+        let heap = &mut self.vm.execution_data.heap;
+        let heap_key = heap.create_table(gc, list, map);
+        let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        TableRef(heap_ref)
     }
 
     /// If the environment is unset, the function will use the default environment
-    #[inline]
     pub fn load_function<'a, Label, ByteStrings, B>(
         &mut self,
         label: Label,
@@ -696,17 +539,140 @@ impl<'vm> VmContext<'vm> {
         B: AsRef<[u8]> + 'a,
         ByteStrings: IntoIterator<Item = B>,
     {
-        self.vm.load_function(label, environment, module)
+        let label = label.into();
+
+        let gc = &mut self.vm.execution_data.gc;
+        let heap = &mut self.vm.execution_data.heap;
+        let environment = environment
+            .map(|table| table.0.key().into())
+            .unwrap_or(self.vm.default_environment.key().into());
+
+        let mut keys = Vec::with_capacity(module.chunks.len());
+
+        for (i, chunk) in module.chunks.into_iter().enumerate() {
+            let byte_strings = chunk
+                .byte_strings
+                .into_iter()
+                .map(|bytes| heap.intern_bytes(gc, bytes.as_ref()))
+                .collect();
+
+            let functions = chunk
+                .dependencies
+                .into_iter()
+                .map(|index| keys[index])
+                .collect();
+
+            let mut up_values = ValueStack::default();
+
+            if i == module.main {
+                if let Some(index) = chunk.env {
+                    up_values.set(index, environment);
+                }
+            }
+
+            let key = heap.create(
+                gc,
+                HeapValue::Function(Function {
+                    up_values: up_values.into(),
+                    definition: Rc::new(FunctionDefinition {
+                        label: label.clone(),
+                        env: chunk.env,
+                        up_values: chunk.up_values,
+                        byte_strings,
+                        numbers: chunk.numbers,
+                        functions,
+                        instructions: chunk.instructions,
+                        source_map: chunk.source_map,
+                    }),
+                }),
+            );
+
+            keys.push(key);
+        }
+
+        let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
+        let heap_ref = heap.create_ref(*key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        Ok(FunctionRef(heap_ref))
     }
 
-    #[inline]
     pub fn create_native_function(
         &mut self,
         callback: impl Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
             + Clone
             + 'static,
     ) -> FunctionRef {
-        self.vm.create_native_function(callback)
+        let heap = &mut self.vm.execution_data.heap;
+        let gc = &mut self.vm.execution_data.gc;
+        let key = heap.create(gc, HeapValue::NativeFunction(callback.into()));
+
+        let heap_ref = heap.create_ref(key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        FunctionRef(heap_ref)
+    }
+
+    #[inline]
+    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
+        let key = *self.vm.coroutine_data.coroutine_stack.last()?;
+
+        Some(CoroutineRef(self.vm.execution_data.heap.create_ref(key)))
+    }
+
+    pub fn create_coroutine(
+        &mut self,
+        function: FunctionRef,
+    ) -> Result<CoroutineRef, RuntimeError> {
+        let function_key = function.0.key();
+
+        let heap = &self.vm.execution_data.heap;
+
+        if !matches!(
+            heap.get(function_key),
+            Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
+        ) {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        }
+
+        let coroutine = Box::new(Coroutine::new(function_key));
+
+        // move to the heap
+        let gc = &mut self.vm.execution_data.gc;
+        let heap = &mut self.vm.execution_data.heap;
+
+        let heap_key = heap.create(gc, HeapValue::Coroutine(coroutine));
+        let heap_ref = heap.create_ref(heap_key);
+
+        // test after creating ref to avoid immediately collecting the generated value
+        if gc.should_step() {
+            gc.step(
+                &self.vm.execution_data.metatable_keys,
+                &self.vm.execution_data.cache_pools,
+                &self.vm.execution_stack,
+                heap,
+            );
+        }
+
+        Ok(CoroutineRef(heap_ref))
     }
 
     /// Returns true if the calling context allows yielding (Coroutine or resumable)
@@ -753,21 +719,6 @@ impl<'vm> VmContext<'vm> {
         }
 
         Ok(())
-    }
-
-    #[inline]
-    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
-        let key = *self.vm.coroutine_data.coroutine_stack.last()?;
-
-        Some(CoroutineRef(self.vm.execution_data.heap.create_ref(key)))
-    }
-
-    #[inline]
-    pub fn create_coroutine(
-        &mut self,
-        function: FunctionRef,
-    ) -> Result<CoroutineRef, RuntimeError> {
-        self.vm.create_coroutine(function)
     }
 
     #[inline]
