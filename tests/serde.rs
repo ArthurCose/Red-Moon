@@ -2,25 +2,35 @@
 
 use red_moon::errors::RuntimeError;
 use red_moon::interpreter::{FunctionRef, MultiValue, TableRef, Vm};
+use red_moon::languages::lua::LuaCompiler;
 
 fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
-    let env = ctx.default_environment();
 
     // create garbage for making holes
     ctx.create_table();
     ctx.create_table();
 
-    let table_a = ctx.create_table();
-    let table_b = ctx.create_table();
-    table_a.set("b", table_b.clone(), ctx)?;
-    table_b.set("a", table_a.clone(), ctx)?;
-    table_b.set(1, 2, ctx)?;
+    // load lua
+    const SOURCE: &str = r#"
+        local b = {}
+        a = { b = b }
+        b.a = a
+        b[1] = 2
 
-    env.set("a", table_a, ctx)?;
+        function lua_fn()
+            return "lua_fn success"
+        end
+    "#;
 
-    // create function
+    let compiler = LuaCompiler::default();
+    let module = compiler.compile(SOURCE).unwrap();
+    ctx.load_function(file!(), None, module)?.call((), ctx)?;
+
+    let env = ctx.default_environment();
+
+    // create native function
     let f = ctx.create_function(|args, _| Ok(args));
 
     assert!(!f.hydrate("hydrated_fn", ctx)?);
@@ -46,6 +56,10 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // test number
     assert_eq!(table_b.get::<_, i32>(1, ctx)?, 2);
+
+    // test lua function
+    let lua_f: FunctionRef = env.get("lua_fn", ctx)?;
+    assert_eq!(lua_f.call::<_, String>((), ctx)?, "lua_fn success");
 
     // test dehydrated function
     let f: FunctionRef = env.get("native_fn", ctx)?;
