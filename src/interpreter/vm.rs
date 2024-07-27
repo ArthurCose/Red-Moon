@@ -606,7 +606,7 @@ impl<'vm> VmContext<'vm> {
         Ok(FunctionRef(heap_ref))
     }
 
-    pub fn create_native_function(
+    pub fn create_function(
         &mut self,
         callback: impl Fn(MultiValue, &mut VmContext) -> Result<MultiValue, RuntimeError>
             + Clone

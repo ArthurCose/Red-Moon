@@ -231,7 +231,7 @@ fn impl_rewind(ctx: &mut VmContext) -> Result<QueuedRewind, RuntimeError> {
     let env = ctx.default_environment();
 
     let snapshots_capture = snapshots.clone();
-    let snap = ctx.create_native_function(move |_, ctx| {
+    let snap = ctx.create_function(move |_, ctx| {
         let mut snapshots = snapshots_capture.borrow_mut();
         snapshots.push(ctx.clone_vm());
         MultiValue::pack((), ctx)
@@ -239,7 +239,7 @@ fn impl_rewind(ctx: &mut VmContext) -> Result<QueuedRewind, RuntimeError> {
     env.set("snap", snap, ctx)?;
 
     let queued_rewind_capture = queued_rewind.clone();
-    let rewind = ctx.create_native_function(move |args, ctx| {
+    let rewind = ctx.create_function(move |args, ctx| {
         let x: Option<i64> = args.unpack(ctx)?;
         let x = x.unwrap_or(-1);
 

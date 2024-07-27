@@ -5,7 +5,7 @@ fn instructions_print() {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
 
-    let print_ref = ctx.create_native_function(|args, ctx| {
+    let print_ref = ctx.create_function(|args, ctx| {
         let len = args.len();
 
         for (i, arg) in args.to_vec().into_iter().enumerate() {

@@ -7,7 +7,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // todo: close
 
     // create
-    let create = ctx.create_native_function(|args, ctx| {
+    let create = ctx.create_function(|args, ctx| {
         let function = args.unpack_args(ctx)?;
         let co = ctx.create_coroutine(function)?;
         MultiValue::pack(co, ctx)
@@ -15,7 +15,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("create", create, ctx)?;
 
     // isyieldable
-    let isyieldable = ctx.create_native_function(|args, ctx| {
+    let isyieldable = ctx.create_function(|args, ctx| {
         let (co, mut args): (Option<CoroutineRef>, MultiValue) = args.unpack(ctx)?;
 
         if !ctx.is_yieldable() {
@@ -37,7 +37,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("isyieldable", isyieldable, ctx)?;
 
     // resume
-    let resume = ctx.create_native_function(|args, ctx| {
+    let resume = ctx.create_function(|args, ctx| {
         let (co, args): (CoroutineRef, MultiValue) = args.unpack_args(ctx)?;
 
         match co.resume(args, ctx) {
@@ -51,7 +51,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("resume", resume, ctx)?;
 
     // running
-    let running = ctx.create_native_function(|mut args, ctx| {
+    let running = ctx.create_function(|mut args, ctx| {
         args.clear();
 
         let co = ctx.top_coroutine();
@@ -76,7 +76,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let normal_string = ctx.intern_string(b"normal");
     let dead_string = ctx.intern_string(b"dead");
 
-    let status = ctx.create_native_function(move |args, ctx| {
+    let status = ctx.create_function(move |args, ctx| {
         let co: CoroutineRef = args.unpack_args(ctx)?;
         let status = match co.status(ctx)? {
             CoroutineStatus::Suspended => suspended_string.clone(),
@@ -94,18 +94,18 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("status", status, ctx)?;
 
     // wrap
-    let wrap = ctx.create_native_function(|args, ctx| {
+    let wrap = ctx.create_function(|args, ctx| {
         let function = args.unpack_args(ctx)?;
         let co = ctx.create_coroutine(function)?;
 
-        let f = ctx.create_native_function(move |args, ctx| co.resume(args, ctx));
+        let f = ctx.create_function(move |args, ctx| co.resume(args, ctx));
 
         MultiValue::pack(f, ctx)
     });
     coroutine.raw_set("wrap", wrap, ctx)?;
 
     // yield
-    let r#yield = ctx.create_native_function(|args, ctx| {
+    let r#yield = ctx.create_function(|args, ctx| {
         ctx.set_resume_callback(|result, _| result)?;
         Err(RuntimeErrorData::Yield(args).into())
     });

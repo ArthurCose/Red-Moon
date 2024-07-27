@@ -5,7 +5,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let table = ctx.create_table();
 
     // concat
-    let concat = ctx.create_native_function(|args, ctx| {
+    let concat = ctx.create_function(|args, ctx| {
         let (table, separator, start, end): (TableRef, Option<ByteString>, i64, i64) =
             args.unpack_args(ctx)?;
 
@@ -47,7 +47,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     table.raw_set("concat", concat, ctx)?;
 
     // insert
-    let insert = ctx.create_native_function(|args, ctx| {
+    let insert = ctx.create_function(|args, ctx| {
         let (table, middle, last): (TableRef, Value, Value) = args.unpack_args(ctx)?;
 
         if last.is_nil() {
@@ -68,7 +68,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     table.raw_set("insert", insert, ctx)?;
 
     // remove
-    let remove = ctx.create_native_function(|args, ctx| {
+    let remove = ctx.create_function(|args, ctx| {
         let (table, index): (TableRef, i64) = args.unpack_args(ctx)?;
 
         let len = table.raw_len(ctx)?;
@@ -90,7 +90,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     table.raw_set("remove", remove, ctx)?;
 
     // pack
-    let pack = ctx.create_native_function(|mut args, ctx| {
+    let pack = ctx.create_function(|mut args, ctx| {
         let table = ctx.create_table();
 
         let mut index = 1;
@@ -105,7 +105,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     table.raw_set("pack", pack, ctx)?;
 
     // unpack
-    let unpack = ctx.create_native_function(|args, ctx| {
+    let unpack = ctx.create_function(|args, ctx| {
         let table: TableRef = args.unpack_args(ctx)?;
 
         let mut multi = ctx.create_multi();

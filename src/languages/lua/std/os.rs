@@ -7,7 +7,7 @@ pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let os = ctx.create_table();
 
     // clock
-    let clock = ctx.create_native_function(|mut args, ctx| {
+    let clock = ctx.create_function(|mut args, ctx| {
         args.clear();
 
         let duration = ProcessTime::try_now()

@@ -11,7 +11,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("_VERSION", "Lua 5.3", ctx)?;
 
     // assert
-    let assert = ctx.create_native_function(|args, ctx| {
+    let assert = ctx.create_function(|args, ctx| {
         let (passed, message): (bool, LazyArg<Option<ByteString>>) = args.unpack_args(ctx)?;
 
         if !passed {
@@ -27,7 +27,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("assert", assert, ctx)?;
 
     // collectgarbage
-    let assert = ctx.create_native_function(|args, ctx| {
+    let assert = ctx.create_function(|args, ctx| {
         let (opt, mut rest): (Option<ByteString>, MultiValue) = args.unpack_args(ctx)?;
 
         let result = if let Some(opt) = opt {
@@ -109,7 +109,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("collectgarbage", assert, ctx)?;
 
     // error
-    let error = ctx.create_native_function(|args, ctx| {
+    let error = ctx.create_function(|args, ctx| {
         // todo: level
         let message: Value = args.unpack_args(ctx)?;
 
@@ -125,7 +125,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("error", error, ctx)?;
 
     // print
-    let print = ctx.create_native_function(|mut args, ctx| {
+    let print = ctx.create_function(|mut args, ctx| {
         while let Some(arg) = args.pop_front() {
             print!("{}", to_string(arg, ctx)?);
 
@@ -141,7 +141,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("print", print, ctx)?;
 
     // tostring
-    let tostring = ctx.create_native_function(|args, ctx| {
+    let tostring = ctx.create_function(|args, ctx| {
         let value: Value = args.unpack_args(ctx)?;
         let string = to_string(value, ctx)?;
 
@@ -150,7 +150,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("tostring", tostring, ctx)?;
 
     // type
-    let type_name = ctx.create_native_function(|args, ctx| {
+    let type_name = ctx.create_function(|args, ctx| {
         let value: Value = args.unpack_args(ctx)?;
         let type_name = value.type_name();
 
@@ -159,7 +159,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("type", type_name, ctx)?;
 
     // getmetatable
-    let getmetatable = ctx.create_native_function(|args, ctx| {
+    let getmetatable = ctx.create_function(|args, ctx| {
         let value: Value = args.unpack_args(ctx)?;
 
         let metatable = match value {
@@ -182,7 +182,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("getmetatable", getmetatable, ctx)?;
 
     // setmetatable
-    let setmetatable = ctx.create_native_function(|args, ctx| {
+    let setmetatable = ctx.create_function(|args, ctx| {
         let (table, metatable): (TableRef, Option<TableRef>) = args.unpack_args(ctx)?;
 
         if let Some(metatable) = table.metatable(ctx)? {
@@ -204,7 +204,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("setmetatable", setmetatable, ctx)?;
 
     // rawequal
-    let rawequal = ctx.create_native_function(|args, ctx| {
+    let rawequal = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack_args(ctx)?;
 
         MultiValue::pack(a == b, ctx)
@@ -212,7 +212,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("rawequal", rawequal, ctx)?;
 
     // rawget
-    let rawget = ctx.create_native_function(|args, ctx| {
+    let rawget = ctx.create_function(|args, ctx| {
         let (table, key): (TableRef, Value) = args.unpack_args(ctx)?;
         let value: Value = table.raw_get(key, ctx)?;
 
@@ -221,7 +221,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("rawget", rawget, ctx)?;
 
     // rawset
-    let rawset = ctx.create_native_function(|args, ctx| {
+    let rawset = ctx.create_function(|args, ctx| {
         let (table, key, value): (TableRef, Value, Value) = args.unpack_args(ctx)?;
         table.raw_set(key, value, ctx)?;
 
@@ -230,7 +230,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("rawset", rawset, ctx)?;
 
     // next
-    let next = ctx.create_native_function(|args, ctx| {
+    let next = ctx.create_function(|args, ctx| {
         let (table, key): (TableRef, Value) = args.unpack_args(ctx)?;
         let Some((next_key, value)): Option<(Value, Value)> = table.next(key, ctx)? else {
             return MultiValue::pack((), ctx);
@@ -241,7 +241,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("next", next, ctx)?;
 
     // ipairs
-    let ipairs_iterator = ctx.create_native_function(|args, ctx| {
+    let ipairs_iterator = ctx.create_function(|args, ctx| {
         let (table, mut index): (TableRef, i64) = args.unpack_args(ctx)?;
         index += 1;
 
@@ -255,7 +255,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         }
     });
 
-    let ipairs = ctx.create_native_function(move |args, ctx| {
+    let ipairs = ctx.create_function(move |args, ctx| {
         let table: TableRef = args.unpack_args(ctx)?;
 
         let iterator = if let Some(metatable) = table.metatable(ctx)? {
@@ -272,7 +272,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("ipairs", ipairs, ctx)?;
 
     // pairs
-    let pairs_iterator = ctx.create_native_function(|args, ctx| {
+    let pairs_iterator = ctx.create_function(|args, ctx| {
         let (table, prev_key): (TableRef, Value) = args.unpack_args(ctx)?;
 
         let Some((key, value)): Option<(Value, Value)> = table.next(prev_key, ctx)? else {
@@ -283,7 +283,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         MultiValue::pack((key, value), ctx)
     });
 
-    let pairs = ctx.create_native_function(move |args, ctx| {
+    let pairs = ctx.create_function(move |args, ctx| {
         let table: TableRef = args.unpack_args(ctx)?;
 
         let iterator = if let Some(metatable) = table.metatable(ctx)? {
@@ -300,7 +300,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("pairs", pairs, ctx)?;
 
     // select
-    let select = ctx.create_native_function(|args, ctx| {
+    let select = ctx.create_function(|args, ctx| {
         let (arg, mut args): (Value, MultiValue) = args.unpack_args(ctx)?;
 
         if let Ok(s) = ByteString::from_value(arg.clone(), ctx) {
@@ -352,7 +352,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     env.set("select", select, ctx)?;
 
     // tonumber
-    let tonumber = ctx.create_native_function(|args, ctx| {
+    let tonumber = ctx.create_function(|args, ctx| {
         let (string, base): (Option<ByteString>, Option<i64>) = args.unpack_args(ctx)?;
 
         let Some(base) = base else {
@@ -466,7 +466,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         }
     }
 
-    let pcall = ctx.create_native_function(move |args, ctx| {
+    let pcall = ctx.create_function(move |args, ctx| {
         let (function, args): (FunctionRef, MultiValue) = args.unpack_args(ctx)?;
 
         ctx.set_resumable(true);
@@ -503,7 +503,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         }
     }
 
-    let xpcall = ctx.create_native_function(|args, ctx| {
+    let xpcall = ctx.create_function(|args, ctx| {
         let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
             args.unpack_args(ctx)?;
 

@@ -19,7 +19,7 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 macro_rules! impl_binary_number_op {
     ($ctx:ident, $metatable:ident, $metamethod:ident, $op:tt) => {{
         let key = $ctx.metatable_keys().$metamethod.clone();
-        let func = $ctx.create_native_function(|args, ctx| {
+        let func = $ctx.create_function(|args, ctx| {
             let (a, b): (Value, Value) = args.unpack(ctx)?;
 
             let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -52,7 +52,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
 
     // unary minus
     let key = ctx.metatable_keys().unm.clone();
-    let func = ctx.create_native_function(|args, ctx| {
+    let func = ctx.create_function(|args, ctx| {
         let a: Value = args.unpack(ctx)?;
         let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
 
@@ -68,7 +68,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
 
     // division
     let key = ctx.metatable_keys().div.clone();
-    let func = ctx.create_native_function(|args, ctx| {
+    let func = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_float(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -81,7 +81,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
 
     // integer division
     let key = ctx.metatable_keys().idiv.clone();
-    let func = ctx.create_native_function(|args, ctx| {
+    let func = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -108,7 +108,7 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
 
     // power
     let key = ctx.metatable_keys().pow.clone();
-    let func = ctx.create_native_function(|args, ctx| {
+    let func = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_float(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;

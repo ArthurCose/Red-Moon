@@ -381,7 +381,7 @@ impl Lua {
 
         let vm = unsafe { self.vm_mut() };
         let ctx = &mut vm.context();
-        let function_ref = ctx.create_native_function(move |args, _| {
+        let function_ref = ctx.create_function(move |args, _| {
             // wildly unsafe, see Lua::self_ptr's definition
             let lua = unsafe { &*self_ptr.get() };
 

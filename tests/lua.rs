@@ -36,7 +36,7 @@ fn valid() {
     // override print
     let out_capture = out.clone();
 
-    let print_ref = ctx.create_native_function(move |args, vm| {
+    let print_ref = ctx.create_function(move |args, vm| {
         let len = args.len();
 
         let mut out = out_capture.borrow_mut();
