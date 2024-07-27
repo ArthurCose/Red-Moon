@@ -9,7 +9,7 @@ impl Clone for CounterRef {
 }
 
 #[derive(Default, Clone)]
-pub(super) struct RefCounter {
+pub(crate) struct RefCounter {
     rc: Rc<()>,
 }
 

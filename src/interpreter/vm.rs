@@ -18,7 +18,11 @@ use std::rc::Rc;
 #[cfg(feature = "instruction_exec_counts")]
 use super::instruction::InstructionCounter;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VmLimits {
     pub stack_size: usize,
     pub metatable_chain_depth: usize,
@@ -109,6 +113,81 @@ pub struct Vm {
     pub(crate) coroutine_data: CoroutineData,
     default_environment: HeapRef,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for Vm {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // enable deduplication
+        super::serde_byte_string_rc::enable();
+        super::serde_function_definition_rc::enable();
+        super::serde_value_stack_rc::enable();
+
+        // serialize
+        let result = (|| {
+            use serde::ser::SerializeStruct;
+            let mut state = serializer.serialize_struct("Vm", 4)?;
+            state.serialize_field("limits", &self.execution_data.limits)?;
+            state.serialize_field("gc", &self.execution_data.gc)?;
+            state.serialize_field("heap_storage", &self.execution_data.heap.storage)?;
+            state.serialize_field("byte_strings", &self.execution_data.heap.byte_strings)?;
+            state.end()
+        })();
+
+        // reset + disable deduplication
+        super::serde_byte_string_rc::reset();
+        super::serde_function_definition_rc::reset();
+        super::serde_value_stack_rc::reset();
+
+        result
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Vm {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use crate::interpreter::ByteString;
+        use slotmap::SlotMap;
+
+        #[derive(Deserialize)]
+        #[serde(rename = "Vm")]
+        struct Data {
+            limits: VmLimits,
+            gc: GarbageCollector,
+            heap_storage: SlotMap<HeapKey, HeapValue>,
+            byte_strings: FastHashMap<ByteString, HeapKey>,
+        }
+
+        // enable deduplication
+        super::serde_byte_string_rc::enable();
+        super::serde_function_definition_rc::enable();
+        super::serde_value_stack_rc::enable();
+
+        // deserialize
+        let result = Deserialize::deserialize(deserializer);
+
+        // reset + disable deduplication
+        super::serde_byte_string_rc::reset();
+        super::serde_function_definition_rc::reset();
+        super::serde_value_stack_rc::reset();
+
+        let data: Data = result?;
+
+        // apply
+        let mut vm = Vm::default();
+        vm.execution_data.limits = data.limits;
+        vm.execution_data.gc = data.gc;
+        vm.execution_data.heap.storage = data.heap_storage;
+        vm.execution_data.heap.byte_strings = data.byte_strings;
+
+        Ok(vm)
+    }
 }
 
 impl Clone for Vm {

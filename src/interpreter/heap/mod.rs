@@ -22,11 +22,10 @@ slotmap::new_key_type! {
 }
 
 pub(crate) struct Heap {
-    pub(self) storage: slotmap::SlotMap<HeapKey, HeapValue>,
-    pub(self) byte_strings: FastHashMap<ByteString, HeapKey>,
-    pub(self) ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
-    #[allow(clippy::vec_box)]
-    pub(self) recycled_tables: Rc<VecCell<Box<Table>>>,
+    pub(crate) storage: slotmap::SlotMap<HeapKey, HeapValue>,
+    pub(crate) byte_strings: FastHashMap<ByteString, HeapKey>,
+    pub(crate) ref_roots: IndexMap<HeapKey, RefCounter, FxBuildHasher>,
+    pub(crate) recycled_tables: Rc<VecCell<Box<Table>>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef,
 }

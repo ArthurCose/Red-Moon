@@ -17,6 +17,9 @@ serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"
+bincode = "1"
+rmp-serde = "1"
+ron = "0.8"
 
 [profile.release]
 panic = "abort"

@@ -64,7 +64,7 @@ use crate::serde_util::{
 #[cfg(feature = "serde")]
 impl_serde_rc!(
     serde_runtime_error_data_rc,
-    Rc<RuntimeErrorData>,
+    RuntimeErrorData,
     RuntimeErrorData
 );
 

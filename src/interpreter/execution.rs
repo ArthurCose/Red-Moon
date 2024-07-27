@@ -11,6 +11,9 @@ use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 enum CallResult {
     Call(usize, ReturnMode),
     Return(usize),
@@ -18,6 +21,7 @@ enum CallResult {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct ExecutionContext {
     pub(crate) call_stack: Vec<CallContext>,
     pub(crate) value_stack: ValueStack,
@@ -576,8 +580,10 @@ impl ExecutionContext {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct CallContext {
     pub(crate) up_values: ValueStack,
+    #[cfg_attr(feature = "serde", serde(with = "super::serde_function_definition_rc"))]
     pub(crate) function_definition: Rc<FunctionDefinition>,
     pub(crate) next_instruction_index: usize,
     pub(crate) stack_start: usize,

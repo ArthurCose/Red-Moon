@@ -4,7 +4,10 @@ use crate::vec_cell::VecCell;
 use std::ops::Range;
 
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use {
+    crate::serde_util::impl_serde_deduplicating_rc,
+    serde::{Deserialize, Serialize},
+};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -79,6 +82,9 @@ impl StackValue {
 pub(crate) struct ValueStack {
     values: Vec<StackValue>,
 }
+
+#[cfg(feature = "serde")]
+impl_serde_deduplicating_rc!(serde_value_stack_rc, ValueStack, ValueStack);
 
 impl Clone for ValueStack {
     fn clone(&self) -> Self {

@@ -5,6 +5,9 @@ use super::{MultiValue, ReturnMode, Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub(crate) type ContinuationCallback = NativeFunction<Result<MultiValue, RuntimeError>>;
 
 #[derive(Default, Clone, Copy)]
@@ -14,8 +17,11 @@ pub(crate) struct YieldPermissions {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) enum Continuation {
     Entry(HeapKey),
+    // todo: store in heap to allow hydration
+    #[cfg_attr(feature = "serde", serde(skip))]
     Callback(ContinuationCallback),
     Execution {
         execution: ExecutionContext,
@@ -25,6 +31,7 @@ pub(crate) enum Continuation {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CoroutineStatus {
     Suspended,
     Running,
@@ -32,10 +39,12 @@ pub enum CoroutineStatus {
 }
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Coroutine {
     pub(crate) status: CoroutineStatus,
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) continuation_stack: Vec<(Continuation, bool)>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub(crate) err: Option<Rc<RuntimeError>>,
 }
 
