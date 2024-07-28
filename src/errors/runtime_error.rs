@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RuntimeError {
-    #[cfg_attr(feature = "serde", serde(skip))]
     pub trace: StackTrace,
     pub data: RuntimeErrorData,
 }

@@ -1,12 +1,23 @@
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use {
+    crate::serde_util::impl_serde_rc,
+    serde::{Deserialize, Serialize},
+};
+
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StackTraceFrame {
+    #[cfg_attr(feature = "serde", serde(with = "serde_rc"))]
     pub(crate) source_name: Rc<str>,
     pub(crate) line: usize,
     pub(crate) col: usize,
     pub(crate) instruction_index: usize,
 }
+
+#[cfg(feature = "serde")]
+impl_serde_rc!(serde_rc, str, &str);
 
 impl StackTraceFrame {
     pub fn source_name(&self) -> &str {
@@ -31,6 +42,7 @@ impl StackTraceFrame {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StackTrace {
     frames: Vec<StackTraceFrame>,
 }
