@@ -48,55 +48,65 @@ impl FunctionRef {
     /// Returns false if there's no function with a matching tag, this function will receive the tag to maintain identity after serialization.
     ///
     /// Returns true if there's a function with a matching tag, that function will be replaced with a new copy of this function.
-    #[cfg(feature = "serde")]
+    #[cfg_attr(not(feature = "serde"), allow(unused))]
     pub fn hydrate<T: super::IntoValue>(
         &self,
         tag: T,
         ctx: &mut VmContext,
     ) -> Result<bool, RuntimeError> {
-        use super::Value;
+        #[cfg(feature = "serde")]
+        {
+            use super::Value;
 
-        let tag = tag.into_value(ctx)?;
+            let tag = tag.into_value(ctx)?;
 
-        let heap = &mut ctx.vm.execution_data.heap;
-        tag.test_validity(heap)?;
+            let heap = &mut ctx.vm.execution_data.heap;
+            tag.test_validity(heap)?;
 
-        if !matches!(
-            tag,
-            Value::Nil | Value::Bool(_) | Value::Integer(_) | Value::Float(_) | Value::String(_)
-        ) {
-            return Err(RuntimeErrorData::InvalidTag.into());
-        }
-
-        let tag = tag.to_stack_value();
-        let new_key = self.0.key();
-
-        let old_key = match heap.tags.entry(tag) {
-            indexmap::map::Entry::Occupied(entry) => *entry.get(),
-            indexmap::map::Entry::Vacant(entry) => {
-                entry.insert(new_key);
-                return Ok(false);
+            if !matches!(
+                tag,
+                Value::Nil
+                    | Value::Bool(_)
+                    | Value::Integer(_)
+                    | Value::Float(_)
+                    | Value::String(_)
+            ) {
+                return Err(RuntimeErrorData::InvalidTag.into());
             }
-        };
 
-        let Some(heap_value) = heap.get(new_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+            let tag = tag.to_stack_value();
+            let new_key = self.0.key();
 
-        if !matches!(heap_value, HeapValue::NativeFunction(_)) {
-            return Err(RuntimeErrorData::RequiresNativeFunction.into());
+            let old_key = match heap.tags.entry(tag) {
+                indexmap::map::Entry::Occupied(entry) => *entry.get(),
+                indexmap::map::Entry::Vacant(entry) => {
+                    entry.insert(new_key);
+                    return Ok(false);
+                }
+            };
+
+            let Some(heap_value) = heap.get(new_key) else {
+                return Err(RuntimeErrorData::InvalidRef.into());
+            };
+
+            if !matches!(heap_value, HeapValue::NativeFunction(_)) {
+                return Err(RuntimeErrorData::RequiresNativeFunction.into());
+            }
+
+            let heap_value = heap_value.clone();
+
+            let gc = &mut ctx.vm.execution_data.gc;
+            heap.set(gc, old_key, heap_value);
+
+            if let Some(callback) = heap.resume_callbacks.get(&new_key) {
+                heap.resume_callbacks.insert(old_key, callback.clone());
+            }
+
+            Ok(true)
         }
 
-        let heap_value = heap_value.clone();
-
-        let gc = &mut ctx.vm.execution_data.gc;
-        heap.set(gc, old_key, heap_value);
-
-        if let Some(callback) = heap.resume_callbacks.get(&new_key) {
-            heap.resume_callbacks.insert(old_key, callback.clone());
-        }
-
-        Ok(true)
+        #[cfg(not(feature = "serde"))]
+        Ok(false)
     }
 
     pub fn call<A: IntoMulti, R: FromMulti>(
