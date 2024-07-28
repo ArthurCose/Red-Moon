@@ -6,7 +6,7 @@ use super::multi::MultiValue;
 use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
 use super::{TypeName, UpValueSource, Value};
-use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData, StackTrace};
+use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -457,15 +457,13 @@ impl ExecutionContext {
                     IllegalInstruction::MissingReturnCount,
                 )
                 .map_err(|err| {
-                    let instruction_index = definition.instructions.len().saturating_sub(1);
-                    let mut trace = StackTrace::default();
-                    let frame = definition.create_stack_trace_frame(instruction_index);
-                    trace.push_frame(frame);
+                    let mut err: RuntimeError = err.into();
 
-                    RuntimeError {
-                        data: err.into(),
-                        trace,
-                    }
+                    let instruction_index = definition.instructions.len().saturating_sub(1);
+                    let frame = definition.create_stack_trace_frame(instruction_index);
+                    err.trace.push_frame(frame);
+
+                    err
                 })?;
         }
 
@@ -557,13 +555,7 @@ impl ExecutionContext {
     }
 
     pub(crate) fn unwind_error(vm: &mut Vm, data: RuntimeErrorData) -> RuntimeError {
-        Self::continue_unwind(
-            vm,
-            RuntimeError {
-                trace: StackTrace::default(),
-                data,
-            },
-        )
+        Self::continue_unwind(vm, data.into())
     }
 
     pub(crate) fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
