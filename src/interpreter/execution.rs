@@ -1446,44 +1446,38 @@ impl CallContext {
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
-        value: StackValue,
+        mut value: StackValue,
         coerce_value: impl Fn(&Heap, StackValue) -> Result<T, RuntimeErrorData>,
     ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
-        match value {
-            StackValue::HeapValue(heap_key) => {
-                match self.binary_metamethod(
-                    heap,
-                    value_stack,
-                    (heap_key, metamethod_key),
-                    dest,
-                    value_a,
-                    value_b,
-                ) {
-                    Some(call_result) => Ok(ValueOrCallResult::CallResult(call_result)),
-                    None => Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
+        loop {
+            match value {
+                StackValue::HeapValue(heap_key) => {
+                    match self.binary_metamethod(
+                        heap,
+                        value_stack,
+                        (heap_key, metamethod_key),
+                        dest,
+                        value_a,
+                        value_b,
+                    ) {
+                        Some(call_result) => return Ok(ValueOrCallResult::CallResult(call_result)),
+                        None => {
+                            return Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap)))
+                        }
+                    }
                 }
-            }
-            StackValue::Pointer(heap_key) => {
-                let HeapValue::StackValue(value) = heap.get(heap_key).unwrap() else {
-                    unreachable!()
-                };
+                StackValue::Pointer(heap_key) => {
+                    let HeapValue::StackValue(pointed) = heap.get(heap_key).unwrap() else {
+                        unreachable!()
+                    };
 
-                let value = *value;
-
-                self.resolve_binary_operand(
-                    (heap, value_stack),
-                    metamethod_key,
-                    dest,
-                    value_a,
-                    value_b,
-                    value,
-                    coerce_value,
-                )
+                    value = *pointed;
+                }
+                _ => match coerce_value(heap, value) {
+                    Ok(coerced_value) => return Ok(ValueOrCallResult::Value(coerced_value)),
+                    Err(err) => return Err(err),
+                },
             }
-            _ => match coerce_value(heap, value) {
-                Ok(coerced_value) => Ok(ValueOrCallResult::Value(coerced_value)),
-                Err(err) => Err(err),
-            },
         }
     }
 
