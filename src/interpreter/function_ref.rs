@@ -37,8 +37,12 @@ impl FunctionRef {
         let tag = tag.to_stack_value();
         let new_key = self.0.key();
 
-        let Some(old_key) = heap.tags.insert(tag, new_key) else {
-            return Ok(false);
+        let old_key = match heap.tags.entry(tag) {
+            indexmap::map::Entry::Occupied(entry) => *entry.get(),
+            indexmap::map::Entry::Vacant(entry) => {
+                entry.insert(new_key);
+                return Ok(false);
+            }
         };
 
         let Some(heap_value) = heap.get(new_key) else {
