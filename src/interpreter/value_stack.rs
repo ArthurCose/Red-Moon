@@ -187,6 +187,10 @@ impl ValueStack {
         debug_assert_eq!(self.len(), start + keep)
     }
 
+    pub(crate) fn resize(&mut self, len: usize) {
+        self.values.resize(len, StackValue::Nil);
+    }
+
     pub(crate) fn clear(&mut self) {
         self.values.clear();
     }
