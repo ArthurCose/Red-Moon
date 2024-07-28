@@ -62,7 +62,7 @@ impl ExecutionContext {
         value: StackValue,
         mut args: MultiValue,
         vm: &mut Vm,
-    ) -> Result<Self, RuntimeErrorData> {
+    ) -> Result<Self, RuntimeError> {
         let exec_data = &mut vm.execution_data;
 
         let function_key = resolve_call(exec_data, value, |heap, value| {
@@ -82,7 +82,7 @@ impl ExecutionContext {
                         Ok(result) => result,
                         Err(err) => {
                             vm.execution_data.cache_pools.store_value_stack(value_stack);
-                            return Err(err.data);
+                            return Err(err);
                         }
                     };
                 results.push_stack_multi(&mut value_stack);

@@ -785,12 +785,12 @@ impl<'vm> VmContext<'vm> {
                 self.vm.execution_stack.push(context);
                 ExecutionContext::resume(self.vm)
             }
-            _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm)
-                .map_err(RuntimeError::from)
-                .and_then(|context| {
+            _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm).and_then(
+                |context| {
                     self.vm.execution_stack.push(context);
                     ExecutionContext::resume(self.vm)
-                }),
+                },
+            ),
         };
 
         let multi = result?;
