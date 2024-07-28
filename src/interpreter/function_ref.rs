@@ -45,6 +45,9 @@ impl FunctionRef {
         Ok(())
     }
 
+    /// Returns false if there's no function with a matching tag, this function will receive the tag to maintain identity after serialization.
+    ///
+    /// Returns true if there's a function with a matching tag, that function will be replaced with a new copy of this function.
     #[cfg(feature = "serde")]
     pub fn hydrate<T: super::IntoValue>(
         &self,
@@ -80,11 +83,8 @@ impl FunctionRef {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
-        if !matches!(
-            heap_value,
-            HeapValue::NativeFunction(_) | HeapValue::Function(_),
-        ) {
-            return Err(RuntimeErrorData::InvalidRef.into());
+        if !matches!(heap_value, HeapValue::NativeFunction(_)) {
+            return Err(RuntimeErrorData::RequiresNativeFunction.into());
         }
 
         let heap_value = heap_value.clone();
