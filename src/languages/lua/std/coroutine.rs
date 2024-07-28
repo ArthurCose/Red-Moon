@@ -2,8 +2,6 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::{CoroutineRef, CoroutineStatus, MultiValue, Value, VmContext};
 
 pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let coroutine = ctx.create_table();
-
     // todo: close
 
     // create
@@ -12,7 +10,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let co = ctx.create_coroutine(function)?;
         MultiValue::pack(co, ctx)
     });
-    coroutine.raw_set("create", create, ctx)?;
+    let hydrating = create.hydrate("coroutine.create", ctx)?;
 
     // isyieldable
     let isyieldable = ctx.create_function(|args, ctx| {
@@ -34,7 +32,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    coroutine.raw_set("isyieldable", isyieldable, ctx)?;
+    create.hydrate("coroutine.isyieldable", ctx)?;
 
     // resume
     let resume = ctx.create_function(|args, ctx| {
@@ -48,7 +46,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             Err(err) => MultiValue::pack((false, err.to_string()), ctx),
         }
     });
-    coroutine.raw_set("resume", resume, ctx)?;
+    create.hydrate("coroutine.resume", ctx)?;
 
     // running
     let running = ctx.create_function(|mut args, ctx| {
@@ -68,7 +66,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    coroutine.raw_set("running", running, ctx)?;
+    create.hydrate("coroutine.running", ctx)?;
 
     // status
     let suspended_string = ctx.intern_string(b"suspended");
@@ -91,7 +89,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         };
         MultiValue::pack(status, ctx)
     });
-    coroutine.raw_set("status", status, ctx)?;
+    create.hydrate("coroutine.status", ctx)?;
 
     // wrap
     let wrap = ctx.create_function(|args, ctx| {
@@ -102,15 +100,26 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(f, ctx)
     });
-    coroutine.raw_set("wrap", wrap, ctx)?;
+    create.hydrate("coroutine.wrap", ctx)?;
 
     // yield
     let r#yield = ctx.create_function(move |args, _| Err(RuntimeErrorData::Yield(args).into()));
     r#yield.set_resume_callback(|(result, _), _| result, ctx)?;
-    coroutine.raw_set("yield", r#yield, ctx)?;
+    create.hydrate("coroutine.yield", ctx)?;
 
-    let env = ctx.default_environment();
-    env.set("coroutine", coroutine, ctx)?;
+    if !hydrating {
+        let coroutine = ctx.create_table();
+        coroutine.raw_set("create", create, ctx)?;
+        coroutine.raw_set("isyieldable", isyieldable, ctx)?;
+        coroutine.raw_set("resume", resume, ctx)?;
+        coroutine.raw_set("running", running, ctx)?;
+        coroutine.raw_set("status", status, ctx)?;
+        coroutine.raw_set("wrap", wrap, ctx)?;
+        coroutine.raw_set("yield", r#yield, ctx)?;
+
+        let env = ctx.default_environment();
+        env.set("coroutine", coroutine, ctx)?;
+    }
 
     Ok(())
 }

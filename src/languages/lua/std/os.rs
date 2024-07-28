@@ -4,8 +4,6 @@ use crate::interpreter::{IntoValue, VmContext};
 use cpu_time::ProcessTime;
 
 pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let os = ctx.create_table();
-
     // clock
     let clock = ctx.create_function(|mut args, ctx| {
         args.clear();
@@ -18,10 +16,15 @@ pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    os.raw_set("clock", clock, ctx)?;
+    let hydrating = clock.hydrate("os.clock", ctx)?;
 
-    let env = ctx.default_environment();
-    env.set("os", os, ctx)?;
+    if !hydrating {
+        let os = ctx.create_table();
+        os.raw_set("clock", clock, ctx)?;
+
+        let env = ctx.default_environment();
+        env.set("os", os, ctx)?;
+    }
 
     Ok(())
 }

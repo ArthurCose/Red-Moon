@@ -5,11 +5,6 @@ use crate::interpreter::{
 use crate::languages::lua::parse_number;
 
 pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let env = ctx.default_environment();
-
-    env.set("_G", env.clone(), ctx)?;
-    env.set("_VERSION", "Lua 5.3", ctx)?;
-
     // assert
     let assert = ctx.create_function(|args, ctx| {
         let (passed, message): (bool, LazyArg<Option<ByteString>>) = args.unpack_args(ctx)?;
@@ -24,10 +19,10 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    env.set("assert", assert, ctx)?;
+    let hydrating = assert.hydrate("lua.assert", ctx)?;
 
     // collectgarbage
-    let assert = ctx.create_function(|args, ctx| {
+    let collectgarbage = ctx.create_function(|args, ctx| {
         let (opt, mut rest): (Option<ByteString>, MultiValue) = args.unpack_args(ctx)?;
 
         let result = if let Some(opt) = opt {
@@ -106,7 +101,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         ctx.store_multi(rest);
         result
     });
-    env.set("collectgarbage", assert, ctx)?;
+    collectgarbage.hydrate("lua.collectgarbage", ctx)?;
 
     // error
     let error = ctx.create_function(|args, ctx| {
@@ -122,7 +117,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Err(err)
     });
-    env.set("error", error, ctx)?;
+    error.hydrate("lua.error", ctx)?;
 
     // print
     let print = ctx.create_function(|mut args, ctx| {
@@ -138,7 +133,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    env.set("print", print, ctx)?;
+    print.hydrate("lua.print", ctx)?;
 
     // tostring
     let tostring = ctx.create_function(|args, ctx| {
@@ -147,7 +142,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(string, ctx)
     });
-    env.set("tostring", tostring, ctx)?;
+    tostring.hydrate("lua.tostring", ctx)?;
 
     // type
     let type_name = ctx.create_function(|args, ctx| {
@@ -156,7 +151,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(type_name.as_str(), ctx)
     });
-    env.set("type", type_name, ctx)?;
+    type_name.hydrate("lua.type", ctx)?;
 
     // getmetatable
     let getmetatable = ctx.create_function(|args, ctx| {
@@ -179,7 +174,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(metatable, ctx)
     });
-    env.set("getmetatable", getmetatable, ctx)?;
+    getmetatable.hydrate("lua.getmetatable", ctx)?;
 
     // setmetatable
     let setmetatable = ctx.create_function(|args, ctx| {
@@ -201,7 +196,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(table, ctx)
     });
-    env.set("setmetatable", setmetatable, ctx)?;
+    setmetatable.hydrate("lua.setmetatable", ctx)?;
 
     // rawequal
     let rawequal = ctx.create_function(|args, ctx| {
@@ -209,7 +204,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(a == b, ctx)
     });
-    env.set("rawequal", rawequal, ctx)?;
+    rawequal.hydrate("lua.rawequal", ctx)?;
 
     // rawget
     let rawget = ctx.create_function(|args, ctx| {
@@ -218,7 +213,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(value, ctx)
     });
-    env.set("rawget", rawget, ctx)?;
+    rawget.hydrate("lua.rawget", ctx)?;
 
     // rawset
     let rawset = ctx.create_function(|args, ctx| {
@@ -227,7 +222,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    env.set("rawset", rawset, ctx)?;
+    rawset.hydrate("lua.rawset", ctx)?;
 
     // next
     let next = ctx.create_function(|args, ctx| {
@@ -238,7 +233,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((next_key, value), ctx)
     });
-    env.set("next", next, ctx)?;
+    next.hydrate("lua.next", ctx)?;
 
     // ipairs
     let ipairs_iterator = ctx.create_function(|args, ctx| {
@@ -269,7 +264,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((iterator, table, 0), ctx)
     });
-    env.set("ipairs", ipairs, ctx)?;
+    ipairs.hydrate("lua.ipairs", ctx)?;
 
     // pairs
     let pairs_iterator = ctx.create_function(|args, ctx| {
@@ -297,7 +292,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((iterator, table, Value::default()), ctx)
     });
-    env.set("pairs", pairs, ctx)?;
+    pairs.hydrate("lua.pairs", ctx)?;
 
     // select
     let select = ctx.create_function(|args, ctx| {
@@ -349,7 +344,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    env.set("select", select, ctx)?;
+    select.hydrate("lua.select", ctx)?;
 
     // tonumber
     let tonumber = ctx.create_function(|args, ctx| {
@@ -440,7 +435,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(n, ctx)
     });
-    env.set("tonumber", tonumber, ctx)?;
+    tonumber.hydrate("lua.tonumber", ctx)?;
 
     fn pcall_impl(
         (result, state): (Result<MultiValue, RuntimeError>, MultiValue),
@@ -475,7 +470,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         )
     });
     pcall.set_resume_callback(pcall_impl, ctx)?;
-    env.set("pcall", pcall, ctx)?;
+    pcall.hydrate("lua.pcall", ctx)?;
 
     // xpcall
     fn xpcall_impl(
@@ -515,9 +510,33 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         xpcall_impl((function.call::<_, MultiValue>(args, ctx), state), ctx)
     });
     xpcall.set_resume_callback(xpcall_impl, ctx)?;
-    env.set("xpcall", xpcall, ctx)?;
+    xpcall.hydrate("lua.xpcall", ctx)?;
 
     // todo: warn
+
+    if !hydrating {
+        let env = ctx.default_environment();
+        env.set("_G", env.clone(), ctx)?;
+        env.set("_VERSION", "Lua 5.3", ctx)?;
+        env.set("assert", assert, ctx)?;
+        env.set("collectgarbage", collectgarbage, ctx)?;
+        env.set("error", error, ctx)?;
+        env.set("print", print, ctx)?;
+        env.set("tostring", tostring, ctx)?;
+        env.set("type", type_name, ctx)?;
+        env.set("getmetatable", getmetatable, ctx)?;
+        env.set("setmetatable", setmetatable, ctx)?;
+        env.set("rawequal", rawequal, ctx)?;
+        env.set("rawget", rawget, ctx)?;
+        env.set("rawset", rawset, ctx)?;
+        env.set("next", next, ctx)?;
+        env.set("ipairs", ipairs, ctx)?;
+        env.set("pairs", pairs, ctx)?;
+        env.set("select", select, ctx)?;
+        env.set("tonumber", tonumber, ctx)?;
+        env.set("pcall", pcall, ctx)?;
+        env.set("xpcall", xpcall, ctx)?;
+    }
 
     Ok(())
 }

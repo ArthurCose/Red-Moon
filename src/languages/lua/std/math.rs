@@ -3,8 +3,6 @@ use crate::interpreter::{IntoValue, MultiValue, Number, Value, VmContext};
 use crate::languages::lua::{coerce_integer, parse_number};
 
 pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let math = ctx.create_table();
-
     // abs
     let abs = ctx.create_function(|mut args, ctx| {
         let x = coerce_number(&mut args, 1, ctx)?;
@@ -16,7 +14,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.raw_set("abs", abs, ctx)?;
+    let hydrating = abs.hydrate("math.abs", ctx)?;
 
     // acos
     let acos = ctx.create_function(|args, ctx| {
@@ -24,7 +22,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.acos(), ctx)
     });
-    math.raw_set("acos", acos, ctx)?;
+    acos.hydrate("math.acos", ctx)?;
 
     // asin
     let asin = ctx.create_function(|args, ctx| {
@@ -32,7 +30,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.asin(), ctx)
     });
-    math.raw_set("asin", asin, ctx)?;
+    asin.hydrate("math.asin", ctx)?;
 
     // atan
     let atan = ctx.create_function(|args, ctx| {
@@ -46,7 +44,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(output, ctx)
     });
-    math.raw_set("atan", atan, ctx)?;
+    atan.hydrate("math.atan", ctx)?;
 
     // ceil
     let ceil = ctx.create_function(|args, ctx| {
@@ -54,7 +52,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.ceil(), ctx)
     });
-    math.raw_set("ceil", ceil, ctx)?;
+    ceil.hydrate("math.ceil", ctx)?;
 
     // cos
     let cos = ctx.create_function(|args, ctx| {
@@ -62,7 +60,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.cos(), ctx)
     });
-    math.raw_set("cos", cos, ctx)?;
+    cos.hydrate("math.cos", ctx)?;
 
     // deg
     let deg = ctx.create_function(|args, ctx| {
@@ -70,7 +68,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.to_degrees(), ctx)
     });
-    math.raw_set("deg", deg, ctx)?;
+    deg.hydrate("math.deg", ctx)?;
 
     // exp
     let exp = ctx.create_function(|args, ctx| {
@@ -78,7 +76,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.exp(), ctx)
     });
-    math.raw_set("exp", exp, ctx)?;
+    exp.hydrate("math.exp", ctx)?;
 
     // floor
     let floor = ctx.create_function(|args, ctx| {
@@ -86,7 +84,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.floor(), ctx)
     });
-    math.raw_set("floor", floor, ctx)?;
+    floor.hydrate("math.floor", ctx)?;
 
     // fmod
     // todo: lua preserves integers
@@ -95,14 +93,14 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x % y, ctx)
     });
-    math.raw_set("fmod", fmod, ctx)?;
+    fmod.hydrate("math.fmod", ctx)?;
 
     // huge
     let huge = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(f64::INFINITY, ctx)
     });
-    math.raw_set("huge", huge, ctx)?;
+    huge.hydrate("math.huge", ctx)?;
 
     // log
     let log = ctx.create_function(|args, ctx| {
@@ -111,7 +109,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.log(base), ctx)
     });
-    math.raw_set("log", log, ctx)?;
+    log.hydrate("math.log", ctx)?;
 
     // max
     let max = ctx.create_function(|mut args, ctx| {
@@ -133,14 +131,14 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         args.push_front(max);
         Ok(args)
     });
-    math.raw_set("max", max, ctx)?;
+    max.hydrate("math.max", ctx)?;
 
     // maxinteger
     let maxinteger = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(i64::MAX, ctx)
     });
-    math.raw_set("maxinteger", maxinteger, ctx)?;
+    maxinteger.hydrate("math.maxinteger", ctx)?;
 
     // min
     let min = ctx.create_function(|mut args, ctx| {
@@ -162,51 +160,49 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         args.push_front(min);
         Ok(args)
     });
-    math.raw_set("min", min, ctx)?;
+    min.hydrate("math.min", ctx)?;
 
     // mininteger
     let mininteger = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(i64::MIN, ctx)
     });
-    math.raw_set("mininteger", mininteger, ctx)?;
+    mininteger.hydrate("math.mininteger", ctx)?;
 
     // modf
     let modf = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack((x.trunc(), x.fract()), ctx)
     });
-    math.raw_set("modf", modf, ctx)?;
-
-    math.raw_set("pi", std::f64::consts::PI, ctx)?;
+    modf.hydrate("math.modf", ctx)?;
 
     // rad
     let rad = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.to_radians(), ctx)
     });
-    math.raw_set("rad", rad, ctx)?;
+    rad.hydrate("math.rad", ctx)?;
 
     // sin
     let sin = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.sin(), ctx)
     });
-    math.raw_set("sin", sin, ctx)?;
+    sin.hydrate("math.sin", ctx)?;
 
     // sqrt
     let sqrt = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.sqrt(), ctx)
     });
-    math.raw_set("sqrt", sqrt, ctx)?;
+    sqrt.hydrate("math.sqrt", ctx)?;
 
     // tan
     let tan = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.tan(), ctx)
     });
-    math.raw_set("tan", tan, ctx)?;
+    tan.hydrate("math.tan", ctx)?;
 
     // tointeger
     let tointeger = ctx.create_function(|mut args, ctx| {
@@ -219,7 +215,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.raw_set("tointeger", tointeger, ctx)?;
+    tointeger.hydrate("math.tointeger", ctx)?;
 
     // type
     let integer_string_ref = ctx.intern_string(b"integer");
@@ -234,7 +230,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    math.raw_set("type", r#type, ctx)?;
+    r#type.hydrate("math.type", ctx)?;
 
     // ult
     let ult = ctx.create_function(move |args, ctx| {
@@ -242,10 +238,39 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(m < n, ctx)
     });
-    math.raw_set("ult", ult, ctx)?;
+    ult.hydrate("math.ult", ctx)?;
 
-    let env = ctx.default_environment();
-    env.set("math", math, ctx)?;
+    if !hydrating {
+        let math = ctx.create_table();
+        math.raw_set("abs", abs, ctx)?;
+        math.raw_set("acos", acos, ctx)?;
+        math.raw_set("asin", asin, ctx)?;
+        math.raw_set("atan", atan, ctx)?;
+        math.raw_set("ceil", ceil, ctx)?;
+        math.raw_set("cos", cos, ctx)?;
+        math.raw_set("deg", deg, ctx)?;
+        math.raw_set("exp", exp, ctx)?;
+        math.raw_set("floor", floor, ctx)?;
+        math.raw_set("fmod", fmod, ctx)?;
+        math.raw_set("huge", huge, ctx)?;
+        math.raw_set("log", log, ctx)?;
+        math.raw_set("max", max, ctx)?;
+        math.raw_set("maxinteger", maxinteger, ctx)?;
+        math.raw_set("min", min, ctx)?;
+        math.raw_set("mininteger", mininteger, ctx)?;
+        math.raw_set("modf", modf, ctx)?;
+        math.raw_set("pi", std::f64::consts::PI, ctx)?;
+        math.raw_set("rad", rad, ctx)?;
+        math.raw_set("sin", sin, ctx)?;
+        math.raw_set("sqrt", sqrt, ctx)?;
+        math.raw_set("tan", tan, ctx)?;
+        math.raw_set("tointeger", tointeger, ctx)?;
+        math.raw_set("type", r#type, ctx)?;
+        math.raw_set("ult", ult, ctx)?;
+
+        let env = ctx.default_environment();
+        env.set("math", math, ctx)?;
+    }
 
     // todo: random, randomseed
 

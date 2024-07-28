@@ -2,8 +2,6 @@ use crate::errors::RuntimeError;
 use crate::interpreter::{ByteString, FromValue, MultiValue, TableRef, Value, VmContext};
 
 pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let table = ctx.create_table();
-
     // concat
     let concat = ctx.create_function(|args, ctx| {
         let (table, separator, start, end): (TableRef, Option<ByteString>, i64, i64) =
@@ -44,7 +42,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    table.raw_set("concat", concat, ctx)?;
+    let hydrating = concat.hydrate("table.concat", ctx)?;
 
     // insert
     let insert = ctx.create_function(|args, ctx| {
@@ -65,7 +63,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    table.raw_set("insert", insert, ctx)?;
+    insert.hydrate("table.insert", ctx)?;
 
     // remove
     let remove = ctx.create_function(|args, ctx| {
@@ -87,7 +85,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    table.raw_set("remove", remove, ctx)?;
+    remove.hydrate("table.remove", ctx)?;
 
     // pack
     let pack = ctx.create_function(|mut args, ctx| {
@@ -102,7 +100,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(table, ctx)
     });
-    table.raw_set("pack", pack, ctx)?;
+    pack.hydrate("table.pack", ctx)?;
 
     // unpack
     let unpack = ctx.create_function(|args, ctx| {
@@ -117,13 +115,22 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(multi, ctx)
     });
-    table.raw_set("unpack", unpack, ctx)?;
+    unpack.hydrate("table.unpack", ctx)?;
 
     // todo: table.move() https://www.lua.org/manual/5.4/manual.html#pdf-table.move
     // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort
 
-    let env = ctx.default_environment();
-    env.set("table", table, ctx)?;
+    if !hydrating {
+        let table = ctx.create_table();
+        table.raw_set("concat", concat, ctx)?;
+        table.raw_set("insert", insert, ctx)?;
+        table.raw_set("remove", remove, ctx)?;
+        table.raw_set("pack", pack, ctx)?;
+        table.raw_set("unpack", unpack, ctx)?;
+
+        let env = ctx.default_environment();
+        env.set("table", table, ctx)?;
+    }
 
     Ok(())
 }

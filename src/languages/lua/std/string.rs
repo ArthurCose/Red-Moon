@@ -3,13 +3,25 @@ use crate::interpreter::{MultiValue, Number, StringRef, TableRef, Value, VmConte
 use crate::languages::lua::parse_number;
 
 pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    let string = ctx.create_table();
+    let len = ctx.create_function(|args, ctx| {
+        let string: StringRef = args.unpack(ctx)?;
+        MultiValue::pack(string.fetch(ctx)?.len(), ctx)
+    });
+    let hydrating = len.hydrate("str.len", ctx)?;
 
     let string_metatable = ctx.string_metatable();
-    string_metatable.raw_set(ctx.metatable_keys().index.clone(), string.clone(), ctx)?;
 
-    let env = ctx.default_environment();
-    env.set("string", string, ctx)?;
+    if !hydrating {
+        let string = ctx.create_table();
+        string.set("len", len, ctx)?;
+
+        // set __index
+        let index_metakey = ctx.metatable_keys().index.clone();
+        string_metatable.raw_set(index_metakey, string.clone(), ctx)?;
+
+        let env = ctx.default_environment();
+        env.set("string", string, ctx)?;
+    }
 
     impl_string_metamethods(string_metatable, ctx)?;
 
@@ -17,9 +29,9 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 }
 
 macro_rules! impl_binary_number_op {
-    ($ctx:ident, $metatable:ident, $metamethod:ident, $op:tt) => {{
-        let key = $ctx.metatable_keys().$metamethod.clone();
-        let func = $ctx.create_function(|args, ctx| {
+    ($ctx:ident, $metatable:ident, $metamethod:ident, $fn_name:ident, $op:tt) => {
+        let $metamethod = $ctx.metatable_keys().$metamethod.clone();
+        let $fn_name = $ctx.create_function(|args, ctx| {
             let (a, b): (Value, Value) = args.unpack(ctx)?;
 
             let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -34,25 +46,19 @@ macro_rules! impl_binary_number_op {
 
             MultiValue::pack(value, ctx)
         });
-
-        $metatable.raw_set(key, func, $ctx)?;
-    }};
+    };
 }
 
 fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(), RuntimeError> {
-    // index
-    let key = ctx.metatable_keys().index.clone();
-    metatable.raw_set(key, metatable.clone(), ctx)?;
-
     // basic arithmetic
-    impl_binary_number_op!(ctx, metatable, add, +);
-    impl_binary_number_op!(ctx, metatable, sub, -);
-    impl_binary_number_op!(ctx, metatable, mul, *);
-    impl_binary_number_op!(ctx, metatable, modulus, %);
+    impl_binary_number_op!(ctx, metatable, add, add_fn, +);
+    impl_binary_number_op!(ctx, metatable, sub, sub_fn, -);
+    impl_binary_number_op!(ctx, metatable, mul, mul_fn, *);
+    impl_binary_number_op!(ctx, metatable, modulus, modulus_fn, %);
 
     // unary minus
-    let key = ctx.metatable_keys().unm.clone();
-    let func = ctx.create_function(|args, ctx| {
+    let unm = ctx.metatable_keys().unm.clone();
+    let unm_fn = ctx.create_function(|args, ctx| {
         let a: Value = args.unpack(ctx)?;
         let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
 
@@ -64,11 +70,9 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
         MultiValue::pack(a, ctx)
     });
 
-    metatable.raw_set(key, func, ctx)?;
-
     // division
-    let key = ctx.metatable_keys().div.clone();
-    let func = ctx.create_function(|args, ctx| {
+    let div = ctx.metatable_keys().div.clone();
+    let div_fn = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_float(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -77,11 +81,9 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
         MultiValue::pack(a / b, ctx)
     });
 
-    metatable.raw_set(key, func, ctx)?;
-
     // integer division
-    let key = ctx.metatable_keys().idiv.clone();
-    let func = ctx.create_function(|args, ctx| {
+    let idiv = ctx.metatable_keys().idiv.clone();
+    let idiv_fn = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_number(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -104,11 +106,9 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
         MultiValue::pack(value, ctx)
     });
 
-    metatable.raw_set(key, func, ctx)?;
-
     // power
-    let key = ctx.metatable_keys().pow.clone();
-    let func = ctx.create_function(|args, ctx| {
+    let pow = ctx.metatable_keys().pow.clone();
+    let pow_fn = ctx.create_function(|args, ctx| {
         let (a, b): (Value, Value) = args.unpack(ctx)?;
 
         let a = coerce_float(&a, ctx).ok_or(RuntimeErrorData::InvalidArithmetic(a.type_name()))?;
@@ -117,7 +117,25 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
         MultiValue::pack(a.powf(b), ctx)
     });
 
-    metatable.raw_set(key, func, ctx)?;
+    let hydrating = add_fn.hydrate("str.__add", ctx)?;
+    sub_fn.hydrate("str.__sub", ctx)?;
+    mul_fn.hydrate("str.__mul", ctx)?;
+    modulus_fn.hydrate("str.__mod", ctx)?;
+    unm_fn.hydrate("str.__unm", ctx)?;
+    div_fn.hydrate("str.__div", ctx)?;
+    idiv_fn.hydrate("str.__idiv", ctx)?;
+    pow_fn.hydrate("str.__pow", ctx)?;
+
+    if !hydrating {
+        metatable.raw_set(add, add_fn, ctx)?;
+        metatable.raw_set(sub, sub_fn, ctx)?;
+        metatable.raw_set(mul, mul_fn, ctx)?;
+        metatable.raw_set(modulus, modulus_fn, ctx)?;
+        metatable.raw_set(unm, unm_fn, ctx)?;
+        metatable.raw_set(div, div_fn, ctx)?;
+        metatable.raw_set(idiv, idiv_fn, ctx)?;
+        metatable.raw_set(pow, pow_fn, ctx)?;
+    }
 
     Ok(())
 }
