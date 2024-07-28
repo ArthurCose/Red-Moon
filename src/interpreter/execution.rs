@@ -682,15 +682,15 @@ impl CallContext {
                     let dest_index = self.register_base + dest as usize;
 
                     let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
-                        return Err(err.clone());
+                        return Err(err);
                     };
 
                     let Some(table_value) = heap.get_mut(gc, heap_key) else {
-                        return Err(err.clone());
+                        return Err(err);
                     };
 
                     let HeapValue::Table(table) = table_value else {
-                        return Err(err.clone());
+                        return Err(err);
                     };
 
                     // get the index offset
@@ -729,15 +729,15 @@ impl CallContext {
                     let dest_index = self.register_base + dest as usize;
 
                     let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
-                        return Err(table_err.clone());
+                        return Err(table_err);
                     };
 
                     let Some(table_value) = heap.get_mut(gc, heap_key) else {
-                        return Err(table_err.clone());
+                        return Err(table_err);
                     };
 
                     let HeapValue::Table(table) = table_value else {
-                        return Err(table_err.clone());
+                        return Err(table_err);
                     };
 
                     // get the index offset
