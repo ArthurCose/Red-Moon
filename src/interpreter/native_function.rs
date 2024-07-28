@@ -4,6 +4,9 @@ use super::{multi::MultiValue, Continuation};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub trait NativeFunctionTrait<A>:
     Fn(A, &mut VmContext) -> Result<MultiValue, RuntimeError>
 {
@@ -18,8 +21,38 @@ impl<A, T: Fn(A, &mut VmContext) -> Result<MultiValue, RuntimeError> + Clone + '
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct NativeFunction<A> {
+    #[cfg_attr(feature = "serde", serde(with = "serde_callback"))]
     callback: Rc<dyn NativeFunctionTrait<A>>,
+}
+
+#[cfg(feature = "serde")]
+mod serde_callback {
+    use super::*;
+
+    pub(super) fn serialize<A, S>(
+        _: &Rc<dyn NativeFunctionTrait<A>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Serialize::serialize(&(), serializer)
+    }
+
+    pub(super) fn deserialize<'de, A, D>(
+        deserializer: D,
+    ) -> Result<Rc<dyn NativeFunctionTrait<A>>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let _: () = serde::Deserialize::deserialize(deserializer)?;
+
+        Ok(Rc::new(|_: A, _: &mut VmContext| {
+            Err(RuntimeErrorData::FunctionLostInSerialization.into())
+        }))
+    }
 }
 
 impl<A> NativeFunction<A> {

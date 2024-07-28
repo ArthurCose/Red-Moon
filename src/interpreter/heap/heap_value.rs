@@ -15,29 +15,10 @@ pub(crate) enum HeapValue {
     StackValue(StackValue),
     Bytes(ByteString),
     Table(Box<Table>),
-    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_native_fn"))]
-    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_native_fn"))]
     NativeFunction(NativeFunction<MultiValue>),
     Function(Function),
     Coroutine(Box<Coroutine>),
 }
-
-#[cfg(feature = "serde")]
-use crate::serde_util::{impl_serde_deserialize_stub_fn, impl_serde_serialize_stub_fn};
-
-#[cfg(feature = "serde")]
-impl_serde_serialize_stub_fn!(serialize_native_fn, NativeFunction<MultiValue>);
-#[cfg(feature = "serde")]
-impl_serde_deserialize_stub_fn!(
-    deserialize_native_fn,
-    NativeFunction<MultiValue>,
-    NativeFunction::from(
-        |mut args: MultiValue, _: &mut crate::interpreter::VmContext| {
-            args.clear();
-            Ok(args)
-        }
-    )
-);
 
 impl HeapValue {
     pub(crate) fn gc_size(&self) -> usize {

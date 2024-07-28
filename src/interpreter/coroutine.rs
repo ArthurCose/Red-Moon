@@ -21,7 +21,6 @@ pub(crate) struct YieldPermissions {
 pub(crate) enum Continuation {
     Entry(HeapKey),
     // todo: store in heap to allow hydration
-    #[cfg_attr(feature = "serde", serde(skip))]
     Callback(ContinuationCallback),
     Execution {
         execution: ExecutionContext,

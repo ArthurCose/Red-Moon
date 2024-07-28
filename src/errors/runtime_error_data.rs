@@ -55,6 +55,8 @@ pub enum RuntimeErrorData {
     #[cfg(feature = "serde")]
     InvalidTag,
     #[cfg(feature = "serde")]
+    FunctionLostInSerialization,
+    #[cfg(feature = "serde")]
     #[serde(other)]
     LostInSerialization,
 }
@@ -171,6 +173,13 @@ impl std::fmt::Display for RuntimeErrorData {
             #[cfg(feature = "serde")]
             RuntimeErrorData::InvalidTag => {
                 write!(f, "invalid tag, expecting string or primitive")
+            }
+            #[cfg(feature = "serde")]
+            RuntimeErrorData::FunctionLostInSerialization => {
+                write!(
+                    f,
+                    "function lost during serialization, use hydrate to refill native functions"
+                )
             }
             #[cfg(feature = "serde")]
             RuntimeErrorData::LostInSerialization => {

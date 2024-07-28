@@ -1,6 +1,6 @@
 #![cfg(feature = "serde")]
 
-use red_moon::errors::RuntimeError;
+use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{FunctionRef, MultiValue, TableRef, Vm};
 use red_moon::languages::lua::LuaCompiler;
 
@@ -63,7 +63,9 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // test dehydrated function
     let f: FunctionRef = env.get("native_fn", ctx)?;
-    assert_eq!(f.call::<_, MultiValue>(1, ctx)?, ctx.create_multi());
+    assert!(f
+        .call::<_, MultiValue>(1, ctx)
+        .is_err_and(|err| err.data == RuntimeErrorData::FunctionLostInSerialization));
 
     // hydrate
     let f = ctx.create_function(|args, _| Ok(args));
