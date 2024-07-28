@@ -105,10 +105,8 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     coroutine.raw_set("wrap", wrap, ctx)?;
 
     // yield
-    let r#yield = ctx.create_function(|args, ctx| {
-        ctx.set_resume_callback(|result, _| result)?;
-        Err(RuntimeErrorData::Yield(args).into())
-    });
+    let r#yield = ctx.create_function(move |args, _| Err(RuntimeErrorData::Yield(args).into()));
+    r#yield.set_resume_callback(|(result, _), _| result, ctx)?;
     coroutine.raw_set("yield", r#yield, ctx)?;
 
     let env = ctx.default_environment();

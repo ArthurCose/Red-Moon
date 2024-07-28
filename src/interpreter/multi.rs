@@ -1,3 +1,4 @@
+use super::cache_pools::CachePools;
 use super::heap::Heap;
 use super::value::{FromValue, IntoValue};
 use super::value_stack::{StackValue, ValueStack};
@@ -78,6 +79,22 @@ impl MultiValue {
         self.values.drain(..).rev()
     }
 
+    pub(crate) fn from_value_stack(
+        cache_pools: &CachePools,
+        heap: &mut Heap,
+        value_stack: &ValueStack,
+    ) -> Self {
+        let mut multi = cache_pools.create_multi();
+        multi.values.extend(
+            value_stack
+                .iter()
+                .rev()
+                .map(|&value| Value::from_stack_value(heap, value)),
+        );
+
+        multi
+    }
+
     /// Copies values from a ValueStack
     pub(crate) fn copy_stack_multi(
         &mut self,
@@ -107,10 +124,14 @@ impl MultiValue {
         Ok(())
     }
 
-    /// Pushes values into a ValueStack
+    /// Pushes values into a ValueStack, places an integer storing the length first
     pub(crate) fn push_stack_multi(&self, value_stack: &mut ValueStack) {
         value_stack.push(StackValue::Integer(self.len() as _));
+        self.extend_stack(value_stack);
+    }
 
+    /// Pushes values into a ValueStack
+    pub(crate) fn extend_stack(&self, value_stack: &mut ValueStack) {
         value_stack.extend(self.values.iter().rev().map(|value| value.to_stack_value()));
     }
 }

@@ -4,7 +4,8 @@ use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::execution::ExecutionContext;
 use crate::interpreter::metatable_keys::MetatableKeys;
-use crate::interpreter::value_stack::StackValue;
+use crate::interpreter::value_stack::{StackValue, ValueStack};
+use crate::interpreter::vm::CoroutineData;
 use crate::interpreter::Continuation;
 use crate::{FastHashMap, FastHashSet};
 use std::rc::Rc;
@@ -162,8 +163,9 @@ impl GarbageCollector {
         &mut self,
         metatable_keys: &MetatableKeys,
         cache_pools: &CachePools,
-        execution_stack: &[ExecutionContext],
         heap: &mut Heap,
+        execution_stack: &[ExecutionContext],
+        coroutine_data: &CoroutineData,
     ) {
         let mark = match self.phase {
             Phase::Idle => {
@@ -180,7 +182,7 @@ impl GarbageCollector {
         let limit = self.used_memory * self.config.step_multiplier / 1024;
 
         if mark {
-            self.mark_roots(heap, execution_stack);
+            self.mark_roots(heap, execution_stack, coroutine_data);
             self.traverse_gray(metatable_keys, cache_pools, heap, Some(limit));
 
             if self.phase_queue.is_empty() {
@@ -195,10 +197,11 @@ impl GarbageCollector {
         &mut self,
         metatable_keys: &MetatableKeys,
         cache_pools: &CachePools,
-        execution_stack: &[ExecutionContext],
         heap: &mut Heap,
+        execution_stack: &[ExecutionContext],
+        coroutine_data: &CoroutineData,
     ) {
-        self.mark_roots(heap, execution_stack);
+        self.mark_roots(heap, execution_stack, coroutine_data);
 
         while !self.phase_queue.is_empty() {
             self.traverse_gray(metatable_keys, cache_pools, heap, None);
@@ -209,7 +212,12 @@ impl GarbageCollector {
         self.accumulated = 0;
     }
 
-    fn mark_roots(&mut self, heap: &mut Heap, execution_stack: &[ExecutionContext]) {
+    fn mark_roots(
+        &mut self,
+        heap: &mut Heap,
+        execution_stack: &[ExecutionContext],
+        coroutine_data: &CoroutineData,
+    ) {
         // identify ref roots and mark them
         heap.ref_roots.retain(|&key, counter| {
             let keep = counter.count() > 0;
@@ -231,17 +239,30 @@ impl GarbageCollector {
         for execution in execution_stack {
             self.mark_execution_context(execution);
         }
+
+        // mark coroutine related data
+
+        for value_stack in &coroutine_data.continuation_states {
+            self.mark_value_stack(value_stack);
+        }
+
+        for (continuation, _) in &coroutine_data.in_progress_yield {
+            match continuation {
+                Continuation::Entry(key) => self.mark_heap_key(*key),
+                Continuation::Callback(key, state) => {
+                    self.mark_heap_key(*key);
+                    self.mark_value_stack(state);
+                }
+                Continuation::Execution { execution, .. } => self.mark_execution_context(execution),
+            }
+        }
     }
 
     fn mark_execution_context(&mut self, execution: &ExecutionContext) {
-        for value in execution.value_stack.iter() {
-            self.mark_stack_value(value);
-        }
+        self.mark_value_stack(&execution.value_stack);
 
         for call in &execution.call_stack {
-            for value in call.up_values.iter() {
-                self.mark_stack_value(value);
-            }
+            self.mark_value_stack(&call.up_values)
         }
     }
 
@@ -327,6 +348,12 @@ impl GarbageCollector {
                         heap.recycled_tables.push(table);
                     }
                 }
+                HeapValue::NativeFunction(_) => {
+                    if let Some(callback) = heap.resume_callbacks.remove(&key) {
+                        self.used_memory -=
+                            std::mem::size_of::<HeapKey>() + std::mem::size_of_val(&callback);
+                    }
+                }
                 _ => {}
             }
 
@@ -360,6 +387,12 @@ impl GarbageCollector {
         self.mark_heap_key(*key);
     }
 
+    fn mark_value_stack(&mut self, value_stack: &ValueStack) {
+        for value in value_stack.iter() {
+            self.mark_stack_value(value);
+        }
+    }
+
     fn mark_heap_key(&mut self, key: HeapKey) {
         if self.marked.contains_key(key) {
             return;
@@ -380,9 +413,7 @@ impl GarbageCollector {
 
         match value {
             HeapValue::Function(function) => {
-                for value in function.up_values.iter() {
-                    self.mark_stack_value(value);
-                }
+                self.mark_value_stack(&function.up_values);
 
                 let definition_key = Rc::as_ptr(&function.definition) as usize;
 
@@ -479,7 +510,10 @@ impl GarbageCollector {
                 for (continuation, _) in &co.continuation_stack {
                     match continuation {
                         Continuation::Entry(key) => self.mark_heap_key(*key),
-                        Continuation::Callback(_) => {}
+                        Continuation::Callback(key, state) => {
+                            self.mark_heap_key(*key);
+                            self.mark_value_stack(state);
+                        }
                         Continuation::Execution { execution, .. } => {
                             self.mark_execution_context(execution)
                         }

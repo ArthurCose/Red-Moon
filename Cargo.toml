@@ -42,3 +42,4 @@ default = ["serde"]
 
 [lints.clippy]
 redundant_closure = "allow"
+type_complexity = "allow"

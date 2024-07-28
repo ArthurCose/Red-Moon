@@ -1,5 +1,5 @@
 use super::heap::HeapKey;
-use super::native_function::NativeFunction;
+use super::value_stack::ValueStack;
 use super::{execution::ExecutionContext, heap::HeapValue};
 use super::{MultiValue, ReturnMode, Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
@@ -7,8 +7,6 @@ use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-pub(crate) type ContinuationCallback = NativeFunction<Result<MultiValue, RuntimeError>>;
 
 #[derive(Default, Clone, Copy)]
 pub(crate) struct YieldPermissions {
@@ -20,8 +18,7 @@ pub(crate) struct YieldPermissions {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) enum Continuation {
     Entry(HeapKey),
-    // todo: store in heap to allow hydration
-    Callback(ContinuationCallback),
+    Callback(HeapKey, ValueStack),
     Execution {
         execution: ExecutionContext,
         return_mode: ReturnMode,
@@ -90,9 +87,10 @@ impl Coroutine {
         }
 
         coroutine.status = CoroutineStatus::Running;
-        vm.coroutine_data.coroutine_stack.push(co_heap_key);
+        let coroutine_data = &mut vm.execution_data.coroutine_data;
+        coroutine_data.coroutine_stack.push(co_heap_key);
 
-        let previous_yield_permissions = vm.coroutine_data.yield_permissions;
+        let previous_yield_permissions = coroutine_data.yield_permissions;
 
         let original_size = coroutine.heap_size();
 
@@ -105,28 +103,36 @@ impl Coroutine {
             };
 
             let vm = &mut *ctx.vm;
-            vm.coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
+            let coroutine_data = &mut vm.execution_data.coroutine_data;
+            coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
 
             let result = match continuation {
-                Continuation::Entry(function_key) => {
-                    match vm.execution_data.heap.get(function_key).unwrap() {
-                        HeapValue::Function(func) => {
-                            let context = ExecutionContext::new_function_call(
-                                function_key,
-                                func.clone(),
-                                args,
-                                vm,
-                            );
-                            vm.execution_stack.push(context);
-                            ExecutionContext::resume(vm)
-                        }
-                        HeapValue::NativeFunction(native_function) => {
-                            native_function.shallow_clone().call(args, ctx)
-                        }
-                        _ => unreachable!(),
+                Continuation::Entry(key) => match vm.execution_data.heap.get(key).unwrap() {
+                    HeapValue::Function(func) => {
+                        let context =
+                            ExecutionContext::new_function_call(key, func.clone(), args, vm);
+                        vm.execution_stack.push(context);
+                        ExecutionContext::resume(vm)
                     }
+                    HeapValue::NativeFunction(native_function) => {
+                        native_function.shallow_clone().call(key, args, ctx)
+                    }
+                    _ => unreachable!(),
+                },
+                Continuation::Callback(key, state) => {
+                    let cache_pools = &vm.execution_data.cache_pools;
+                    let heap = &mut vm.execution_data.heap;
+                    let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
+                    let callback = heap.resume_callbacks.get(&key).unwrap();
+
+                    if state.capacity() > 0 {
+                        cache_pools.store_short_value_stack(state);
+                    }
+
+                    callback
+                        .shallow_clone()
+                        .call(key, (Ok(args), state_multi), ctx)
                 }
-                Continuation::Callback(callback) => callback.call(Ok(args), ctx),
                 Continuation::Execution {
                     mut execution,
                     return_mode,
@@ -209,13 +215,15 @@ impl Coroutine {
             gc.step(
                 &vm.execution_data.metatable_keys,
                 &vm.execution_data.cache_pools,
-                &vm.execution_stack,
                 heap,
+                &vm.execution_stack,
+                &vm.execution_data.coroutine_data,
             );
         }
 
-        vm.coroutine_data.coroutine_stack.pop();
-        vm.coroutine_data.yield_permissions = previous_yield_permissions;
+        let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
+        coroutine_data.coroutine_stack.pop();
+        coroutine_data.yield_permissions = previous_yield_permissions;
 
         result
     }
@@ -231,7 +239,9 @@ impl Coroutine {
 
         coroutine.status = CoroutineStatus::Suspended;
 
-        for data in vm.coroutine_data.in_progress_yield.drain(..).rev() {
+        let coroutine_data = &mut vm.execution_data.coroutine_data;
+
+        for data in coroutine_data.in_progress_yield.drain(..).rev() {
             coroutine.continuation_stack.push(data);
         }
     }
@@ -242,7 +252,16 @@ impl Coroutine {
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
         loop {
-            ctx.vm.coroutine_data.in_progress_yield.clear();
+            let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
+            let cache_pools = &ctx.vm.execution_data.cache_pools;
+
+            for (continuation, _) in coroutine_data.in_progress_yield.drain(..) {
+                if let Continuation::Callback(_, state) = continuation {
+                    if state.capacity() > 0 {
+                        cache_pools.store_short_value_stack(state);
+                    }
+                }
+            }
 
             let vm = &mut *ctx.vm;
             let heap = &mut vm.execution_data.heap;
@@ -256,10 +275,23 @@ impl Coroutine {
             };
 
             match continuation {
-                Continuation::Callback(callback) => {
-                    vm.coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
+                Continuation::Callback(key, state) => {
+                    let coroutine_data = &mut vm.execution_data.coroutine_data;
+                    coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
 
-                    match callback.call(Err(err), ctx) {
+                    let cache_pools = &vm.execution_data.cache_pools;
+                    let heap = &mut vm.execution_data.heap;
+                    let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
+                    let callback = heap.resume_callbacks.get(&key).unwrap();
+
+                    if state.capacity() > 0 {
+                        cache_pools.store_short_value_stack(state);
+                    }
+
+                    match callback
+                        .shallow_clone()
+                        .call(key, (Err(err), state_multi), ctx)
+                    {
                         Ok(values) => {
                             // converted to Ok ("pcall"-like function)
                             return Ok(values);

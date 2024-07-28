@@ -442,12 +442,11 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     env.set("tonumber", tonumber, ctx)?;
 
-    // pcall
-    fn pcall_continuation(
-        result: Result<MultiValue, RuntimeError>,
+    fn pcall_impl(
+        (result, state): (Result<MultiValue, RuntimeError>, MultiValue),
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
-        ctx.set_resumable(true);
+        ctx.store_multi(state);
 
         match result {
             Ok(mut values) => {
@@ -456,8 +455,6 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             }
             Err(err) => {
                 if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                    ctx.set_resume_callback(pcall_continuation)?;
-
                     Err(err)
                 } else {
                     MultiValue::pack((false, err.to_string()), ctx)
@@ -469,36 +466,39 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let pcall = ctx.create_function(move |args, ctx| {
         let (function, args): (FunctionRef, MultiValue) = args.unpack_args(ctx)?;
 
-        ctx.set_resumable(true);
-        pcall_continuation(function.call::<_, MultiValue>(args, ctx), ctx)
+        pcall_impl(
+            (
+                function.call::<_, MultiValue>(args, ctx),
+                ctx.create_multi(),
+            ),
+            ctx,
+        )
     });
+    pcall.set_resume_callback(pcall_impl, ctx)?;
     env.set("pcall", pcall, ctx)?;
 
     // xpcall
-    fn create_xpcall_continuation(
-        handler: FunctionRef,
-    ) -> impl Fn(Result<MultiValue, RuntimeError>, &mut VmContext) -> Result<MultiValue, RuntimeError>
-           + Clone {
-        move |result: Result<MultiValue, RuntimeError>, ctx: &mut VmContext| {
-            ctx.set_resumable(true);
+    fn xpcall_impl(
+        (result, state): (Result<MultiValue, RuntimeError>, MultiValue),
+        ctx: &mut VmContext,
+    ) -> Result<MultiValue, RuntimeError> {
+        match result {
+            Ok(values) => Ok(values),
+            Err(err) => {
+                if matches!(err.data, RuntimeErrorData::Yield(_)) {
+                    ctx.set_resume_state(state)?;
+                } else {
+                    let mut err_message = err.to_string();
+                    let handler: FunctionRef = state.unpack(ctx)?;
 
-            match result {
-                Ok(values) => Ok(values),
-                Err(err) => {
-                    if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                        ctx.set_resume_callback(create_xpcall_continuation(handler.clone()))?;
-                    } else {
-                        let mut err_message = err.to_string();
-
-                        if let Err(handler_err) = handler.call::<_, ()>(err_message, ctx) {
-                            err_message = handler_err.to_string();
-                            // pass our handler's error into itself, give up on future errors (lua does not specify max retries)
-                            let _ = handler.call::<_, ()>(err_message, ctx);
-                        }
+                    if let Err(handler_err) = handler.call::<_, ()>(err_message, ctx) {
+                        err_message = handler_err.to_string();
+                        // pass our handler's error into itself, give up on future errors (lua does not specify max retries)
+                        let _ = handler.call::<_, ()>(err_message, ctx);
                     }
-
-                    Err(err)
                 }
+
+                Err(err)
             }
         }
     }
@@ -507,9 +507,14 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
             args.unpack_args(ctx)?;
 
-        ctx.set_resumable(true);
-        create_xpcall_continuation(handler)(function.call::<_, MultiValue>(args, ctx), ctx)
+        ctx.set_resume_state(handler.clone())?;
+
+        let mut state = ctx.create_multi();
+        state.push_front(handler.into());
+
+        xpcall_impl((function.call::<_, MultiValue>(args, ctx), state), ctx)
     });
+    xpcall.set_resume_callback(xpcall_impl, ctx)?;
     env.set("xpcall", xpcall, ctx)?;
 
     // todo: warn

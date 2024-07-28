@@ -74,13 +74,17 @@ impl ExecutionContext {
 
         match exec_data.heap.get(function_key).unwrap() {
             HeapValue::NativeFunction(function) => {
-                let results = match function.shallow_clone().call(args, &mut vm.context()) {
-                    Ok(result) => result,
-                    Err(err) => {
-                        vm.execution_data.cache_pools.store_value_stack(value_stack);
-                        return Err(err.data);
-                    }
-                };
+                let results =
+                    match function
+                        .shallow_clone()
+                        .call(function_key, args, &mut vm.context())
+                    {
+                        Ok(result) => result,
+                        Err(err) => {
+                            vm.execution_data.cache_pools.store_value_stack(value_stack);
+                            return Err(err.data);
+                        }
+                    };
                 results.push_stack_multi(&mut value_stack);
             }
             HeapValue::Function(function) => {
@@ -111,6 +115,11 @@ impl ExecutionContext {
     }
 
     pub(crate) fn resume(vm: &mut Vm) -> Result<MultiValue, RuntimeError> {
+        let coroutine_data = &vm.execution_data.coroutine_data;
+        if !coroutine_data.in_progress_yield.is_empty() {
+            return Err(RuntimeErrorData::UnhandledYield.into());
+        }
+
         let mut execution = vm.execution_stack.last_mut().unwrap();
 
         let mut last_definition = None;
@@ -210,7 +219,7 @@ impl ExecutionContext {
                                 old_stack_size + execution.value_stack.len();
 
                             // call the function
-                            let result = callback.call(args, &mut vm.context());
+                            let result = callback.call(function_key, args, &mut vm.context());
 
                             // revert tracked stack size before handling the result
                             vm.execution_data.tracked_stack_size = old_stack_size;
@@ -220,7 +229,9 @@ impl ExecutionContext {
                                 Err(mut err) => {
                                     // handle yielding
                                     if let RuntimeErrorData::Yield(_) = &mut err.data {
-                                        if !vm.coroutine_data.yield_permissions.allows_yield {
+                                        let coroutine_data = &mut vm.execution_data.coroutine_data;
+
+                                        if !coroutine_data.yield_permissions.allows_yield {
                                             // we can't yield here
                                             err.data = RuntimeErrorData::InvalidYield;
                                             return Err(Self::continue_unwind(vm, err));
@@ -228,7 +239,7 @@ impl ExecutionContext {
 
                                         let execution = vm.execution_stack.pop().unwrap();
 
-                                        vm.coroutine_data.in_progress_yield.push((
+                                        coroutine_data.in_progress_yield.push((
                                             Continuation::Execution {
                                                 execution,
                                                 return_mode,
@@ -425,8 +436,9 @@ impl ExecutionContext {
                     exec_data.gc.step(
                         &exec_data.metatable_keys,
                         &exec_data.cache_pools,
-                        &vm.execution_stack,
                         &mut exec_data.heap,
+                        &vm.execution_stack,
+                        &exec_data.coroutine_data,
                     );
 
                     execution = vm.execution_stack.last_mut().unwrap();

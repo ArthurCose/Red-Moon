@@ -113,6 +113,10 @@ impl ValueStack {
         self.values.len()
     }
 
+    pub(crate) fn capacity(&self) -> usize {
+        self.values.capacity()
+    }
+
     pub(crate) fn push(&mut self, value: StackValue) {
         self.values.push(value)
     }
@@ -187,7 +191,7 @@ impl ValueStack {
         self.values.clear();
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &StackValue> {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = &StackValue> {
         self.values.iter()
     }
 }

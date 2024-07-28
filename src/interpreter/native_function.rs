@@ -1,4 +1,6 @@
 use super::coroutine::YieldPermissions;
+use super::heap::HeapKey;
+use super::value_stack::ValueStack;
 use super::VmContext;
 use super::{multi::MultiValue, Continuation};
 use crate::errors::{RuntimeError, RuntimeErrorData};
@@ -56,9 +58,16 @@ mod serde_callback {
 }
 
 impl<A> NativeFunction<A> {
-    pub(crate) fn call(&self, args: A, ctx: &mut VmContext) -> Result<MultiValue, RuntimeError> {
-        let result = if ctx.vm.coroutine_data.yield_permissions.allows_yield {
-            self.yieldable_call(args, ctx)
+    pub(crate) fn call(
+        &self,
+        key: HeapKey,
+        args: A,
+        ctx: &mut VmContext,
+    ) -> Result<MultiValue, RuntimeError> {
+        let coroutine_data = &ctx.vm.execution_data.coroutine_data;
+
+        let result = if coroutine_data.yield_permissions.allows_yield {
+            self.yieldable_call(key, args, ctx)
         } else {
             self.non_yielding_call(args, ctx)
         };
@@ -83,24 +92,35 @@ impl<A> NativeFunction<A> {
         })
     }
 
-    fn yieldable_call(&self, args: A, ctx: &mut VmContext) -> Result<MultiValue, RuntimeError> {
-        let coroutine_data = &mut ctx.vm.coroutine_data;
+    fn yieldable_call(
+        &self,
+        key: HeapKey,
+        args: A,
+        ctx: &mut VmContext,
+    ) -> Result<MultiValue, RuntimeError> {
+        let execution_data = &mut ctx.vm.execution_data;
+        let coroutine_data = &mut execution_data.coroutine_data;
+
+        if !coroutine_data.in_progress_yield.is_empty() {
+            return Err(RuntimeErrorData::UnhandledYield.into());
+        }
+
         let previous_yield_permissions = coroutine_data.yield_permissions;
-        let continuation_previously_set = coroutine_data.continuation_set;
+        let continuation_previously_set = coroutine_data.continuation_state_set;
 
         coroutine_data.yield_permissions = YieldPermissions {
             parent_allows_yield: previous_yield_permissions.allows_yield,
-            allows_yield: false,
+            allows_yield: execution_data.heap.resume_callbacks.contains_key(&key),
         };
-        coroutine_data.continuation_set = false;
+        coroutine_data.continuation_state_set = false;
 
         let result = match (self.callback)(args, ctx) {
             Ok(values) => {
-                let coroutine_data = &mut ctx.vm.coroutine_data;
+                let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
 
-                if coroutine_data.continuation_set {
+                if coroutine_data.continuation_state_set {
                     // we don't want to leak data here
-                    coroutine_data.continuation_callbacks.pop();
+                    coroutine_data.continuation_states.pop();
                 }
 
                 if !coroutine_data.in_progress_yield.is_empty() {
@@ -109,34 +129,35 @@ impl<A> NativeFunction<A> {
                     Ok(values)
                 }
             }
-            Err(mut err) => {
-                let coroutine_data = &mut ctx.vm.coroutine_data;
+            Err(err) => {
+                let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
 
                 if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                    if coroutine_data.continuation_set {
-                        // pass the continuation
-                        let callback = coroutine_data.continuation_callbacks.pop().unwrap();
-                        let continuation = Continuation::Callback(callback);
-
-                        coroutine_data.in_progress_yield.push((
-                            continuation,
-                            coroutine_data.yield_permissions.parent_allows_yield,
-                        ));
+                    let state = if coroutine_data.continuation_state_set {
+                        coroutine_data.continuation_states.pop().unwrap()
                     } else {
-                        err.data = RuntimeErrorData::YieldMissingContinuation;
-                    }
-                } else if coroutine_data.continuation_set {
+                        ValueStack::default()
+                    };
+
+                    // pass the continuation
+                    let continuation = Continuation::Callback(key, state);
+
+                    coroutine_data.in_progress_yield.push((
+                        continuation,
+                        coroutine_data.yield_permissions.parent_allows_yield,
+                    ));
+                } else if coroutine_data.continuation_state_set {
                     // we don't want to leak data here
-                    coroutine_data.continuation_callbacks.pop();
+                    coroutine_data.continuation_states.pop();
                 }
 
                 Err(err)
             }
         };
 
-        let coroutine_data = &mut ctx.vm.coroutine_data;
+        let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
         coroutine_data.yield_permissions = previous_yield_permissions;
-        coroutine_data.continuation_set = continuation_previously_set;
+        coroutine_data.continuation_state_set = continuation_previously_set;
 
         result
     }
