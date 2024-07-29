@@ -19,7 +19,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    let hydrating = assert.hydrate("lua.assert", ctx)?;
+    let rehydrating = assert.rehydrate("lua.assert", ctx)?;
 
     // collectgarbage
     let collectgarbage = ctx.create_function(|args, ctx| {
@@ -101,7 +101,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         ctx.store_multi(rest);
         result
     });
-    collectgarbage.hydrate("lua.collectgarbage", ctx)?;
+    collectgarbage.rehydrate("lua.collectgarbage", ctx)?;
 
     // error
     let error = ctx.create_function(|args, ctx| {
@@ -117,7 +117,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Err(err)
     });
-    error.hydrate("lua.error", ctx)?;
+    error.rehydrate("lua.error", ctx)?;
 
     // print
     let print = ctx.create_function(|mut args, ctx| {
@@ -133,7 +133,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    print.hydrate("lua.print", ctx)?;
+    print.rehydrate("lua.print", ctx)?;
 
     // tostring
     let tostring = ctx.create_function(|args, ctx| {
@@ -142,7 +142,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(string, ctx)
     });
-    tostring.hydrate("lua.tostring", ctx)?;
+    tostring.rehydrate("lua.tostring", ctx)?;
 
     // type
     let type_name = ctx.create_function(|args, ctx| {
@@ -151,7 +151,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(type_name.as_str(), ctx)
     });
-    type_name.hydrate("lua.type", ctx)?;
+    type_name.rehydrate("lua.type", ctx)?;
 
     // getmetatable
     let getmetatable = ctx.create_function(|args, ctx| {
@@ -174,7 +174,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(metatable, ctx)
     });
-    getmetatable.hydrate("lua.getmetatable", ctx)?;
+    getmetatable.rehydrate("lua.getmetatable", ctx)?;
 
     // setmetatable
     let setmetatable = ctx.create_function(|args, ctx| {
@@ -196,7 +196,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(table, ctx)
     });
-    setmetatable.hydrate("lua.setmetatable", ctx)?;
+    setmetatable.rehydrate("lua.setmetatable", ctx)?;
 
     // rawequal
     let rawequal = ctx.create_function(|args, ctx| {
@@ -204,7 +204,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(a == b, ctx)
     });
-    rawequal.hydrate("lua.rawequal", ctx)?;
+    rawequal.rehydrate("lua.rawequal", ctx)?;
 
     // rawget
     let rawget = ctx.create_function(|args, ctx| {
@@ -213,7 +213,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(value, ctx)
     });
-    rawget.hydrate("lua.rawget", ctx)?;
+    rawget.rehydrate("lua.rawget", ctx)?;
 
     // rawset
     let rawset = ctx.create_function(|args, ctx| {
@@ -222,7 +222,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    rawset.hydrate("lua.rawset", ctx)?;
+    rawset.rehydrate("lua.rawset", ctx)?;
 
     // next
     let next = ctx.create_function(|args, ctx| {
@@ -233,7 +233,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((next_key, value), ctx)
     });
-    next.hydrate("lua.next", ctx)?;
+    next.rehydrate("lua.next", ctx)?;
 
     // ipairs
     let ipairs_iterator = ctx.create_function(|args, ctx| {
@@ -264,7 +264,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((iterator, table, 0), ctx)
     });
-    ipairs.hydrate("lua.ipairs", ctx)?;
+    ipairs.rehydrate("lua.ipairs", ctx)?;
 
     // pairs
     let pairs_iterator = ctx.create_function(|args, ctx| {
@@ -292,7 +292,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((iterator, table, Value::default()), ctx)
     });
-    pairs.hydrate("lua.pairs", ctx)?;
+    pairs.rehydrate("lua.pairs", ctx)?;
 
     // select
     let select = ctx.create_function(|args, ctx| {
@@ -344,7 +344,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    select.hydrate("lua.select", ctx)?;
+    select.rehydrate("lua.select", ctx)?;
 
     // tonumber
     let tonumber = ctx.create_function(|args, ctx| {
@@ -435,7 +435,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(n, ctx)
     });
-    tonumber.hydrate("lua.tonumber", ctx)?;
+    tonumber.rehydrate("lua.tonumber", ctx)?;
 
     let pcall = ctx.create_resumable_function(move |(result, state), ctx| {
         let first_call = state.is_empty();
@@ -462,7 +462,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             }
         }
     });
-    pcall.hydrate("lua.pcall", ctx)?;
+    pcall.rehydrate("lua.pcall", ctx)?;
 
     let xpcall = ctx.create_resumable_function(|(result, state), ctx| {
         let handler: Option<FunctionRef> = state.unpack(ctx)?;
@@ -493,11 +493,11 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             function.call::<_, MultiValue>(args, ctx)
         }
     });
-    xpcall.hydrate("lua.xpcall", ctx)?;
+    xpcall.rehydrate("lua.xpcall", ctx)?;
 
     // todo: warn
 
-    if !hydrating {
+    if !rehydrating {
         let env = ctx.default_environment();
         env.set("_G", env.clone(), ctx)?;
         env.set("_VERSION", "Lua 5.3", ctx)?;

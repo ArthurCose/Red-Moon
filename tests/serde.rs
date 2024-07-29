@@ -28,7 +28,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
         Err(RuntimeErrorData::Yield(args).into())
     });
 
-    assert!(!resumable.hydrate("resumable_fn", ctx)?);
+    assert!(!resumable.rehydrate("resumable_fn", ctx)?);
     env.set("resumable_fn", resumable, ctx)?;
 
     // load lua
@@ -53,7 +53,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     // create native function
     let f = ctx.create_function(|args, _| Ok(args));
 
-    assert!(!f.hydrate("hydrated_fn", ctx)?);
+    assert!(!f.rehydrate("hydrated_fn", ctx)?);
     env.set("native_fn", f, ctx)?;
 
     // create holes and make sure the hydration tag doesn't get collected
@@ -87,14 +87,14 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
         .call::<_, MultiValue>(1, ctx)
         .is_err_and(|err| err.data == RuntimeErrorData::FunctionLostInSerialization));
 
-    // hydrate
+    // rehydrate
     let f = ctx.create_function(|args, _| Ok(args));
-    assert!(f.hydrate("hydrated_fn", ctx)?);
+    assert!(f.rehydrate("hydrated_fn", ctx)?);
     assert_eq!(f.call::<_, MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
 
     // test resumable, expecting "resumed" to be stored in state
     let resumable = ctx.create_resumable_function(|(_, state), _| Ok(state));
-    assert!(resumable.hydrate("resumable_fn", ctx)?);
+    assert!(resumable.rehydrate("resumable_fn", ctx)?);
 
     let co: CoroutineRef = env.get("co", ctx)?;
     assert_eq!(co.resume((), ctx)?, MultiValue::pack("resumed", ctx)?);

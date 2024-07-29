@@ -7,11 +7,11 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let string: StringRef = args.unpack(ctx)?;
         MultiValue::pack(string.fetch(ctx)?.len(), ctx)
     });
-    let hydrating = len.hydrate("str.len", ctx)?;
+    let rehydrating = len.rehydrate("str.len", ctx)?;
 
     let string_metatable = ctx.string_metatable();
 
-    if !hydrating {
+    if !rehydrating {
         let string = ctx.create_table();
         string.set("len", len, ctx)?;
 
@@ -117,16 +117,16 @@ fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(
         MultiValue::pack(a.powf(b), ctx)
     });
 
-    let hydrating = add_fn.hydrate("str.__add", ctx)?;
-    sub_fn.hydrate("str.__sub", ctx)?;
-    mul_fn.hydrate("str.__mul", ctx)?;
-    modulus_fn.hydrate("str.__mod", ctx)?;
-    unm_fn.hydrate("str.__unm", ctx)?;
-    div_fn.hydrate("str.__div", ctx)?;
-    idiv_fn.hydrate("str.__idiv", ctx)?;
-    pow_fn.hydrate("str.__pow", ctx)?;
+    let rehydrating = add_fn.rehydrate("str.__add", ctx)?;
+    sub_fn.rehydrate("str.__sub", ctx)?;
+    mul_fn.rehydrate("str.__mul", ctx)?;
+    modulus_fn.rehydrate("str.__mod", ctx)?;
+    unm_fn.rehydrate("str.__unm", ctx)?;
+    div_fn.rehydrate("str.__div", ctx)?;
+    idiv_fn.rehydrate("str.__idiv", ctx)?;
+    pow_fn.rehydrate("str.__pow", ctx)?;
 
-    if !hydrating {
+    if !rehydrating {
         metatable.raw_set(add, add_fn, ctx)?;
         metatable.raw_set(sub, sub_fn, ctx)?;
         metatable.raw_set(mul, mul_fn, ctx)?;

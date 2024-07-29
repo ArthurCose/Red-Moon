@@ -14,7 +14,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    let hydrating = abs.hydrate("math.abs", ctx)?;
+    let rehydrating = abs.rehydrate("math.abs", ctx)?;
 
     // acos
     let acos = ctx.create_function(|args, ctx| {
@@ -22,7 +22,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.acos(), ctx)
     });
-    acos.hydrate("math.acos", ctx)?;
+    acos.rehydrate("math.acos", ctx)?;
 
     // asin
     let asin = ctx.create_function(|args, ctx| {
@@ -30,7 +30,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.asin(), ctx)
     });
-    asin.hydrate("math.asin", ctx)?;
+    asin.rehydrate("math.asin", ctx)?;
 
     // atan
     let atan = ctx.create_function(|args, ctx| {
@@ -44,7 +44,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(output, ctx)
     });
-    atan.hydrate("math.atan", ctx)?;
+    atan.rehydrate("math.atan", ctx)?;
 
     // ceil
     let ceil = ctx.create_function(|args, ctx| {
@@ -52,7 +52,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.ceil(), ctx)
     });
-    ceil.hydrate("math.ceil", ctx)?;
+    ceil.rehydrate("math.ceil", ctx)?;
 
     // cos
     let cos = ctx.create_function(|args, ctx| {
@@ -60,7 +60,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.cos(), ctx)
     });
-    cos.hydrate("math.cos", ctx)?;
+    cos.rehydrate("math.cos", ctx)?;
 
     // deg
     let deg = ctx.create_function(|args, ctx| {
@@ -68,7 +68,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.to_degrees(), ctx)
     });
-    deg.hydrate("math.deg", ctx)?;
+    deg.rehydrate("math.deg", ctx)?;
 
     // exp
     let exp = ctx.create_function(|args, ctx| {
@@ -76,7 +76,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.exp(), ctx)
     });
-    exp.hydrate("math.exp", ctx)?;
+    exp.rehydrate("math.exp", ctx)?;
 
     // floor
     let floor = ctx.create_function(|args, ctx| {
@@ -84,7 +84,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.floor(), ctx)
     });
-    floor.hydrate("math.floor", ctx)?;
+    floor.rehydrate("math.floor", ctx)?;
 
     // fmod
     // todo: lua preserves integers
@@ -93,14 +93,14 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x % y, ctx)
     });
-    fmod.hydrate("math.fmod", ctx)?;
+    fmod.rehydrate("math.fmod", ctx)?;
 
     // huge
     let huge = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(f64::INFINITY, ctx)
     });
-    huge.hydrate("math.huge", ctx)?;
+    huge.rehydrate("math.huge", ctx)?;
 
     // log
     let log = ctx.create_function(|args, ctx| {
@@ -109,7 +109,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(x.log(base), ctx)
     });
-    log.hydrate("math.log", ctx)?;
+    log.rehydrate("math.log", ctx)?;
 
     // max
     let max = ctx.create_function(|mut args, ctx| {
@@ -131,14 +131,14 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         args.push_front(max);
         Ok(args)
     });
-    max.hydrate("math.max", ctx)?;
+    max.rehydrate("math.max", ctx)?;
 
     // maxinteger
     let maxinteger = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(i64::MAX, ctx)
     });
-    maxinteger.hydrate("math.maxinteger", ctx)?;
+    maxinteger.rehydrate("math.maxinteger", ctx)?;
 
     // min
     let min = ctx.create_function(|mut args, ctx| {
@@ -160,49 +160,49 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         args.push_front(min);
         Ok(args)
     });
-    min.hydrate("math.min", ctx)?;
+    min.rehydrate("math.min", ctx)?;
 
     // mininteger
     let mininteger = ctx.create_function(|args, ctx| {
         ctx.store_multi(args);
         MultiValue::pack(i64::MIN, ctx)
     });
-    mininteger.hydrate("math.mininteger", ctx)?;
+    mininteger.rehydrate("math.mininteger", ctx)?;
 
     // modf
     let modf = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack((x.trunc(), x.fract()), ctx)
     });
-    modf.hydrate("math.modf", ctx)?;
+    modf.rehydrate("math.modf", ctx)?;
 
     // rad
     let rad = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.to_radians(), ctx)
     });
-    rad.hydrate("math.rad", ctx)?;
+    rad.rehydrate("math.rad", ctx)?;
 
     // sin
     let sin = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.sin(), ctx)
     });
-    sin.hydrate("math.sin", ctx)?;
+    sin.rehydrate("math.sin", ctx)?;
 
     // sqrt
     let sqrt = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.sqrt(), ctx)
     });
-    sqrt.hydrate("math.sqrt", ctx)?;
+    sqrt.rehydrate("math.sqrt", ctx)?;
 
     // tan
     let tan = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
         MultiValue::pack(x.tan(), ctx)
     });
-    tan.hydrate("math.tan", ctx)?;
+    tan.rehydrate("math.tan", ctx)?;
 
     // tointeger
     let tointeger = ctx.create_function(|mut args, ctx| {
@@ -215,7 +215,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    tointeger.hydrate("math.tointeger", ctx)?;
+    tointeger.rehydrate("math.tointeger", ctx)?;
 
     // type
     let integer_string_ref = ctx.intern_string(b"integer");
@@ -230,7 +230,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    r#type.hydrate("math.type", ctx)?;
+    r#type.rehydrate("math.type", ctx)?;
 
     // ult
     let ult = ctx.create_function(move |args, ctx| {
@@ -238,9 +238,9 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(m < n, ctx)
     });
-    ult.hydrate("math.ult", ctx)?;
+    ult.rehydrate("math.ult", ctx)?;
 
-    if !hydrating {
+    if !rehydrating {
         let math = ctx.create_table();
         math.raw_set("abs", abs, ctx)?;
         math.raw_set("acos", acos, ctx)?;

@@ -42,7 +42,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    let hydrating = concat.hydrate("table.concat", ctx)?;
+    let rehydrating = concat.rehydrate("table.concat", ctx)?;
 
     // insert
     let insert = ctx.create_function(|args, ctx| {
@@ -63,7 +63,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    insert.hydrate("table.insert", ctx)?;
+    insert.rehydrate("table.insert", ctx)?;
 
     // remove
     let remove = ctx.create_function(|args, ctx| {
@@ -85,7 +85,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack((), ctx)
     });
-    remove.hydrate("table.remove", ctx)?;
+    remove.rehydrate("table.remove", ctx)?;
 
     // pack
     let pack = ctx.create_function(|mut args, ctx| {
@@ -100,7 +100,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(table, ctx)
     });
-    pack.hydrate("table.pack", ctx)?;
+    pack.rehydrate("table.pack", ctx)?;
 
     // unpack
     let unpack = ctx.create_function(|args, ctx| {
@@ -115,12 +115,12 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(multi, ctx)
     });
-    unpack.hydrate("table.unpack", ctx)?;
+    unpack.rehydrate("table.unpack", ctx)?;
 
     // todo: table.move() https://www.lua.org/manual/5.4/manual.html#pdf-table.move
     // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort
 
-    if !hydrating {
+    if !rehydrating {
         let table = ctx.create_table();
         table.raw_set("concat", concat, ctx)?;
         table.raw_set("insert", insert, ctx)?;

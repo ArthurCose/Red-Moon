@@ -178,7 +178,7 @@ impl std::fmt::Display for RuntimeErrorData {
             RuntimeErrorData::FunctionLostInSerialization => {
                 write!(
                     f,
-                    "function lost during serialization, use hydrate to refill native functions"
+                    "function lost during serialization, use rehydrate to refill native functions"
                 )
             }
             #[cfg(feature = "serde")]

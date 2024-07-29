@@ -229,7 +229,7 @@ impl GarbageCollector {
             keep
         });
 
-        // mark tags, we don't want to delete a string required for hydration
+        // mark tags, we don't want to delete a string required for rehydration
         #[cfg(feature = "serde")]
         for tag_value in heap.tags.keys() {
             self.mark_stack_value(tag_value);

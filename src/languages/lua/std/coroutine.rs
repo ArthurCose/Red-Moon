@@ -10,7 +10,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let co = ctx.create_coroutine(function)?;
         MultiValue::pack(co, ctx)
     });
-    let hydrating = create.hydrate("coroutine.create", ctx)?;
+    let rehydrating = create.rehydrate("coroutine.create", ctx)?;
 
     // isyieldable
     let isyieldable = ctx.create_function(|args, ctx| {
@@ -32,7 +32,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    create.hydrate("coroutine.isyieldable", ctx)?;
+    create.rehydrate("coroutine.isyieldable", ctx)?;
 
     // resume
     let resume = ctx.create_function(|args, ctx| {
@@ -46,7 +46,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             Err(err) => MultiValue::pack((false, err.to_string()), ctx),
         }
     });
-    create.hydrate("coroutine.resume", ctx)?;
+    create.rehydrate("coroutine.resume", ctx)?;
 
     // running
     let running = ctx.create_function(|mut args, ctx| {
@@ -66,7 +66,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    create.hydrate("coroutine.running", ctx)?;
+    create.rehydrate("coroutine.running", ctx)?;
 
     // status
     let suspended_string = ctx.intern_string(b"suspended");
@@ -89,7 +89,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         };
         MultiValue::pack(status, ctx)
     });
-    create.hydrate("coroutine.status", ctx)?;
+    create.rehydrate("coroutine.status", ctx)?;
 
     // wrap
     let wrap = ctx.create_function(|args, ctx| {
@@ -100,7 +100,7 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         MultiValue::pack(f, ctx)
     });
-    create.hydrate("coroutine.wrap", ctx)?;
+    create.rehydrate("coroutine.wrap", ctx)?;
 
     // yield
     let r#yield = ctx.create_resumable_function(|(result, state), ctx| {
@@ -111,9 +111,9 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             result
         }
     });
-    create.hydrate("coroutine.yield", ctx)?;
+    create.rehydrate("coroutine.yield", ctx)?;
 
-    if !hydrating {
+    if !rehydrating {
         let coroutine = ctx.create_table();
         coroutine.raw_set("create", create, ctx)?;
         coroutine.raw_set("isyieldable", isyieldable, ctx)?;

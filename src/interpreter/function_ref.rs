@@ -16,7 +16,7 @@ impl FunctionRef {
     ///
     /// Returns true if there's a function with a matching tag, that function will be replaced with a new copy of this function.
     #[cfg_attr(not(feature = "serde"), allow(unused))]
-    pub fn hydrate<T: super::IntoValue>(
+    pub fn rehydrate<T: super::IntoValue>(
         &self,
         tag: T,
         ctx: &mut VmContext,

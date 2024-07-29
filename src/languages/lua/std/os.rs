@@ -16,9 +16,9 @@ pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         Ok(args)
     });
-    let hydrating = clock.hydrate("os.clock", ctx)?;
+    let rehydrating = clock.rehydrate("os.clock", ctx)?;
 
-    if !hydrating {
+    if !rehydrating {
         let os = ctx.create_table();
         os.raw_set("clock", clock, ctx)?;
 
