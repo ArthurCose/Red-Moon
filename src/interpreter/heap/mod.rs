@@ -122,6 +122,21 @@ impl Heap {
         key
     }
 
+    pub(crate) fn create_with_key(
+        &mut self,
+        gc: &mut GarbageCollector,
+        callback: impl FnOnce(HeapKey) -> HeapValue,
+    ) -> HeapKey {
+        let key = self.storage.insert_with_key(|key| {
+            let value = callback(key);
+            gc.modify_used_memory(value.gc_size() as _);
+            value
+        });
+
+        gc.acknowledge_write(key);
+        key
+    }
+
     pub(crate) fn create_ref(&mut self, heap_key: HeapKey) -> HeapRef {
         let counter_ref = match self.ref_roots.entry(heap_key) {
             indexmap::map::Entry::Occupied(mut entry) => entry.get_mut().create_counter_ref(),

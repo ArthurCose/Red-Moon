@@ -18,9 +18,15 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     ctx.create_table();
 
     // create resumable native function
-    let resumable = ctx.create_function(|args, _| Err(RuntimeErrorData::Yield(args).into()));
-    // dummy to allow yielding, implementation will exist on the other side
-    resumable.set_resume_callback(|(result, _), _| result, ctx)?;
+    let resumable = ctx.create_resumable_function(|(result, _), ctx| {
+        let mut args = result?;
+        args.clear();
+
+        // store "resumed" in state
+        ctx.resume_call_with_state("resumed")?;
+
+        Err(RuntimeErrorData::Yield(args).into())
+    });
 
     assert!(!resumable.hydrate("resumable_fn", ctx)?);
     env.set("resumable_fn", resumable, ctx)?;
@@ -86,9 +92,8 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     assert!(f.hydrate("hydrated_fn", ctx)?);
     assert_eq!(f.call::<_, MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
 
-    // test resumable
-    let resumable = ctx.create_function(|args, _| Err(RuntimeErrorData::Yield(args).into()));
-    resumable.set_resume_callback(|(_, _), ctx| MultiValue::pack("resumed", ctx), ctx)?;
+    // test resumable, expecting "resumed" to be stored in state
+    let resumable = ctx.create_resumable_function(|(_, state), _| Ok(state));
     assert!(resumable.hydrate("resumable_fn", ctx)?);
 
     let co: CoroutineRef = env.get("co", ctx)?;

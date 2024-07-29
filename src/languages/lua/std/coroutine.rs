@@ -103,8 +103,14 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     create.hydrate("coroutine.wrap", ctx)?;
 
     // yield
-    let r#yield = ctx.create_function(move |args, _| Err(RuntimeErrorData::Yield(args).into()));
-    r#yield.set_resume_callback(|(result, _), _| result, ctx)?;
+    let r#yield = ctx.create_resumable_function(|(result, state), ctx| {
+        if state.is_empty() {
+            ctx.resume_call_with_state(true)?;
+            Err(RuntimeErrorData::Yield(result?).into())
+        } else {
+            result
+        }
+    });
     create.hydrate("coroutine.yield", ctx)?;
 
     if !hydrating {

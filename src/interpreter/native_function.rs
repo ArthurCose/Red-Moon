@@ -1,6 +1,5 @@
 use super::coroutine::YieldPermissions;
 use super::heap::HeapKey;
-use super::value_stack::ValueStack;
 use super::VmContext;
 use super::{multi::MultiValue, Continuation};
 use crate::errors::{RuntimeError, RuntimeErrorData};
@@ -26,7 +25,7 @@ impl<A, T: Fn(A, &mut VmContext) -> Result<MultiValue, RuntimeError> + Clone + '
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct NativeFunction<A> {
     #[cfg_attr(feature = "serde", serde(with = "serde_callback"))]
-    callback: Rc<dyn NativeFunctionTrait<A>>,
+    pub(crate) callback: Rc<dyn NativeFunctionTrait<A>>,
 }
 
 #[cfg(feature = "serde")]
@@ -118,37 +117,29 @@ impl<A> NativeFunction<A> {
             Ok(values) => {
                 let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
 
-                if coroutine_data.continuation_state_set {
-                    // we don't want to leak data here
-                    coroutine_data.continuation_states.pop();
-                }
-
                 if !coroutine_data.in_progress_yield.is_empty() {
                     Err(RuntimeErrorData::UnhandledYield.into())
                 } else {
                     Ok(values)
                 }
             }
-            Err(err) => {
+            Err(mut err) => {
                 let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
 
                 if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                    let state = if coroutine_data.continuation_state_set {
-                        coroutine_data.continuation_states.pop().unwrap()
+                    if coroutine_data.continuation_state_set {
+                        let state = coroutine_data.continuation_states.pop().unwrap();
+
+                        // pass the continuation
+                        let continuation = Continuation::Callback(key, state);
+
+                        coroutine_data.in_progress_yield.push((
+                            continuation,
+                            coroutine_data.yield_permissions.parent_allows_yield,
+                        ));
                     } else {
-                        ValueStack::default()
-                    };
-
-                    // pass the continuation
-                    let continuation = Continuation::Callback(key, state);
-
-                    coroutine_data.in_progress_yield.push((
-                        continuation,
-                        coroutine_data.yield_permissions.parent_allows_yield,
-                    ));
-                } else if coroutine_data.continuation_state_set {
-                    // we don't want to leak data here
-                    coroutine_data.continuation_states.pop();
+                        err.data = RuntimeErrorData::UnhandledYield;
+                    }
                 }
 
                 Err(err)

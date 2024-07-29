@@ -437,79 +437,62 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     tonumber.hydrate("lua.tonumber", ctx)?;
 
-    fn pcall_impl(
-        (result, state): (Result<MultiValue, RuntimeError>, MultiValue),
-        ctx: &mut VmContext,
-    ) -> Result<MultiValue, RuntimeError> {
+    let pcall = ctx.create_resumable_function(move |(result, state), ctx| {
+        let first_call = state.is_empty();
         ctx.store_multi(state);
 
-        match result {
-            Ok(mut values) => {
-                values.push_front(Value::Bool(true));
-                Ok(values)
-            }
-            Err(err) => {
-                if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                    Err(err)
-                } else {
+        if first_call {
+            let (function, args): (FunctionRef, MultiValue) = result?.unpack_args(ctx)?;
+
+            ctx.resume_call_with_state(true)?;
+
+            function.call::<_, MultiValue>(args, ctx)
+        } else {
+            // handle the result of the call
+            match result {
+                Ok(mut values) => {
+                    // return the success flag and pass the return values
+                    values.push_front(Value::Bool(true));
+                    Ok(values)
+                }
+                Err(err) => {
+                    // return the success flag and the error as a value
                     MultiValue::pack((false, err.to_string()), ctx)
                 }
             }
         }
-    }
-
-    let pcall = ctx.create_function(move |args, ctx| {
-        let (function, args): (FunctionRef, MultiValue) = args.unpack_args(ctx)?;
-
-        pcall_impl(
-            (
-                function.call::<_, MultiValue>(args, ctx),
-                ctx.create_multi(),
-            ),
-            ctx,
-        )
     });
-    pcall.set_resume_callback(pcall_impl, ctx)?;
     pcall.hydrate("lua.pcall", ctx)?;
 
-    // xpcall
-    fn xpcall_impl(
-        (result, state): (Result<MultiValue, RuntimeError>, MultiValue),
-        ctx: &mut VmContext,
-    ) -> Result<MultiValue, RuntimeError> {
-        match result {
-            Ok(values) => Ok(values),
-            Err(err) => {
-                if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                    ctx.set_resume_state(state)?;
-                } else {
+    let xpcall = ctx.create_resumable_function(|(result, state), ctx| {
+        let handler: Option<FunctionRef> = state.unpack(ctx)?;
+
+        if let Some(handler) = handler {
+            // resumed
+            match result {
+                Ok(values) => Ok(values),
+                Err(err) => {
                     let mut err_message = err.to_string();
-                    let handler: FunctionRef = state.unpack(ctx)?;
 
                     if let Err(handler_err) = handler.call::<_, ()>(err_message, ctx) {
                         err_message = handler_err.to_string();
                         // pass our handler's error into itself, give up on future errors (lua does not specify max retries)
                         let _ = handler.call::<_, ()>(err_message, ctx);
                     }
+
+                    Err(err)
                 }
-
-                Err(err)
             }
+        } else {
+            // first call
+            let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
+                result?.unpack_args(ctx)?;
+
+            ctx.resume_call_with_state(handler.clone())?;
+
+            function.call::<_, MultiValue>(args, ctx)
         }
-    }
-
-    let xpcall = ctx.create_function(|args, ctx| {
-        let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
-            args.unpack_args(ctx)?;
-
-        ctx.set_resume_state(handler.clone())?;
-
-        let mut state = ctx.create_multi();
-        state.push_front(handler.into());
-
-        xpcall_impl((function.call::<_, MultiValue>(args, ctx), state), ctx)
     });
-    xpcall.set_resume_callback(xpcall_impl, ctx)?;
     xpcall.hydrate("lua.xpcall", ctx)?;
 
     // todo: warn

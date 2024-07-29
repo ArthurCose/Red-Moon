@@ -1,5 +1,5 @@
-use super::heap::{HeapKey, HeapRef, HeapValue};
-use super::{FromMulti, IntoMulti, MultiValue, VmContext};
+use super::heap::{HeapRef, HeapValue};
+use super::{FromMulti, IntoMulti, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
@@ -10,39 +10,6 @@ impl FunctionRef {
     #[inline]
     pub fn id(&self) -> u64 {
         self.0.key().data().as_ffi()
-    }
-
-    /// Defines the behavior for resuming a native function if a coroutine yield occurs.
-    /// Allows coroutine yielding within the scope of calls to this function.
-    pub fn set_resume_callback(
-        &self,
-        callback: impl Fn(
-                (Result<MultiValue, RuntimeError>, MultiValue),
-                &mut VmContext,
-            ) -> Result<MultiValue, RuntimeError>
-            + Clone
-            + 'static,
-        ctx: &mut VmContext,
-    ) -> Result<(), RuntimeError> {
-        let heap = &mut ctx.vm.execution_data.heap;
-        let key = self.0.key();
-
-        let Some(heap_value) = heap.get(key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
-
-        if !matches!(heap_value, HeapValue::NativeFunction(_)) {
-            return Err(RuntimeErrorData::RequiresNativeFunction.into());
-        }
-
-        let size = std::mem::size_of::<HeapKey>() + std::mem::size_of_val(&callback);
-
-        if heap.resume_callbacks.insert(key, callback.into()).is_none() {
-            let gc = &mut ctx.vm.execution_data.gc;
-            gc.modify_used_memory(size as _);
-        }
-
-        Ok(())
     }
 
     /// Returns false if there's no function with a matching tag, this function will receive the tag to maintain identity after serialization.

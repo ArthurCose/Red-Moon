@@ -113,10 +113,6 @@ impl ValueStack {
         self.values.len()
     }
 
-    pub(crate) fn capacity(&self) -> usize {
-        self.values.capacity()
-    }
-
     pub(crate) fn push(&mut self, value: StackValue) {
         self.values.push(value)
     }

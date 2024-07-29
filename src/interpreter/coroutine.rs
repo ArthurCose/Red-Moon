@@ -125,9 +125,7 @@ impl Coroutine {
                     let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
                     let callback = heap.resume_callbacks.get(&key).unwrap();
 
-                    if state.capacity() > 0 {
-                        cache_pools.store_short_value_stack(state);
-                    }
+                    cache_pools.store_short_value_stack(state);
 
                     callback
                         .shallow_clone()
@@ -257,9 +255,7 @@ impl Coroutine {
 
             for (continuation, _) in coroutine_data.in_progress_yield.drain(..) {
                 if let Continuation::Callback(_, state) = continuation {
-                    if state.capacity() > 0 {
-                        cache_pools.store_short_value_stack(state);
-                    }
+                    cache_pools.store_short_value_stack(state);
                 }
             }
 
@@ -284,9 +280,7 @@ impl Coroutine {
                     let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
                     let callback = heap.resume_callbacks.get(&key).unwrap();
 
-                    if state.capacity() > 0 {
-                        cache_pools.store_short_value_stack(state);
-                    }
+                    cache_pools.store_short_value_stack(state);
 
                     match callback
                         .shallow_clone()
