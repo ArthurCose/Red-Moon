@@ -1,7 +1,7 @@
 use super::cache_pools::CachePools;
 use super::coroutine::{Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
-use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapRef, HeapValue};
+use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapValue};
 use super::metatable_keys::MetatableKeys;
 use super::value_stack::{StackValue, ValueStack};
 use super::{
@@ -112,7 +112,8 @@ impl Clone for ExecutionAccessibleData {
 pub struct Vm {
     pub(crate) execution_data: ExecutionAccessibleData,
     pub(crate) execution_stack: Vec<ExecutionContext>,
-    default_environment: HeapRef,
+    registry: TableRef,
+    default_environment: TableRef,
     app_data: FastHashMap<TypeId, Box<dyn AppData>>,
 }
 
@@ -202,6 +203,7 @@ impl Clone for Vm {
             execution_data: self.execution_data.clone(),
             // we can clear the execution stack on the copy
             execution_stack: Default::default(),
+            registry: self.registry.clone(),
             default_environment: self.default_environment.clone(),
             app_data: self.app_data.clone(),
         }
@@ -218,8 +220,10 @@ impl Vm {
     pub fn new() -> Self {
         let mut gc = GarbageCollector::default();
         let mut heap = Heap::new(&mut gc);
-        let default_environment = heap.create(&mut gc, HeapValue::Table(Default::default()));
-        let default_environment = heap.create_ref(default_environment);
+        let registry_key = heap.create(&mut gc, HeapValue::Table(Default::default()));
+        let registry = heap.create_ref(registry_key);
+        let default_environment_key = heap.create(&mut gc, HeapValue::Table(Default::default()));
+        let default_environment = heap.create_ref(default_environment_key);
 
         let metatable_keys = MetatableKeys::new(&mut gc, &mut heap);
 
@@ -236,7 +240,8 @@ impl Vm {
                 instruction_counter: Default::default(),
             },
             execution_stack: Default::default(),
-            default_environment,
+            registry: TableRef(registry),
+            default_environment: TableRef(default_environment),
             app_data: Default::default(),
         }
     }
@@ -280,8 +285,13 @@ impl Vm {
     }
 
     #[inline]
+    pub fn registry(&self) -> TableRef {
+        self.registry.clone()
+    }
+
+    #[inline]
     pub fn default_environment(&self) -> TableRef {
-        TableRef(self.default_environment.clone())
+        self.default_environment.clone()
     }
 
     #[inline]
@@ -424,6 +434,11 @@ impl<'vm> VmContext<'vm> {
     }
 
     #[inline]
+    pub fn registry(&self) -> TableRef {
+        self.vm.registry()
+    }
+
+    #[inline]
     pub fn default_environment(&self) -> TableRef {
         self.vm.default_environment()
     }
@@ -555,7 +570,7 @@ impl<'vm> VmContext<'vm> {
         let heap = &mut self.vm.execution_data.heap;
         let environment = environment
             .map(|table| table.0.key().into())
-            .unwrap_or(self.vm.default_environment.key().into());
+            .unwrap_or(self.vm.default_environment.0.key().into());
 
         let mut keys = Vec::with_capacity(module.chunks.len());
 
