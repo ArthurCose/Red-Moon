@@ -1088,7 +1088,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a + b,
+                        |a, b| a.wrapping_add(b),
                         |a, b| a + b,
                     )? {
                         return Ok(call_result);
@@ -1101,7 +1101,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a - b,
+                        |a, b| a.wrapping_sub(b),
                         |a, b| a - b,
                     )? {
                         return Ok(call_result);
@@ -1114,7 +1114,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a * b,
+                        |a, b| a.wrapping_mul(b),
                         |a, b| a * b,
                     )? {
                         return Ok(call_result);
