@@ -87,6 +87,10 @@ impl Table {
             _ => {}
         }
 
+        self.get_from_map(key)
+    }
+
+    pub(crate) fn get_from_map(&self, key: StackValue) -> StackValue {
         self.map.get(&key).cloned().unwrap_or(StackValue::Nil)
     }
 

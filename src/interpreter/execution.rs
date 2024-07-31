@@ -3,6 +3,7 @@ use super::heap::{Heap, HeapKey, HeapValue};
 use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::{Function, FunctionDefinition};
 use super::multi::MultiValue;
+use super::table::Table;
 use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
 use super::{TypeName, UpValueSource, Value};
@@ -795,9 +796,14 @@ impl CallContext {
                     let base =
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
 
-                    if let Some(call_result) =
-                        self.copy_from_table(exec_data, value_stack, dest, base, heap_key.into())?
-                    {
+                    if let Some(call_result) = self.copy_from_table(
+                        exec_data,
+                        value_stack,
+                        dest,
+                        base,
+                        heap_key.into(),
+                        |table, key| table.get_from_map(key),
+                    )? {
                         return Ok(call_result);
                     }
                 }
@@ -831,9 +837,14 @@ impl CallContext {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
-                    if let Some(call_result) =
-                        self.copy_from_table(exec_data, value_stack, dest, base, key)?
-                    {
+                    if let Some(call_result) = self.copy_from_table(
+                        exec_data,
+                        value_stack,
+                        dest,
+                        base,
+                        key,
+                        |table, key| table.get(key),
+                    )? {
                         return Ok(call_result);
                     }
                 }
@@ -1817,6 +1828,7 @@ impl CallContext {
         dest: Register,
         base: StackValue,
         key: StackValue,
+        getter: impl Fn(&Table, StackValue) -> StackValue,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         // initial test
         let StackValue::HeapValue(base_heap_key) = base else {
@@ -1827,7 +1839,7 @@ impl CallContext {
 
         let heap_value = exec_data.heap.get(base_heap_key).unwrap();
         let mut value = match heap_value {
-            HeapValue::Table(table) => table.get(key),
+            HeapValue::Table(table) => getter(table, key),
             HeapValue::Bytes(_) => StackValue::Nil,
             _ => {
                 return Err(RuntimeErrorData::AttemptToIndex(
@@ -1858,7 +1870,7 @@ impl CallContext {
 
                 match heap_value {
                     HeapValue::Table(table) => {
-                        value = table.get(key);
+                        value = getter(table, key);
 
                         if value != StackValue::Nil {
                             break;
