@@ -826,9 +826,14 @@ impl CallContext {
                     let base =
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
 
-                    if let Some(call_result) =
-                        self.copy_to_table(exec_data, value_stack, base, heap_key.into(), src)?
-                    {
+                    if let Some(call_result) = self.copy_to_table(
+                        exec_data,
+                        value_stack,
+                        base,
+                        heap_key.into(),
+                        src,
+                        |table, key, value| table.set_in_map(key, value),
+                    )? {
                         return Ok(call_result);
                     }
                 }
@@ -853,9 +858,14 @@ impl CallContext {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
-                    if let Some(call_result) =
-                        self.copy_to_table(exec_data, value_stack, base, key, src)?
-                    {
+                    if let Some(call_result) = self.copy_to_table(
+                        exec_data,
+                        value_stack,
+                        base,
+                        key,
+                        src,
+                        |table, key, value| table.set(key, value),
+                    )? {
                         return Ok(call_result);
                     }
                 }
@@ -1909,6 +1919,7 @@ impl CallContext {
         table_stack_value: StackValue,
         key: StackValue,
         src: u8,
+        setter: impl Fn(&mut Table, StackValue, StackValue),
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let StackValue::HeapValue(heap_key) = table_stack_value else {
             return Err(RuntimeErrorData::AttemptToIndex(
@@ -1947,7 +1958,7 @@ impl CallContext {
 
             let original_size = table.heap_size();
 
-            table.set(key, src_value);
+            setter(table, key, src_value);
 
             let new_size = table.heap_size();
             gc.modify_used_memory(new_size as isize - original_size as isize);

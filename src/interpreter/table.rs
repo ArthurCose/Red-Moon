@@ -112,12 +112,15 @@ impl Table {
             return;
         }
 
-        if let StackValue::Nil = value {
-            self.map.shift_remove(&key);
-            return;
-        }
+        self.set_in_map(key, value);
+    }
 
-        self.map.insert(key, value);
+    pub(crate) fn set_in_map(&mut self, key: StackValue, value: StackValue) {
+        if value == StackValue::Nil {
+            self.map.shift_remove(&key);
+        } else {
+            self.map.insert(key, value);
+        }
     }
 
     fn set_in_list(&mut self, index: usize, value: StackValue) -> bool {
