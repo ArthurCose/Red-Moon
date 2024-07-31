@@ -183,6 +183,20 @@ impl ValueStack {
         debug_assert_eq!(self.len(), start + keep)
     }
 
+    pub(crate) fn copy_within(&mut self, src: Range<usize>, dest: usize) {
+        let min_len = if src.start > dest {
+            src.end
+        } else {
+            dest + src.len()
+        };
+
+        if self.values.len() < min_len {
+            self.values.resize(min_len, Default::default());
+        }
+
+        self.values.copy_within(src, dest);
+    }
+
     pub(crate) fn resize(&mut self, len: usize) {
         self.values.resize(len, StackValue::Nil);
     }

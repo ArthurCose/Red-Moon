@@ -412,21 +412,13 @@ impl ExecutionContext {
                             execution.value_stack.set(len_register, count_value);
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
-                            let mut values = exec_data.cache_pools.create_short_value_stack();
-
                             let start = stack_index + 1;
-                            for value in
-                                execution.value_stack.get_slice(start..start + return_count)
-                            {
-                                values.push(*value);
-                            }
-
                             let dest_index = parent_base + dest as usize;
-                            execution.value_stack.chip(dest_index, 0);
+
                             execution
                                 .value_stack
-                                .extend(values.get_slice(0..return_count).iter().cloned());
-                            exec_data.cache_pools.store_short_value_stack(values);
+                                .copy_within(start..start + return_count, dest_index);
+                            execution.value_stack.chip(dest_index + return_count, 0);
                         }
                         ReturnMode::TailCall => unreachable!(),
                     }
