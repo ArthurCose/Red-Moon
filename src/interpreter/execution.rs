@@ -349,54 +349,46 @@ impl ExecutionContext {
                         .store_short_value_stack(call.up_values);
 
                     let mut return_count = return_count as usize;
+                    let value_stack = &mut execution.value_stack;
 
                     match call.return_mode {
                         ReturnMode::Multi => {
                             // remove extra values past the return values
-                            execution
-                                .value_stack
+                            value_stack
                                 .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // chip under the return values and count
-                            execution
-                                .value_stack
-                                .chip(call.stack_start, return_count + 1);
+                            value_stack.chip(call.stack_start, return_count + 1);
                         }
                         ReturnMode::Static(expected_count) => {
                             return_count = return_count.min(expected_count as _);
 
                             // remove extra values past the return values
-                            execution
-                                .value_stack
+                            value_stack
                                 .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // chip under the return values
-                            execution.value_stack.chip(call.stack_start, return_count);
+                            value_stack.chip(call.stack_start, return_count);
                         }
                         ReturnMode::Destination(dest) => {
                             // copy value
-                            let value = execution
-                                .value_stack
-                                .get(call.register_base + registry_index + 1);
+                            let value = value_stack.get(call.register_base + registry_index + 1);
 
                             // remove all values
-                            execution.value_stack.chip(call.stack_start, 0);
+                            value_stack.chip(call.stack_start, 0);
 
                             // store value
-                            execution
-                                .value_stack
-                                .set(parent_base + dest as usize, value);
+                            value_stack.set(parent_base + dest as usize, value);
                         }
                         ReturnMode::Extend(len_index) => {
                             // remove extra values past the return values
-                            execution
-                                .value_stack
+                            value_stack
                                 .chip(call.register_base + registry_index + return_count + 1, 0);
 
                             // get the return count
                             let len_register = parent_base + len_index as usize;
                             let StackValue::Integer(stored_return_count) =
-                                execution.value_stack.get(len_register)
+                                value_stack.get(len_register)
                             else {
                                 return Err(Self::unwind_error(
                                     vm,
@@ -405,20 +397,18 @@ impl ExecutionContext {
                             };
 
                             // chip under the return values
-                            execution.value_stack.chip(call.stack_start, return_count);
+                            value_stack.chip(call.stack_start, return_count);
                             // add the return count
                             let count = stored_return_count + return_count as i64 - 1;
                             let count_value = StackValue::Integer(count);
-                            execution.value_stack.set(len_register, count_value);
+                            value_stack.set(len_register, count_value);
                         }
                         ReturnMode::UnsizedDestinationPreserve(dest) => {
                             let start = stack_index + 1;
                             let dest_index = parent_base + dest as usize;
 
-                            execution
-                                .value_stack
-                                .copy_within(start..start + return_count, dest_index);
-                            execution.value_stack.chip(dest_index + return_count, 0);
+                            value_stack.copy_within(start..start + return_count, dest_index);
+                            value_stack.chip(dest_index + return_count, 0);
                         }
                         ReturnMode::TailCall => unreachable!(),
                     }
