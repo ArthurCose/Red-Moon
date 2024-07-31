@@ -1154,51 +1154,22 @@ impl CallContext {
                     }
                 }
                 Instruction::IntegerDivision(dest, a, b) => {
-                    let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
-                    let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
+                    let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
 
-                    let value = match (value_a, value_b) {
-                        (StackValue::Integer(a), StackValue::Integer(b)) => {
-                            if b == 0 {
-                                return Err(RuntimeErrorData::DivideByZero);
-                            }
-                            StackValue::Integer(a / b)
-                        }
-                        (StackValue::Float(a), StackValue::Float(b)) => StackValue::Float(a / b),
-                        (StackValue::Float(a), StackValue::Integer(b)) => {
-                            StackValue::Float((a / b as f64).trunc())
-                        }
-                        (StackValue::Integer(a), StackValue::Float(b)) => {
-                            StackValue::Float((a as f64 / b).trunc())
-                        }
-                        _ => {
-                            let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
-
-                            return self
-                                .try_binary_metamethods(
-                                    (heap, value_stack),
-                                    metamethod_key,
-                                    dest,
-                                    value_a,
-                                    value_b,
-                                )
-                                .ok_or_else(|| match (value_a, value_b) {
-                                    (StackValue::Integer(_) | StackValue::Float(_), _) => {
-                                        RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap))
-                                    }
-                                    _ => {
-                                        RuntimeErrorData::InvalidArithmetic(value_a.type_name(heap))
-                                    }
-                                });
-                        }
-                    };
-
-                    value_stack.set(self.register_base + dest as usize, value);
+                    if let Some(call_result) = self.division_operation(
+                        (heap, value_stack),
+                        (dest, a, b),
+                        metamethod_key,
+                        |a, b| a / b,
+                        |a, b| a / b,
+                    )? {
+                        return Ok(call_result);
+                    }
                 }
                 Instruction::Modulus(dest, a, b) => {
                     let metamethod_key = exec_data.metatable_keys.modulus.0.key().into();
 
-                    if let Some(call_result) = self.binary_number_operation(
+                    if let Some(call_result) = self.division_operation(
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
@@ -1659,6 +1630,57 @@ impl CallContext {
             self.register_base + dest as usize,
             StackValue::Integer(operation(int_a, int_b)),
         );
+
+        Ok(None)
+    }
+
+    fn division_operation(
+        &self,
+        (heap, value_stack): (&mut Heap, &mut ValueStack),
+        (dest, a, b): (Register, Register, Register),
+        metamethod_key: StackValue,
+        integer_operation: impl Fn(i64, i64) -> i64,
+        float_operation: impl Fn(f64, f64) -> f64,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
+
+        let value = match (value_a, value_b) {
+            (StackValue::Integer(a), StackValue::Integer(b)) => {
+                if b == 0 {
+                    return Err(RuntimeErrorData::DivideByZero);
+                }
+                StackValue::Integer(integer_operation(a, b))
+            }
+            (StackValue::Float(a), StackValue::Float(b)) => {
+                StackValue::Float(float_operation(a, b))
+            }
+            (StackValue::Float(a), StackValue::Integer(b)) => {
+                StackValue::Float(float_operation(a, b as f64))
+            }
+            (StackValue::Integer(a), StackValue::Float(b)) => {
+                StackValue::Float(float_operation(a as f64, b))
+            }
+            _ => {
+                return Ok(Some(
+                    self.try_binary_metamethods(
+                        (heap, value_stack),
+                        metamethod_key,
+                        dest,
+                        value_a,
+                        value_b,
+                    )
+                    .ok_or_else(|| match (value_a, value_b) {
+                        (StackValue::Integer(_) | StackValue::Float(_), _) => {
+                            RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap))
+                        }
+                        _ => RuntimeErrorData::InvalidArithmetic(value_a.type_name(heap)),
+                    })?,
+                ));
+            }
+        };
+
+        value_stack.set(self.register_base + dest as usize, value);
 
         Ok(None)
     }

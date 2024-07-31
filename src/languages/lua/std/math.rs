@@ -91,7 +91,16 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let (x, y): (Number, Number) = args.unpack_args(ctx)?;
 
         match (x, y) {
-            (Number::Integer(x), Number::Integer(y)) => MultiValue::pack(x % y, ctx),
+            (Number::Integer(x), Number::Integer(y)) => {
+                if y == 0 {
+                    return Err(RuntimeError::new_bad_argument(
+                        2,
+                        RuntimeError::new_static_string("zero"),
+                    ));
+                }
+
+                MultiValue::pack(x % y, ctx)
+            }
             (Number::Integer(x), Number::Float(y)) => MultiValue::pack(x as f64 % y, ctx),
             (Number::Float(x), Number::Integer(y)) => MultiValue::pack(x % y as f64, ctx),
             (Number::Float(x), Number::Float(y)) => MultiValue::pack(x % y, ctx),
