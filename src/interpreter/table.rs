@@ -1,5 +1,6 @@
 use super::heap::HeapKey;
 use super::value_stack::StackValue;
+use crate::languages::lua::coerce_integer;
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
@@ -78,8 +79,8 @@ impl Table {
                 }
             }
             StackValue::Float(float) => {
-                if float.fract() == 0.0 {
-                    if let Some(value) = self.list.get(float as usize - 1) {
+                if let Some(i) = coerce_integer(float) {
+                    if let Some(value) = self.list.get(i as usize - 1) {
                         return *value;
                     }
                 }
@@ -97,8 +98,12 @@ impl Table {
     pub(crate) fn set(&mut self, key: StackValue, value: StackValue) {
         let used_list = match key {
             StackValue::Integer(index) if index > 0 => self.set_in_list(index as usize - 1, value),
-            StackValue::Float(float) if float.fract() == 0.0 && float as usize > 0 => {
-                self.set_in_list(float as usize - 1, value)
+            StackValue::Float(float) => {
+                if let Some(i) = coerce_integer(float) {
+                    self.set_in_list(i as usize - 1, value)
+                } else {
+                    false
+                }
             }
             _ => false,
         };
