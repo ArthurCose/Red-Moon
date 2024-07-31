@@ -95,13 +95,6 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     fmod.rehydrate("math.fmod", ctx)?;
 
-    // huge
-    let huge = ctx.create_function(|args, ctx| {
-        ctx.store_multi(args);
-        MultiValue::pack(f64::INFINITY, ctx)
-    });
-    huge.rehydrate("math.huge", ctx)?;
-
     // log
     let log = ctx.create_function(|args, ctx| {
         let (x, base): (f64, Option<f64>) = args.unpack_args(ctx)?;
@@ -133,13 +126,6 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     max.rehydrate("math.max", ctx)?;
 
-    // maxinteger
-    let maxinteger = ctx.create_function(|args, ctx| {
-        ctx.store_multi(args);
-        MultiValue::pack(i64::MAX, ctx)
-    });
-    maxinteger.rehydrate("math.maxinteger", ctx)?;
-
     // min
     let min = ctx.create_function(|mut args, ctx| {
         let Some(mut min) = args.pop_front() else {
@@ -161,13 +147,6 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         Ok(args)
     });
     min.rehydrate("math.min", ctx)?;
-
-    // mininteger
-    let mininteger = ctx.create_function(|args, ctx| {
-        ctx.store_multi(args);
-        MultiValue::pack(i64::MIN, ctx)
-    });
-    mininteger.rehydrate("math.mininteger", ctx)?;
 
     // modf
     let modf = ctx.create_function(|args, ctx| {
@@ -252,12 +231,12 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         math.raw_set("exp", exp, ctx)?;
         math.raw_set("floor", floor, ctx)?;
         math.raw_set("fmod", fmod, ctx)?;
-        math.raw_set("huge", huge, ctx)?;
+        math.raw_set("huge", f64::INFINITY, ctx)?;
         math.raw_set("log", log, ctx)?;
         math.raw_set("max", max, ctx)?;
-        math.raw_set("maxinteger", maxinteger, ctx)?;
+        math.raw_set("maxinteger", i64::MAX, ctx)?;
         math.raw_set("min", min, ctx)?;
-        math.raw_set("mininteger", mininteger, ctx)?;
+        math.raw_set("mininteger", i64::MIN, ctx)?;
         math.raw_set("modf", modf, ctx)?;
         math.raw_set("pi", std::f64::consts::PI, ctx)?;
         math.raw_set("rad", rad, ctx)?;
