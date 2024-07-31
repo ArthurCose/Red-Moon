@@ -235,13 +235,13 @@ pub fn coerce_integer(float: f64) -> Option<i64> {
         return None;
     }
 
-    let int = float as i64;
+    const MAX_REPRESENTABLE: i64 = 9223372036854774784;
 
-    if float.trunc() != int as f64 {
-        return None;
+    if (i64::MIN as f64..=(MAX_REPRESENTABLE as f64)).contains(&float) {
+        Some(float as _)
+    } else {
+        None
     }
-
-    Some(int)
 }
 
 #[cfg(test)]

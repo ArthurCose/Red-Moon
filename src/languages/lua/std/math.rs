@@ -50,7 +50,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let ceil = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.ceil(), ctx)
+        MultiValue::pack(truncated_to_value(x.ceil()), ctx)
     });
     ceil.rehydrate("math.ceil", ctx)?;
 
@@ -82,7 +82,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let floor = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x.floor(), ctx)
+        MultiValue::pack(truncated_to_value(x.floor()), ctx)
     });
     floor.rehydrate("math.floor", ctx)?;
 
@@ -155,7 +155,7 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // modf
     let modf = ctx.create_function(|args, ctx| {
         let x: f64 = args.unpack_args(ctx)?;
-        MultiValue::pack((x.trunc(), x.fract()), ctx)
+        MultiValue::pack((truncated_to_value(x.trunc()), x.fract()), ctx)
     });
     modf.rehydrate("math.modf", ctx)?;
 
@@ -285,5 +285,15 @@ fn coerce_number(
             position,
             RuntimeError::new_string(format!("number expected, got {}", value.type_name())),
         )),
+    }
+}
+
+fn truncated_to_value(f: f64) -> Value {
+    const MAX_REPRESENTABLE: i64 = 9223372036854774784;
+
+    if (i64::MIN as f64..=(MAX_REPRESENTABLE as f64)).contains(&f) {
+        Value::Integer(f as _)
+    } else {
+        Value::Float(f)
     }
 }
