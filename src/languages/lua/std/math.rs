@@ -87,11 +87,15 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     floor.rehydrate("math.floor", ctx)?;
 
     // fmod
-    // todo: lua preserves integers
     let fmod = ctx.create_function(|args, ctx| {
-        let (x, y): (f64, f64) = args.unpack_args(ctx)?;
+        let (x, y): (Number, Number) = args.unpack_args(ctx)?;
 
-        MultiValue::pack(x % y, ctx)
+        match (x, y) {
+            (Number::Integer(x), Number::Integer(y)) => MultiValue::pack(x % y, ctx),
+            (Number::Integer(x), Number::Float(y)) => MultiValue::pack(x as f64 % y, ctx),
+            (Number::Float(x), Number::Integer(y)) => MultiValue::pack(x % y as f64, ctx),
+            (Number::Float(x), Number::Float(y)) => MultiValue::pack(x % y, ctx),
+        }
     });
     fmod.rehydrate("math.fmod", ctx)?;
 
