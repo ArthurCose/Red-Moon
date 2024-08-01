@@ -340,12 +340,20 @@ impl GarbageCollector {
                     self.used_memory -= std::mem::size_of::<StackValue>();
                 }
                 StorageKey::Bytes(key) => {
-                    let bytes = heap.storage.byte_strings.remove(key).unwrap();
+                    let Some(bytes) = heap.storage.byte_strings.remove(key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        continue;
+                    };
                     heap.byte_strings.remove(&bytes);
                     self.used_memory -= std::mem::size_of_val(&bytes) + bytes.heap_size();
                 }
                 StorageKey::Table(key) => {
-                    let mut table = heap.storage.tables.remove(key).unwrap();
+                    let Some(mut table) = heap.storage.tables.remove(key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        continue;
+                    };
                     self.used_memory -= std::mem::size_of_val(&table) + table.heap_size();
 
                     if heap.recycled_tables.len() < RECYCLE_LIMIT {
@@ -354,7 +362,11 @@ impl GarbageCollector {
                     }
                 }
                 StorageKey::NativeFunction(key) => {
-                    let native_fn = heap.storage.native_functions.remove(key).unwrap();
+                    let Some(native_fn) = heap.storage.native_functions.remove(key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        continue;
+                    };
                     self.used_memory -= std::mem::size_of_val(&native_fn);
 
                     if let Some(callback) = heap.resume_callbacks.remove(&key) {
@@ -363,11 +375,19 @@ impl GarbageCollector {
                     }
                 }
                 StorageKey::Function(key) => {
-                    let function = heap.storage.functions.remove(key).unwrap();
+                    let Some(function) = heap.storage.functions.remove(key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        continue;
+                    };
                     self.used_memory -= std::mem::size_of_val(&function) + function.heap_size();
                 }
                 StorageKey::Coroutine(key) => {
-                    let co = heap.storage.coroutines.remove(key).unwrap();
+                    let Some(co) = heap.storage.coroutines.remove(key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        continue;
+                    };
                     self.used_memory -= std::mem::size_of_val(&co) + co.heap_size();
                 }
             }
@@ -426,7 +446,11 @@ impl GarbageCollector {
     ) {
         match key {
             StorageKey::Function(key) => {
-                let function = heap.get_interpreted_fn(key).unwrap();
+                let Some(function) = heap.get_interpreted_fn(key) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return;
+                };
 
                 self.mark_value_stack(&function.up_values);
 
@@ -443,7 +467,11 @@ impl GarbageCollector {
                 }
             }
             StorageKey::Table(table_key) => {
-                let table = heap.get_table(table_key).unwrap();
+                let Some(table) = heap.get_table(table_key) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return;
+                };
 
                 let mut weak_keys = false;
                 let mut weak_values = false;
@@ -451,15 +479,20 @@ impl GarbageCollector {
                 if let Some(key) = table.metatable {
                     self.mark_storage_key(key.into());
 
-                    let metatable = heap.get_table(key).unwrap();
+                    if let Some(metatable) = heap.get_table(key) {
+                        let mode_key = metatable_keys.mode.0.key.into();
+                        let mode_value = metatable.get(mode_key);
 
-                    let mode_key = metatable_keys.mode.0.key.into();
-                    let mode_value = metatable.get(mode_key);
-
-                    if let StackValue::Bytes(mode_key) = mode_value {
-                        let bytes = heap.get_bytes(mode_key).unwrap();
-                        weak_keys = bytes.as_bytes().contains(&b'k');
-                        weak_values = bytes.as_bytes().contains(&b'v');
+                        if let StackValue::Bytes(mode_key) = mode_value {
+                            if let Some(bytes) = heap.get_bytes(mode_key) {
+                                weak_keys = bytes.as_bytes().contains(&b'k');
+                                weak_values = bytes.as_bytes().contains(&b'v');
+                            } else {
+                                crate::debug_unreachable!();
+                            }
+                        }
+                    } else {
+                        crate::debug_unreachable!();
                     }
                 }
 
@@ -517,7 +550,11 @@ impl GarbageCollector {
                 }
             }
             StorageKey::Coroutine(key) => {
-                let co = heap.get_coroutine(key).unwrap();
+                let Some(co) = heap.get_coroutine(key) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return;
+                };
 
                 for (continuation, _) in &co.continuation_stack {
                     match continuation {
@@ -533,8 +570,11 @@ impl GarbageCollector {
                 }
             }
             StorageKey::StackValue(key) => {
-                let value = heap.get_stack_value(key).unwrap();
-                self.mark_stack_value(value);
+                if let Some(value) = heap.get_stack_value(key) {
+                    self.mark_stack_value(value);
+                } else {
+                    crate::debug_unreachable!();
+                }
             }
             _ => {}
         }

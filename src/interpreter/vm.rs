@@ -754,7 +754,10 @@ impl<'vm> VmContext<'vm> {
             let function_callback = move |args, ctx: &mut VmContext| {
                 let heap = &mut ctx.vm.execution_data.heap;
 
-                let callback = heap.resume_callbacks.get(&key).unwrap();
+                let Some(callback) = heap.resume_callbacks.get(&key) else {
+                    return Err(RuntimeErrorData::InvalidInternalState.into());
+                };
+
                 let callback = callback.shallow_clone();
 
                 let state = MultiValue {
@@ -962,14 +965,14 @@ impl<'vm> VmContext<'vm> {
 
                 func.shallow_clone().call(key, args, self)
             }
-            StackValue::Function(key) => {
-                let context = ExecutionContext::new_function_call(key, args, self.vm);
-                self.vm.execution_stack.push(context);
-                ExecutionContext::resume(self.vm)
-            }
+            StackValue::Function(key) => ExecutionContext::new_function_call(key, args, self.vm)
+                .and_then(|execution| {
+                    self.vm.execution_stack.push(execution);
+                    ExecutionContext::resume(self.vm)
+                }),
             _ => ExecutionContext::new_value_call(function_value, args, self.vm).and_then(
-                |context| {
-                    self.vm.execution_stack.push(context);
+                |execution| {
+                    self.vm.execution_stack.push(execution);
                     ExecutionContext::resume(self.vm)
                 },
             ),

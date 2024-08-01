@@ -366,7 +366,12 @@ impl Heap {
             _ => return StackValue::Nil,
         };
 
-        let metatable = self.storage.tables.get(metatable_key).unwrap();
+        let Some(metatable) = self.storage.tables.get(metatable_key) else {
+            #[cfg(debug_assertions)]
+            unreachable!();
+            #[cfg(not(debug_assertions))]
+            return StackValue::Nil;
+        };
 
         metatable.get(name)
     }

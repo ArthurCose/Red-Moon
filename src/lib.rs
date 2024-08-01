@@ -22,3 +22,12 @@ mod test_readme {
 
     external_doc_test!(include_str!("../README.md"));
 }
+
+macro_rules! debug_unreachable {
+    () => {
+        #[cfg(debug_assertions)]
+        unreachable!();
+    };
+}
+
+pub(crate) use debug_unreachable;

@@ -33,11 +33,13 @@ impl ExecutionContext {
         function_key: FnObjectKey,
         args: MultiValue,
         vm: &mut Vm,
-    ) -> Self {
+    ) -> Result<Self, RuntimeError> {
         let exec_data = &mut vm.execution_data;
         let mut value_stack = exec_data.cache_pools.create_value_stack();
 
-        let function = exec_data.heap.get_interpreted_fn(function_key).unwrap();
+        let Some(function) = exec_data.heap.get_interpreted_fn(function_key) else {
+            return Err(RuntimeErrorData::InvalidInternalState.into());
+        };
 
         value_stack.push(function_key.into());
         args.push_stack_multi(&mut value_stack);
@@ -54,10 +56,10 @@ impl ExecutionContext {
             return_mode: ReturnMode::Multi,
         }];
 
-        Self {
+        Ok(Self {
             call_stack,
             value_stack,
-        }
+        })
     }
 
     pub(crate) fn new_value_call(
@@ -489,7 +491,11 @@ impl ExecutionContext {
 
                 let value = return_values.pop_front().unwrap_or_default();
 
-                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let Some(parent_call) = self.call_stack.last() else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                let parent_register_base = parent_call.register_base;
                 let dest_index = parent_register_base + dest as usize;
                 self.value_stack.set(dest_index, value.to_stack_value());
             }
@@ -504,7 +510,11 @@ impl ExecutionContext {
                 }));
 
                 // add the return count
-                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let Some(parent_call) = self.call_stack.last() else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                let parent_register_base = parent_call.register_base;
                 let len_register = parent_register_base + len_index as usize;
 
                 let StackValue::Integer(stored_return_count) = self.value_stack.get(len_register)
@@ -517,7 +527,11 @@ impl ExecutionContext {
                 self.value_stack.set(len_register, count_value);
             }
             ReturnMode::UnsizedDestinationPreserve(dest) => {
-                let parent_register_base = self.call_stack.last().unwrap().register_base;
+                let Some(parent_call) = self.call_stack.last() else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                let parent_register_base = parent_call.register_base;
                 let dest_index = parent_register_base + dest as usize;
 
                 // clear everything at the destination and beyond before placing values
@@ -549,7 +563,11 @@ impl ExecutionContext {
     }
 
     pub(crate) fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
-        let execution = vm.execution_stack.pop().unwrap();
+        let Some(execution) = vm.execution_stack.pop() else {
+            crate::debug_unreachable!();
+            #[cfg(not(debug_assertions))]
+            return RuntimeErrorData::InvalidInternalState.into();
+        };
 
         let exec_data = &mut vm.execution_data;
 
@@ -1270,8 +1288,17 @@ impl CallContext {
                         |a, b| a < b,
                         |heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
-                                let bytes_a = heap.get_bytes(key_a).unwrap();
-                                let bytes_b = heap.get_bytes(key_b).unwrap();
+                                let Some(bytes_a) = heap.get_bytes(key_a) else {
+                                    crate::debug_unreachable!();
+                                    #[cfg(not(debug_assertions))]
+                                    return None;
+                                };
+
+                                let Some(bytes_b) = heap.get_bytes(key_b) else {
+                                    crate::debug_unreachable!();
+                                    #[cfg(not(debug_assertions))]
+                                    return None;
+                                };
 
                                 Some(bytes_a < bytes_b)
                             } else {
@@ -1293,8 +1320,17 @@ impl CallContext {
                         |a, b| a <= b,
                         |heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
-                                let bytes_a = heap.get_bytes(key_a).unwrap();
-                                let bytes_b = heap.get_bytes(key_b).unwrap();
+                                let Some(bytes_a) = heap.get_bytes(key_a) else {
+                                    crate::debug_unreachable!();
+                                    #[cfg(not(debug_assertions))]
+                                    return None;
+                                };
+
+                                let Some(bytes_b) = heap.get_bytes(key_b) else {
+                                    crate::debug_unreachable!();
+                                    #[cfg(not(debug_assertions))]
+                                    return None;
+                                };
 
                                 Some(bytes_a <= bytes_b)
                             } else {
@@ -1816,7 +1852,10 @@ impl CallContext {
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let mut value = match base {
             StackValue::Table(table_key) => {
-                let table = exec_data.heap.get_table(table_key).unwrap();
+                let Some(table) = exec_data.heap.get_table(table_key) else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
                 getter(table, key)
             }
             StackValue::Bytes(_) => StackValue::Nil,
@@ -1841,7 +1880,9 @@ impl CallContext {
 
                 match index_base {
                     StackValue::Table(table_key) => {
-                        let table = exec_data.heap.get_table(table_key).unwrap();
+                        let Some(table) = exec_data.heap.get_table(table_key) else {
+                            return Err(RuntimeErrorData::InvalidInternalState);
+                        };
 
                         value = getter(table, key);
 
@@ -1921,7 +1962,9 @@ impl CallContext {
             )))
         } else {
             let gc = &mut exec_data.gc;
-            let table = heap.get_table_mut(gc, table_key).unwrap();
+            let Some(table) = heap.get_table_mut(gc, table_key) else {
+                return Err(RuntimeErrorData::InvalidInternalState);
+            };
 
             let original_size = table.heap_size();
 
@@ -1995,15 +2038,24 @@ impl CallContext {
 fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
     match value {
         StackValue::Bytes(key) => {
-            let bytes = heap.get_bytes(key).unwrap();
-            Some(Cow::Borrowed(bytes.as_bytes()))
+            if let Some(bytes) = heap.get_bytes(key) {
+                Some(Cow::Borrowed(bytes.as_bytes()))
+            } else {
+                crate::debug_unreachable!();
+                #[cfg(not(debug_assertions))]
+                None
+            }
         }
         StackValue::Integer(i) => Some(i.to_string().into_bytes().into()),
         StackValue::Float(f) => Some(format!("{f:?}").into_bytes().into()),
         StackValue::Pointer(key) => {
-            let value = *heap.get_stack_value(key).unwrap();
-
-            stringify(heap, value)
+            if let Some(value) = heap.get_stack_value(key) {
+                stringify(heap, *value)
+            } else {
+                crate::debug_unreachable!();
+                #[cfg(not(debug_assertions))]
+                None
+            }
         }
         _ => None,
     }
@@ -2046,9 +2098,11 @@ fn coerce_stack_value_to_integer(
         }
         StackValue::Integer(int) => Ok(int),
         StackValue::Pointer(key) => {
-            let value = *heap.get_stack_value(key).unwrap();
-
-            coerce_stack_value_to_integer(heap, value, generate_err)
+            if let Some(value) = heap.get_stack_value(key) {
+                coerce_stack_value_to_integer(heap, *value, generate_err)
+            } else {
+                Err(RuntimeErrorData::InvalidInternalState)
+            }
         }
         _ => Err(generate_err(value.type_name(heap))),
     }

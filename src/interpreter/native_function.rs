@@ -128,7 +128,9 @@ impl<A> NativeFunction<A> {
 
                 if matches!(err.data, RuntimeErrorData::Yield(_)) {
                     if coroutine_data.continuation_state_set {
-                        let state = coroutine_data.continuation_states.pop().unwrap();
+                        let Some(state) = coroutine_data.continuation_states.pop() else {
+                            return Err(RuntimeErrorData::InvalidInternalState.into());
+                        };
 
                         // pass the continuation
                         let continuation = Continuation::Callback(key, state);

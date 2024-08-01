@@ -65,7 +65,13 @@ impl StackValue {
             return self;
         };
 
-        *heap.get_stack_value(key).unwrap()
+        if let Some(value) = heap.get_stack_value(key) {
+            *value
+        } else {
+            crate::debug_unreachable!();
+            #[cfg(not(debug_assertions))]
+            StackValue::Nil
+        }
     }
 
     pub(crate) fn type_name(self, heap: &Heap) -> TypeName {
@@ -78,7 +84,10 @@ impl StackValue {
             StackValue::NativeFunction(_) => TypeName::Function,
             StackValue::Function(_) => TypeName::Function,
             StackValue::Coroutine(_) => TypeName::Thread,
-            StackValue::Pointer(key) => heap.get_stack_value(key).unwrap().type_name(heap),
+            StackValue::Pointer(key) => heap
+                .get_stack_value(key)
+                .map(|value| value.type_name(heap))
+                .unwrap_or(TypeName::Nil),
         }
     }
 
