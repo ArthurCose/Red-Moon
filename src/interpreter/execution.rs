@@ -2046,6 +2046,12 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
         StackValue::Float(f) => Some(format!("{f:?}").into_bytes().into()),
         StackValue::Pointer(key) => {
             if let Some(value) = heap.get_stack_value(key) {
+                if matches!(value, StackValue::Pointer(_)) {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return None;
+                }
+
                 stringify(heap, *value)
             } else {
                 crate::debug_unreachable!();
@@ -2095,6 +2101,12 @@ fn coerce_stack_value_to_integer(
         StackValue::Integer(int) => Ok(int),
         StackValue::Pointer(key) => {
             if let Some(value) = heap.get_stack_value(key) {
+                if matches!(value, StackValue::Pointer(_)) {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                }
+
                 coerce_stack_value_to_integer(heap, *value, generate_err)
             } else {
                 Err(RuntimeErrorData::InvalidInternalState)

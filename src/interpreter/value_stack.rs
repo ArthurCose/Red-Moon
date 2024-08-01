@@ -86,7 +86,15 @@ impl StackValue {
             StackValue::Coroutine(_) => TypeName::Thread,
             StackValue::Pointer(key) => heap
                 .get_stack_value(key)
-                .map(|value| value.type_name(heap))
+                .map(|value| {
+                    if matches!(value, StackValue::Pointer(_)) {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        return TypeName::Nil;
+                    }
+
+                    value.type_name(heap)
+                })
                 .unwrap_or(TypeName::Nil),
         }
     }

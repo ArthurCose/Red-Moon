@@ -341,6 +341,12 @@ impl Value {
             StackValue::Coroutine(key) => Value::Coroutine(CoroutineRef(heap.create_ref(key))),
             StackValue::Pointer(key) => {
                 if let Some(value) = heap.get_stack_value(key) {
+                    if matches!(value, StackValue::Pointer(_)) {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        return Value::Nil;
+                    }
+
                     Self::from_stack_value(heap, *value)
                 } else {
                     crate::debug_unreachable!();
