@@ -1511,14 +1511,11 @@ impl CallContext {
                 StackValue::Float(float_operation(a as f64, b))
             }
             (StackValue::Integer(_) | StackValue::Float(_), _) => {
-                return Err(RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap)));
-            }
-            _ => {
-                if value_a.lives_in_heap() {
+                if value_b.lives_in_heap() {
                     if let Some(call_result) = self.binary_metamethod(
                         heap,
                         value_stack,
-                        (value_a, metamethod_key),
+                        (value_b, metamethod_key),
                         dest,
                         value_a,
                         value_b,
@@ -1527,11 +1524,14 @@ impl CallContext {
                     }
                 }
 
-                if value_b.lives_in_heap() {
+                return Err(RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap)));
+            }
+            _ => {
+                if value_a.lives_in_heap() {
                     if let Some(call_result) = self.binary_metamethod(
                         heap,
                         value_stack,
-                        (value_b, metamethod_key),
+                        (value_a, metamethod_key),
                         dest,
                         value_a,
                         value_b,
