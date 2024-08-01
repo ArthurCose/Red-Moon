@@ -1,5 +1,5 @@
 use super::coroutine::YieldPermissions;
-use super::heap::HeapKey;
+use super::heap::NativeFnObjectKey;
 use super::VmContext;
 use super::{multi::MultiValue, Continuation};
 use crate::errors::{RuntimeError, RuntimeErrorData};
@@ -59,7 +59,7 @@ mod serde_callback {
 impl<A> NativeFunction<A> {
     pub(crate) fn call(
         &self,
-        key: HeapKey,
+        key: NativeFnObjectKey,
         args: A,
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
@@ -93,7 +93,7 @@ impl<A> NativeFunction<A> {
 
     fn yieldable_call(
         &self,
-        key: HeapKey,
+        key: NativeFnObjectKey,
         args: A,
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {

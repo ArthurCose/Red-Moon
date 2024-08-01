@@ -1,5 +1,4 @@
-use super::heap::HeapKey;
-use super::value_stack::StackValue;
+use super::{heap::TableObjectKey, value_stack::StackValue};
 use crate::languages::lua::coerce_integer;
 use indexmap::IndexMap;
 use rustc_hash::FxBuildHasher;
@@ -10,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Table {
-    pub(crate) metatable: Option<HeapKey>,
+    pub(crate) metatable: Option<TableObjectKey>,
     pub(crate) map: IndexMap<StackValue, StackValue, FxBuildHasher>,
     pub(crate) list: Vec<StackValue>,
 }
@@ -31,11 +30,11 @@ impl Table {
         size
     }
 
-    pub(crate) fn metatable(&self) -> Option<HeapKey> {
+    pub(crate) fn metatable(&self) -> Option<TableObjectKey> {
         self.metatable
     }
 
-    pub(crate) fn set_metatable(&mut self, table_key: Option<HeapKey>) {
+    pub(crate) fn set_metatable(&mut self, table_key: Option<TableObjectKey>) {
         self.metatable = table_key;
     }
 

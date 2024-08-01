@@ -1,15 +1,35 @@
-use super::heap::{HeapRef, HeapValue};
+use super::heap::{Heap, HeapRef, Storage, StorageKey};
 use super::{FromMulti, IntoMulti, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionRef(pub(crate) HeapRef);
+pub struct FunctionRef(pub(crate) HeapRef<StorageKey>);
 
 impl FunctionRef {
     #[inline]
     pub fn id(&self) -> u64 {
-        self.0.key().data().as_ffi()
+        match self.0.key() {
+            StorageKey::NativeFunction(key) => {
+                Storage::key_to_id(key.data(), Storage::NATIVE_FUNCTIONS_TAG)
+            }
+            StorageKey::Function(key) => Storage::key_to_id(key.data(), Storage::FUNCTIONS_TAG),
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn test_validity(&self, heap: &Heap) -> Result<(), RuntimeErrorData> {
+        let valid = match self.0.key() {
+            StorageKey::Function(key) => heap.get_interpreted_fn(key).is_some(),
+            StorageKey::NativeFunction(key) => heap.get_native_fn(key).is_some(),
+            _ => false,
+        };
+
+        if valid {
+            Ok(())
+        } else {
+            Err(RuntimeErrorData::InvalidRef)
+        }
     }
 
     /// Returns false if there's no function with a matching tag, this function will receive the tag to maintain identity after serialization.
@@ -42,7 +62,10 @@ impl FunctionRef {
             }
 
             let tag = tag.to_stack_value();
-            let new_key = self.0.key();
+
+            let StorageKey::NativeFunction(new_key) = self.0.key() else {
+                return Err(RuntimeErrorData::RequiresNativeFunction.into());
+            };
 
             let old_key = match heap.tags.entry(tag) {
                 indexmap::map::Entry::Occupied(entry) => *entry.get(),
@@ -52,18 +75,14 @@ impl FunctionRef {
                 }
             };
 
-            let Some(heap_value) = heap.get(new_key) else {
+            let Some(function) = heap.get_native_fn(new_key) else {
                 return Err(RuntimeErrorData::InvalidRef.into());
             };
 
-            if !matches!(heap_value, HeapValue::NativeFunction(_)) {
-                return Err(RuntimeErrorData::RequiresNativeFunction.into());
-            }
-
-            let heap_value = heap_value.clone();
+            let function = function.clone();
 
             let gc = &mut ctx.vm.execution_data.gc;
-            heap.set(gc, old_key, heap_value);
+            heap.rehydrate(gc, old_key, function);
 
             if let Some(callback) = heap.resume_callbacks.get(&new_key) {
                 heap.resume_callbacks.insert(old_key, callback.clone());
@@ -81,6 +100,6 @@ impl FunctionRef {
         args: A,
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
-        ctx.call_function_key(self.0.key(), args)
+        ctx.call_function_key(self.0.key().into(), args)
     }
 }

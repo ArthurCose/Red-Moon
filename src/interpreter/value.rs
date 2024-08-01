@@ -1,5 +1,5 @@
 use super::execution::ExecutionContext;
-use super::heap::{Heap, HeapKey, HeapValue};
+use super::heap::{BytesObjectKey, Heap, StorageKey};
 use super::value_stack::StackValue;
 use super::vm::VmContext;
 use super::{
@@ -293,23 +293,20 @@ impl Value {
     fn try_binary_metamethods<T: FromMulti>(
         &self,
         other: &Value,
-        method_name: HeapKey,
+        method_name: BytesObjectKey,
         ctx: &mut VmContext,
     ) -> Option<Result<T, RuntimeError>> {
+        let heap = &ctx.vm.execution_data.heap;
         let method_name = method_name.into();
 
-        if let Some(key) = self.heap_key() {
-            let heap = &ctx.vm.execution_data.heap;
-            if let Some(key) = heap.get_metamethod(key, method_name) {
-                return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
-            }
+        let key = self.to_stack_value();
+        if let Some(key) = heap.get_metamethod(key, method_name) {
+            return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
         }
 
-        if let Some(key) = other.heap_key() {
-            let heap = &ctx.vm.execution_data.heap;
-            if let Some(key) = heap.get_metamethod(key, method_name) {
-                return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
-            }
+        let key = other.to_stack_value();
+        if let Some(key) = heap.get_metamethod(key, method_name) {
+            return Some(ctx.call_function_key(key, (self.clone(), other.clone())));
         }
 
         None
@@ -335,27 +332,15 @@ impl Value {
             StackValue::Bool(b) => Value::Bool(b),
             StackValue::Integer(i) => Value::Integer(i),
             StackValue::Float(f) => Value::Float(f),
-            StackValue::HeapValue(key) => {
-                // stack values should be made from within the same ctx as the heap
-                let value = heap.get(key).unwrap();
-
-                match value {
-                    HeapValue::Bytes(_) => Value::String(StringRef(heap.create_ref(key))),
-                    HeapValue::Table(_) => Value::Table(TableRef(heap.create_ref(key))),
-                    HeapValue::Function(_) | HeapValue::NativeFunction(_) => {
-                        Value::Function(FunctionRef(heap.create_ref(key)))
-                    }
-                    HeapValue::Coroutine(_) => Value::Coroutine(CoroutineRef(heap.create_ref(key))),
-                    HeapValue::StackValue(_) => {
-                        // only StackValue::Pointer should point to StackValues
-                        unreachable!()
-                    }
-                }
+            StackValue::Bytes(key) => Value::String(StringRef(heap.create_ref(key))),
+            StackValue::Table(key) => Value::Table(TableRef(heap.create_ref(key))),
+            StackValue::Function(key) => Value::Function(FunctionRef(heap.create_ref(key.into()))),
+            StackValue::NativeFunction(key) => {
+                Value::Function(FunctionRef(heap.create_ref(key.into())))
             }
+            StackValue::Coroutine(key) => Value::Coroutine(CoroutineRef(heap.create_ref(key))),
             StackValue::Pointer(key) => {
-                let HeapValue::StackValue(value) = heap.get(key).unwrap() else {
-                    unreachable!()
-                };
+                let value = heap.get_stack_value(key).unwrap();
 
                 Self::from_stack_value(heap, *value)
             }
@@ -364,13 +349,14 @@ impl Value {
 
     pub(crate) fn test_validity(&self, heap: &Heap) -> Result<(), RuntimeErrorData> {
         let valid = match self {
-            Value::String(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Bytes(_))),
-            Value::Table(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Table(_))),
-            Value::Function(r) => matches!(
-                heap.get(r.0.key()),
-                Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
-            ),
-            Value::Coroutine(r) => matches!(heap.get(r.0.key()), Some(HeapValue::Coroutine(_))),
+            Value::String(r) => heap.get_bytes(r.0.key()).is_some(),
+            Value::Table(r) => heap.get_table(r.0.key()).is_some(),
+            Value::Function(r) => match r.0.key() {
+                StorageKey::NativeFunction(key) => heap.get_native_fn(key).is_some(),
+                StorageKey::Function(key) => heap.get_interpreted_fn(key).is_some(),
+                _ => unreachable!(),
+            },
+            Value::Coroutine(r) => heap.get_coroutine(r.0.key()).is_some(),
             Value::Nil | Value::Bool(_) | Value::Integer(_) | Value::Float(_) => return Ok(()),
         };
 
@@ -378,19 +364,6 @@ impl Value {
             Ok(())
         } else {
             Err(RuntimeErrorData::InvalidRef)
-        }
-    }
-
-    pub(crate) fn heap_key(&self) -> Option<HeapKey> {
-        match self {
-            Value::Nil => None,
-            Value::Bool(_) => None,
-            Value::Integer(_) => None,
-            Value::Float(_) => None,
-            Value::String(string_ref) => Some(string_ref.0.key()),
-            Value::Table(table_ref) => Some(table_ref.0.key()),
-            Value::Function(function_ref) => Some(function_ref.0.key()),
-            Value::Coroutine(coroutine_ref) => Some(coroutine_ref.0.key()),
         }
     }
 }

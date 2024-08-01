@@ -1,7 +1,9 @@
 use super::cache_pools::CachePools;
 use super::coroutine::{Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
-use super::heap::{GarbageCollector, GarbageCollectorConfig, Heap, HeapKey, HeapValue};
+use super::heap::{
+    CoroutineObjectKey, GarbageCollector, GarbageCollectorConfig, Heap, NativeFnObjectKey,
+};
 use super::metatable_keys::MetatableKeys;
 use super::native_function::NativeFunction;
 use super::value_stack::{StackValue, ValueStack};
@@ -61,7 +63,7 @@ pub(crate) struct CoroutineData {
     pub(crate) yield_permissions: YieldPermissions,
     pub(crate) continuation_state_set: bool,
     pub(crate) continuation_states: Vec<ValueStack>,
-    pub(crate) coroutine_stack: Vec<HeapKey>,
+    pub(crate) coroutine_stack: Vec<CoroutineObjectKey>,
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) in_progress_yield: Vec<(Continuation, bool)>,
 }
@@ -156,19 +158,19 @@ impl<'de> Deserialize<'de> for Vm {
     where
         D: serde::Deserializer<'de>,
     {
+        use crate::interpreter::heap::{BytesObjectKey, NativeFnObjectKey, Storage};
         use crate::interpreter::ByteString;
         use indexmap::IndexMap;
         use rustc_hash::FxBuildHasher;
-        use slotmap::SlotMap;
 
         #[derive(Deserialize)]
         #[serde(rename = "Vm")]
         struct Data {
             limits: VmLimits,
             gc: GarbageCollector,
-            heap_storage: SlotMap<HeapKey, HeapValue>,
-            tags: IndexMap<StackValue, HeapKey, FxBuildHasher>,
-            byte_strings: FastHashMap<ByteString, HeapKey>,
+            heap_storage: Storage,
+            tags: IndexMap<StackValue, NativeFnObjectKey, FxBuildHasher>,
+            byte_strings: FastHashMap<ByteString, BytesObjectKey>,
         }
 
         // enable deduplication
@@ -221,9 +223,9 @@ impl Vm {
     pub fn new() -> Self {
         let mut gc = GarbageCollector::default();
         let mut heap = Heap::new(&mut gc);
-        let registry_key = heap.create(&mut gc, HeapValue::Table(Default::default()));
+        let registry_key = heap.create_table(&mut gc, 0, 0);
         let registry = heap.create_ref(registry_key);
-        let default_environment_key = heap.create(&mut gc, HeapValue::Table(Default::default()));
+        let default_environment_key = heap.create_table(&mut gc, 0, 0);
         let default_environment = heap.create_ref(default_environment_key);
 
         let metatable_keys = MetatableKeys::new(&mut gc, &mut heap);
@@ -449,16 +451,11 @@ impl<'vm> VmContext<'vm> {
         let context = self.vm.execution_stack.last()?;
         let call = context.call_stack.last()?;
         let env_index = call.function_definition.env?;
-        let StackValue::HeapValue(env_key) = call.up_values.get(env_index) else {
+        let StackValue::Table(env_key) = call.up_values.get(env_index) else {
             return None;
         };
 
         let heap = &mut self.vm.execution_data.heap;
-
-        if !matches!(heap.get(env_key), Some(HeapValue::Table(_))) {
-            // not a table or was garbage collected
-            return None;
-        }
 
         Some(TableRef(heap.create_ref(env_key)))
     }
@@ -596,9 +593,9 @@ impl<'vm> VmContext<'vm> {
                 }
             }
 
-            let key = heap.create(
+            let key = heap.store_interpreted_fn(
                 gc,
-                HeapValue::Function(Function {
+                Function {
                     up_values: up_values.into(),
                     definition: Rc::new(FunctionDefinition {
                         label: label.clone(),
@@ -610,14 +607,14 @@ impl<'vm> VmContext<'vm> {
                         instructions: chunk.instructions,
                         source_map: chunk.source_map,
                     }),
-                }),
+                },
             );
 
             keys.push(key);
         }
 
         let key = keys.get(module.main).ok_or(RuntimeErrorData::MissingMain)?;
-        let heap_ref = heap.create_ref(*key);
+        let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
         if gc.should_step() {
@@ -641,9 +638,9 @@ impl<'vm> VmContext<'vm> {
     ) -> FunctionRef {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
-        let key = heap.create(gc, HeapValue::NativeFunction(callback.into()));
+        let key = heap.store_native_fn_with_key(gc, |_| callback.into());
 
-        let heap_ref = heap.create_ref(key);
+        let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
         if gc.should_step() {
@@ -753,7 +750,7 @@ impl<'vm> VmContext<'vm> {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
 
-        let key = heap.create_with_key(gc, move |key| {
+        let key = heap.store_native_fn_with_key(gc, move |key| {
             let function_callback = move |args, ctx: &mut VmContext| {
                 let heap = &mut ctx.vm.execution_data.heap;
 
@@ -767,7 +764,7 @@ impl<'vm> VmContext<'vm> {
                 (callback.callback)((Ok(args), state), ctx)
             };
 
-            HeapValue::NativeFunction(function_callback.into())
+            function_callback.into()
         });
 
         let callback = NativeFunction::from(
@@ -814,7 +811,7 @@ impl<'vm> VmContext<'vm> {
             },
         );
 
-        let size = std::mem::size_of::<HeapKey>() + std::mem::size_of_val(&callback);
+        let size = std::mem::size_of::<NativeFnObjectKey>() + std::mem::size_of_val(&callback);
 
         let gc = &mut self.vm.execution_data.gc;
 
@@ -822,7 +819,7 @@ impl<'vm> VmContext<'vm> {
             gc.modify_used_memory(size as _);
         }
 
-        let heap_ref = heap.create_ref(key);
+        let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
         if gc.should_step() {
@@ -853,21 +850,15 @@ impl<'vm> VmContext<'vm> {
         let function_key = function.0.key();
 
         let heap = &self.vm.execution_data.heap;
+        function.test_validity(heap)?;
 
-        if !matches!(
-            heap.get(function_key),
-            Some(HeapValue::Function(_) | HeapValue::NativeFunction(_))
-        ) {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        }
-
-        let coroutine = Box::new(Coroutine::new(function_key));
+        let coroutine = Coroutine::new(function_key);
 
         // move to the heap
         let gc = &mut self.vm.execution_data.gc;
         let heap = &mut self.vm.execution_data.heap;
 
-        let heap_key = heap.create(gc, HeapValue::Coroutine(coroutine));
+        let heap_key = heap.store_coroutine(gc, coroutine);
         let heap_ref = heap.create_ref(heap_key);
 
         // test after creating ref to avoid immediately collecting the generated value
@@ -951,7 +942,7 @@ impl<'vm> VmContext<'vm> {
 
     pub(crate) fn call_function_key<A: IntoMulti, R: FromMulti>(
         &mut self,
-        function_key: HeapKey,
+        function_value: StackValue,
         args: A,
     ) -> Result<R, RuntimeError> {
         let args = args.into_multi(self)?;
@@ -963,20 +954,20 @@ impl<'vm> VmContext<'vm> {
             value.test_validity(heap)?;
         }
 
-        let Some(value) = heap.get(function_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let result = match function_value {
+            StackValue::NativeFunction(key) => {
+                let Some(func) = heap.get_native_fn(key) else {
+                    return Err(RuntimeErrorData::InvalidRef.into());
+                };
 
-        let result = match value {
-            HeapValue::NativeFunction(func) => func.shallow_clone().call(function_key, args, self),
-            HeapValue::Function(func) => {
-                // no need to verify yield, it's handled within ExecutionContext::resume()
-                let context =
-                    ExecutionContext::new_function_call(function_key, func.clone(), args, self.vm);
+                func.shallow_clone().call(key, args, self)
+            }
+            StackValue::Function(key) => {
+                let context = ExecutionContext::new_function_call(key, args, self.vm);
                 self.vm.execution_stack.push(context);
                 ExecutionContext::resume(self.vm)
             }
-            _ => ExecutionContext::new_value_call(function_key.into(), args, self.vm).and_then(
+            _ => ExecutionContext::new_value_call(function_value, args, self.vm).and_then(
                 |context| {
                     self.vm.execution_stack.push(context);
                     ExecutionContext::resume(self.vm)

@@ -1,7 +1,7 @@
 use super::coroutine::Continuation;
-use super::heap::{Heap, HeapKey, HeapValue};
+use super::heap::{FnObjectKey, Heap};
 use super::instruction::{Instruction, Register, ReturnMode};
-use super::interpreted_function::{Function, FunctionDefinition};
+use super::interpreted_function::FunctionDefinition;
 use super::multi::MultiValue;
 use super::table::Table;
 use super::value_stack::{StackValue, ValueStack};
@@ -30,13 +30,14 @@ pub(crate) struct ExecutionContext {
 
 impl ExecutionContext {
     pub(crate) fn new_function_call(
-        function_key: HeapKey,
-        function: Function,
+        function_key: FnObjectKey,
         args: MultiValue,
         vm: &mut Vm,
     ) -> Self {
         let exec_data = &mut vm.execution_data;
         let mut value_stack = exec_data.cache_pools.create_value_stack();
+
+        let function = exec_data.heap.get_interpreted_fn(function_key).unwrap();
 
         value_stack.push(function_key.into());
         args.push_stack_multi(&mut value_stack);
@@ -66,29 +67,33 @@ impl ExecutionContext {
     ) -> Result<Self, RuntimeError> {
         let exec_data = &mut vm.execution_data;
 
-        let function_key = resolve_call(exec_data, value, |heap, value| {
+        let function_value = resolve_call(exec_data, value, |heap, value| {
             args.push_front(Value::from_stack_value(heap, value));
         })?;
 
         let mut call_stack = Vec::new();
         let mut value_stack = exec_data.cache_pools.create_value_stack();
 
-        match exec_data.heap.get(function_key).unwrap() {
-            HeapValue::NativeFunction(function) => {
-                let results =
-                    match function
-                        .shallow_clone()
-                        .call(function_key, args, &mut vm.context())
-                    {
-                        Ok(result) => result,
-                        Err(err) => {
-                            vm.execution_data.cache_pools.store_value_stack(value_stack);
-                            return Err(err);
-                        }
-                    };
+        match function_value {
+            StackValue::NativeFunction(key) => {
+                let Some(function) = exec_data.heap.get_native_fn(key) else {
+                    return Err(RuntimeErrorData::InvalidRef.into());
+                };
+
+                let results = match function.shallow_clone().call(key, args, &mut vm.context()) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        vm.execution_data.cache_pools.store_value_stack(value_stack);
+                        return Err(err);
+                    }
+                };
                 results.push_stack_multi(&mut value_stack);
             }
-            HeapValue::Function(function) => {
+            StackValue::Function(key) => {
+                let Some(function) = exec_data.heap.get_interpreted_fn(key) else {
+                    return Err(RuntimeErrorData::InvalidRef.into());
+                };
+
                 value_stack.push(value);
                 args.push_stack_multi(&mut value_stack);
 
@@ -106,7 +111,7 @@ impl ExecutionContext {
 
                 exec_data.cache_pools.store_multi(args);
             }
-            _ => unreachable!(),
+            _ => return Err(RuntimeErrorData::InvalidRef.into()),
         }
 
         Ok(Self {
@@ -144,15 +149,6 @@ impl ExecutionContext {
 
                     let stack_start = call.register_base + registry_index;
 
-                    let function_value = execution.value_stack.get(stack_start);
-                    let StackValue::HeapValue(heap_key) = function_value else {
-                        let type_name = function_value.type_name(&exec_data.heap);
-                        return Err(Self::unwind_error(
-                            vm,
-                            RuntimeErrorData::InvalidCall(type_name),
-                        ));
-                    };
-
                     let StackValue::Integer(mut arg_count) =
                         execution.value_stack.get(stack_start + 1)
                     else {
@@ -162,7 +158,8 @@ impl ExecutionContext {
                         ));
                     };
 
-                    let function_key = resolve_call(exec_data, heap_key.into(), |_, value| {
+                    let function_value = execution.value_stack.get(stack_start);
+                    let function_key = resolve_call(exec_data, function_value, |_, value| {
                         execution.value_stack.insert(stack_start + 2, value);
 
                         arg_count += 1;
@@ -171,15 +168,20 @@ impl ExecutionContext {
                             .set(stack_start + 1, StackValue::Integer(arg_count));
                     });
 
-                    let function_key = match function_key {
+                    let function_value = match function_key {
                         Ok(key) => key,
                         Err(err) => return Err(Self::unwind_error(vm, err)),
                     };
 
-                    let function_value = exec_data.heap.get(function_key);
-
                     match function_value {
-                        Some(HeapValue::NativeFunction(callback)) => {
+                        StackValue::NativeFunction(key) => {
+                            let Some(callback) = exec_data.heap.get_native_fn(key) else {
+                                return Err(Self::unwind_error(
+                                    vm,
+                                    RuntimeErrorData::InvalidInternalState,
+                                ));
+                            };
+
                             let callback = callback.shallow_clone();
 
                             // load args
@@ -220,7 +222,7 @@ impl ExecutionContext {
                                 old_stack_size + execution.value_stack.len();
 
                             // call the function
-                            let result = callback.call(function_key, args, &mut vm.context());
+                            let result = callback.call(key, args, &mut vm.context());
 
                             // revert tracked stack size before handling the result
                             vm.execution_data.tracked_stack_size = old_stack_size;
@@ -284,7 +286,14 @@ impl ExecutionContext {
 
                             exec_data.cache_pools.store_multi(return_values);
                         }
-                        Some(HeapValue::Function(func)) => {
+                        StackValue::Function(key) => {
+                            let Some(func) = exec_data.heap.get_interpreted_fn(key) else {
+                                return Err(Self::unwind_error(
+                                    vm,
+                                    RuntimeErrorData::InvalidInternalState,
+                                ));
+                            };
+
                             if return_mode == ReturnMode::TailCall {
                                 // transform the caller
                                 call.up_values.clone_from(&func.up_values);
@@ -311,9 +320,7 @@ impl ExecutionContext {
                             }
                         }
                         _ => {
-                            let type_name = function_value
-                                .map(|value| value.type_name(&exec_data.heap))
-                                .unwrap_or(TypeName::Nil);
+                            let type_name = function_value.type_name(&exec_data.heap);
 
                             return Err(Self::unwind_error(
                                 vm,
@@ -625,11 +632,11 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadBytes(dest, index) => {
-                    let Some(&heap_key) = definition.byte_strings.get(index as usize) else {
+                    let Some(&bytes_key) = definition.byte_strings.get(index as usize) else {
                         return Err(IllegalInstruction::MissingByteStringConstant(index).into());
                     };
 
-                    value_stack.set(self.register_base + dest as usize, heap_key.into());
+                    value_stack.set(self.register_base + dest as usize, bytes_key.into());
                 }
                 Instruction::ClearFrom(dest) => {
                     let dest_index = self.register_base + dest as usize;
@@ -650,30 +657,24 @@ impl CallContext {
                         return Err(IllegalInstruction::MissingNumberConstant(len_index).into());
                     };
 
-                    let heap_key = heap.create_table(gc, len as _, 0);
+                    let table_key = heap.create_table(gc, len as _, 0);
 
-                    value_stack.set(self.register_base + dest as usize, heap_key.into());
+                    value_stack.set(self.register_base + dest as usize, table_key.into());
 
                     if gc.should_step() {
                         return Ok(CallResult::StepGc);
                     }
                 }
                 Instruction::FlushToTable(dest, total, index_offset) => {
-                    let err = RuntimeErrorData::InvalidRef;
-
                     // get the table
                     let dest_index = self.register_base + dest as usize;
 
-                    let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
-                        return Err(err);
+                    let StackValue::Table(table_key) = value_stack.get(dest_index) else {
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
-                    let Some(table_value) = heap.get_mut(gc, heap_key) else {
-                        return Err(err);
-                    };
-
-                    let HeapValue::Table(table) = table_value else {
-                        return Err(err);
+                    let Some(table) = heap.get_table_mut(gc, table_key) else {
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
                     // get the index offset
@@ -706,21 +707,15 @@ impl CallContext {
                     }
                 }
                 Instruction::VariadicToTable(dest, src_start, index_offset) => {
-                    let table_err = RuntimeErrorData::InvalidRef;
-
                     // grab the table
                     let dest_index = self.register_base + dest as usize;
 
-                    let StackValue::HeapValue(heap_key) = value_stack.get(dest_index) else {
-                        return Err(table_err);
+                    let StackValue::Table(table_key) = value_stack.get(dest_index) else {
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
-                    let Some(table_value) = heap.get_mut(gc, heap_key) else {
-                        return Err(table_err);
-                    };
-
-                    let HeapValue::Table(table) = table_value else {
-                        return Err(table_err);
+                    let Some(table) = heap.get_table_mut(gc, table_key) else {
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
                     // get the index offset
@@ -741,7 +736,7 @@ impl CallContext {
                     // grab the count
                     let count_index = dest_index + 1;
                     let StackValue::Integer(count) = value_stack.get(count_index) else {
-                        return Err(table_err.clone());
+                        return Err(IllegalInstruction::MissingVariadicCount.into());
                     };
 
                     let start = self.register_base + src_start as usize;
@@ -768,7 +763,8 @@ impl CallContext {
                     };
                     self.next_instruction_index += 1;
 
-                    let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
+                    let Some(&bytes_key) = definition.byte_strings.get(*bytes_index as usize)
+                    else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
                         );
@@ -783,7 +779,7 @@ impl CallContext {
                         value_stack,
                         dest,
                         base,
-                        heap_key.into(),
+                        bytes_key.into(),
                         |table, key| table.get_from_map(key),
                     )? {
                         return Ok(call_result);
@@ -798,7 +794,8 @@ impl CallContext {
                     };
                     self.next_instruction_index += 1;
 
-                    let Some(&heap_key) = definition.byte_strings.get(*bytes_index as usize) else {
+                    let Some(&bytes_key) = definition.byte_strings.get(*bytes_index as usize)
+                    else {
                         return Err(
                             IllegalInstruction::MissingByteStringConstant(*bytes_index).into()
                         );
@@ -812,7 +809,7 @@ impl CallContext {
                         exec_data,
                         value_stack,
                         base,
-                        heap_key.into(),
+                        bytes_key.into(),
                         src,
                         |table, key, value| table.set_in_map(key, value),
                     )? {
@@ -913,18 +910,19 @@ impl CallContext {
                     }
                 }
                 Instruction::Closure(dest, function_index) => {
-                    let Some(&heap_key) = definition.functions.get(function_index as usize) else {
-                        return Err(RuntimeErrorData::IllegalInstruction(
-                            IllegalInstruction::MissingFunctionConstant(function_index),
-                        ));
+                    let Some(&function_key) = definition.functions.get(function_index as usize)
+                    else {
+                        return Err(
+                            IllegalInstruction::MissingFunctionConstant(function_index).into()
+                        );
                     };
 
-                    let HeapValue::Function(func) = heap.get(heap_key).unwrap() else {
-                        unreachable!()
+                    let Some(func) = heap.get_interpreted_fn(function_key) else {
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
                     if func.definition.up_values.is_empty() {
-                        value_stack.set(self.register_base + dest as usize, heap_key.into());
+                        value_stack.set(self.register_base + dest as usize, function_key.into());
                     } else {
                         // copy the function to pass captures
                         let mut func = func.clone();
@@ -940,9 +938,8 @@ impl CallContext {
 
                                     if !matches!(value, StackValue::Pointer(_)) {
                                         // move the stack value to the heap
-                                        let heap_key =
-                                            heap.create(gc, HeapValue::StackValue(value));
-                                        value = StackValue::Pointer(heap_key);
+                                        let key = heap.store_stack_value(gc, value);
+                                        value = StackValue::Pointer(key);
                                         value_stack.set(src_index, value);
                                     }
 
@@ -954,9 +951,8 @@ impl CallContext {
 
                                     if !matches!(value, StackValue::Pointer(_)) {
                                         // move the stack value to the heap
-                                        let heap_key =
-                                            heap.create(gc, HeapValue::StackValue(value));
-                                        value = StackValue::Pointer(heap_key);
+                                        let key = heap.store_stack_value(gc, value);
+                                        value = StackValue::Pointer(key);
                                         self.up_values.set(src_index, value);
                                     }
 
@@ -970,8 +966,8 @@ impl CallContext {
                         func.up_values = Rc::new(up_values);
 
                         // store the new function
-                        let heap_key = heap.create(gc, HeapValue::Function(func));
-                        value_stack.set(self.register_base + dest as usize, heap_key.into());
+                        let function_key = heap.store_interpreted_fn(gc, func);
+                        value_stack.set(self.register_base + dest as usize, function_key.into());
 
                         if gc.should_step() {
                             return Ok(CallResult::StepGc);
@@ -992,9 +988,9 @@ impl CallContext {
                 Instruction::CopyToUpValueDeref(dest, src) => {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
-                    if let StackValue::Pointer(heap_key) = self.up_values.get(dest as usize) {
+                    if let StackValue::Pointer(key) = self.up_values.get(dest as usize) {
                         // pointing to another stack value
-                        heap.set(gc, heap_key, HeapValue::StackValue(value));
+                        heap.set_stack_value(gc, key, value);
                     } else {
                         self.up_values.set(dest as usize, value);
                     }
@@ -1007,8 +1003,8 @@ impl CallContext {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
                     let dest_index = self.register_base + dest as usize;
 
-                    if let StackValue::Pointer(heap_key) = value_stack.get(dest_index) {
-                        heap.set(gc, heap_key, HeapValue::StackValue(value));
+                    if let StackValue::Pointer(key) = value_stack.get(dest_index) {
+                        heap.set_stack_value(gc, key, value);
                     } else {
                         value_stack.set(dest_index, value);
                     }
@@ -1025,26 +1021,30 @@ impl CallContext {
 
                     let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
-                    let StackValue::HeapValue(heap_key) = value_a else {
-                        return Err(RuntimeErrorData::NoLength(value_a.type_name(heap)));
-                    };
-
                     // default behavior
-                    let heap_value = heap.get(heap_key).unwrap();
-                    let len = match heap_value {
-                        HeapValue::Table(table) => table.list_len(),
-                        HeapValue::Bytes(bytes) => bytes.len(),
-                        _ => return Err(RuntimeErrorData::NoLength(heap_value.type_name(heap))),
+                    let len = match value_a {
+                        StackValue::Table(key) => {
+                            let Some(table) = heap.get_table(key) else {
+                                return Err(RuntimeErrorData::InvalidInternalState);
+                            };
+
+                            table.list_len()
+                        }
+                        StackValue::Bytes(key) => {
+                            let Some(bytes) = heap.get_bytes(key) else {
+                                return Err(RuntimeErrorData::InvalidInternalState);
+                            };
+
+                            bytes.len()
+                        }
+                        _ => return Err(RuntimeErrorData::NoLength(value_a.type_name(heap))),
                     };
 
                     // try metamethod before using the default value
-                    if matches!(heap_value, HeapValue::Table(_)) {
-                        if let Some(call_result) = self.unary_metamethod(
-                            heap,
-                            value_stack,
-                            (heap_key, metamethod_key),
-                            (dest, value_a),
-                        ) {
+                    if matches!(value_a, StackValue::Table(_)) {
+                        if let Some(call_result) =
+                            self.unary_metamethod(heap, value_stack, metamethod_key, dest, value_a)
+                        {
                             return Ok(call_result);
                         }
                     }
@@ -1268,8 +1268,11 @@ impl CallContext {
                         metamethod_key,
                         |a, b| a < b,
                         |a, b| a < b,
-                        |a, b| {
-                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) = (a, b) {
+                        |heap, a, b| {
+                            if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
+                                let bytes_a = heap.get_bytes(key_a).unwrap();
+                                let bytes_b = heap.get_bytes(key_b).unwrap();
+
                                 Some(bytes_a < bytes_b)
                             } else {
                                 None
@@ -1288,8 +1291,11 @@ impl CallContext {
                         metamethod_key,
                         |a, b| a <= b,
                         |a, b| a <= b,
-                        |a, b| {
-                            if let (HeapValue::Bytes(bytes_a), HeapValue::Bytes(bytes_b)) = (a, b) {
+                        |heap, a, b| {
+                            if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
+                                let bytes_a = heap.get_bytes(key_a).unwrap();
+                                let bytes_b = heap.get_bytes(key_b).unwrap();
+
                                 Some(bytes_a <= bytes_b)
                             } else {
                                 None
@@ -1314,8 +1320,8 @@ impl CallContext {
 
                         bytes.extend(string_a.iter());
                         bytes.extend(string_b.iter());
-                        let heap_key = heap.intern_bytes(gc, &bytes);
-                        value_stack.set(self.register_base + dest as usize, heap_key.into());
+                        let bytes_key = heap.intern_bytes(gc, &bytes);
+                        value_stack.set(self.register_base + dest as usize, bytes_key.into());
 
                         if gc.should_step() {
                             return Ok(CallResult::StepGc);
@@ -1420,38 +1426,26 @@ impl CallContext {
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
-        mut value: StackValue,
+        value: StackValue,
         coerce_value: impl Fn(&Heap, StackValue) -> Result<T, RuntimeErrorData>,
     ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
-        loop {
-            match value {
-                StackValue::HeapValue(heap_key) => {
-                    match self.binary_metamethod(
-                        heap,
-                        value_stack,
-                        (heap_key, metamethod_key),
-                        dest,
-                        value_a,
-                        value_b,
-                    ) {
-                        Some(call_result) => return Ok(ValueOrCallResult::CallResult(call_result)),
-                        None => {
-                            return Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap)))
-                        }
-                    }
-                }
-                StackValue::Pointer(heap_key) => {
-                    let HeapValue::StackValue(pointed) = heap.get(heap_key).unwrap() else {
-                        unreachable!()
-                    };
-
-                    value = *pointed;
-                }
-                _ => match coerce_value(heap, value) {
-                    Ok(coerced_value) => return Ok(ValueOrCallResult::Value(coerced_value)),
-                    Err(err) => return Err(err),
-                },
+        if value.lives_in_heap() {
+            match self.binary_metamethod(
+                heap,
+                value_stack,
+                (value, metamethod_key),
+                dest,
+                value_a,
+                value_b,
+            ) {
+                Some(call_result) => return Ok(ValueOrCallResult::CallResult(call_result)),
+                None => return Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
             }
+        }
+
+        match coerce_value(heap, value) {
+            Ok(coerced_value) => Ok(ValueOrCallResult::Value(coerced_value)),
+            Err(err) => Err(err),
         }
     }
 
@@ -1464,9 +1458,8 @@ impl CallContext {
         integer_operation: impl Fn(i64, i64) -> i64,
         float_operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        // using get since we resolve pointers in self.resolve_binary_operand()
-        let value_a = value_stack.get(self.register_base + a as usize);
-        let value_b = value_stack.get(self.register_base + b as usize);
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
         let resolved_a = match self.resolve_binary_operand(
             (heap, value_stack),
@@ -1532,9 +1525,8 @@ impl CallContext {
         metamethod_key: StackValue,
         operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        // using get since we resolve pointers in self.resolve_binary_operand()
-        let value_a = value_stack.get(self.register_base + a as usize);
-        let value_b = value_stack.get(self.register_base + b as usize);
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
         let float_a = match self.resolve_binary_operand(
             (heap, value_stack),
@@ -1578,9 +1570,8 @@ impl CallContext {
         metamethod_key: StackValue,
         operation: impl Fn(i64, i64) -> i64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        // using get since we resolve pointers in self.resolve_binary_operand()
-        let value_a = value_stack.get(self.register_base + a as usize);
-        let value_b = value_stack.get(self.register_base + b as usize);
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
         let int_a = match self.resolve_binary_operand(
             (heap, value_stack),
@@ -1674,7 +1665,7 @@ impl CallContext {
         metamethod_key: StackValue,
         integer_comparison: impl Fn(i64, i64) -> bool,
         float_comparison: impl Fn(f64, f64) -> bool,
-        heap_comparison: impl Fn(&HeapValue, &HeapValue) -> Option<bool>,
+        heap_comparison: impl Fn(&Heap, StackValue, StackValue) -> Option<bool>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1696,24 +1687,15 @@ impl CallContext {
             (StackValue::Float(float_a), StackValue::Float(float_b)) => {
                 float_comparison(float_a, float_b)
             }
-            (StackValue::HeapValue(key_a), StackValue::HeapValue(key_b)) => {
-                let a = heap.get(key_a).unwrap();
-                let b = heap.get(key_b).unwrap();
-
-                let Some(result) = heap_comparison(a, b) else {
+            _ => {
+                let Some(result) = heap_comparison(heap, value_a, value_b) else {
                     return Err(RuntimeErrorData::InvalidCompare(
-                        a.type_name(heap),
-                        b.type_name(heap),
+                        value_a.type_name(heap),
+                        value_b.type_name(heap),
                     ));
                 };
 
                 result
-            }
-            _ => {
-                return Err(RuntimeErrorData::InvalidCompare(
-                    value_a.type_name(heap),
-                    value_b.type_name(heap),
-                ))
             }
         };
 
@@ -1730,11 +1712,11 @@ impl CallContext {
         value_a: StackValue,
         value_b: StackValue,
     ) -> Option<CallResult> {
-        if let StackValue::HeapValue(heap_key) = value_a {
+        if value_a.lives_in_heap() {
             if let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
-                (heap_key, metamethod_key),
+                (value_a, metamethod_key),
                 dest,
                 value_a,
                 value_b,
@@ -1743,11 +1725,11 @@ impl CallContext {
             }
         }
 
-        if let StackValue::HeapValue(heap_key) = value_b {
+        if value_b.lives_in_heap() {
             if let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
-                (heap_key, metamethod_key),
+                (value_b, metamethod_key),
                 dest,
                 value_a,
                 value_b,
@@ -1763,7 +1745,7 @@ impl CallContext {
         &self,
         heap: &mut Heap,
         value_stack: &mut ValueStack,
-        (heap_key, metamethod_key): (HeapKey, StackValue),
+        (heap_key, metamethod_key): (StackValue, StackValue),
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
@@ -1772,12 +1754,7 @@ impl CallContext {
 
         let function_index = value_stack.len() - self.register_base;
 
-        value_stack.extend([
-            function_key.into(),
-            StackValue::Integer(2),
-            value_a,
-            value_b,
-        ]);
+        value_stack.extend([function_key, StackValue::Integer(2), value_a, value_b]);
 
         Some(CallResult::Call(
             function_index,
@@ -1791,26 +1768,18 @@ impl CallContext {
         (dest, a): (Register, Register),
         metamethod_key: StackValue,
         generate_error: impl Fn(TypeName) -> RuntimeErrorData,
-        operation: impl Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
+        primitive_operation: impl Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
 
-        let result = match value_a {
-            StackValue::HeapValue(heap_key) => {
-                return Ok(Some(
-                    self.unary_metamethod(
-                        heap,
-                        value_stack,
-                        (heap_key, metamethod_key),
-                        (dest, value_a),
-                    )
+        if value_a.lives_in_heap() {
+            return Ok(Some(
+                self.unary_metamethod(heap, value_stack, metamethod_key, dest, value_a)
                     .ok_or_else(|| generate_error(value_a.type_name(heap)))?,
-                ));
-            }
-            // already resolved the pointer
-            StackValue::Pointer(_) => unreachable!(),
-            _ => operation(heap, value_a)?,
-        };
+            ));
+        }
+
+        let result = primitive_operation(heap, value_a)?;
 
         value_stack.set(self.register_base + dest as usize, result);
 
@@ -1821,13 +1790,14 @@ impl CallContext {
         &self,
         heap: &mut Heap,
         value_stack: &mut ValueStack,
-        (heap_key, metamethod_key): (HeapKey, StackValue),
-        (dest, value_a): (Register, StackValue),
+        metamethod_key: StackValue,
+        dest: Register,
+        value: StackValue,
     ) -> Option<CallResult> {
-        let function_key = heap.get_metamethod(heap_key, metamethod_key)?;
+        let function_key = heap.get_metamethod(value, metamethod_key)?;
         let function_index = value_stack.len() - self.register_base;
 
-        value_stack.extend([function_key.into(), StackValue::Integer(1), value_a]);
+        value_stack.extend([function_key, StackValue::Integer(1), value]);
 
         Some(CallResult::Call(
             function_index,
@@ -1844,20 +1814,15 @@ impl CallContext {
         key: StackValue,
         getter: impl Fn(&Table, StackValue) -> StackValue,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        // initial test
-        let StackValue::HeapValue(base_heap_key) = base else {
-            return Err(RuntimeErrorData::AttemptToIndex(
-                base.type_name(&exec_data.heap),
-            ));
-        };
-
-        let heap_value = exec_data.heap.get(base_heap_key).unwrap();
-        let mut value = match heap_value {
-            HeapValue::Table(table) => getter(table, key),
-            HeapValue::Bytes(_) => StackValue::Nil,
+        let mut value = match base {
+            StackValue::Table(table_key) => {
+                let table = exec_data.heap.get_table(table_key).unwrap();
+                getter(table, key)
+            }
+            StackValue::Bytes(_) => StackValue::Nil,
             _ => {
                 return Err(RuntimeErrorData::AttemptToIndex(
-                    heap_value.type_name(&exec_data.heap),
+                    base.type_name(&exec_data.heap),
                 ))
             }
         };
@@ -1874,35 +1839,39 @@ impl CallContext {
             while next_index_base != StackValue::Nil {
                 index_base = next_index_base;
 
-                let StackValue::HeapValue(heap_key) = index_base else {
-                    return Err(RuntimeErrorData::AttemptToIndex(
-                        index_base.type_name(&exec_data.heap),
-                    ));
-                };
+                match index_base {
+                    StackValue::Table(table_key) => {
+                        let table = exec_data.heap.get_table(table_key).unwrap();
 
-                let heap_value = exec_data.heap.get(heap_key).unwrap();
-
-                match heap_value {
-                    HeapValue::Table(table) => {
                         value = getter(table, key);
 
                         if value != StackValue::Nil {
                             break;
                         }
                     }
-                    HeapValue::NativeFunction(_) | HeapValue::Function(_) => {
+                    StackValue::NativeFunction(_) | StackValue::Function(_) => {
                         let function_index = value_stack.len() - self.register_base;
-                        value_stack.extend([heap_key.into(), StackValue::Integer(2), base, key]);
+                        value_stack.extend([index_base, StackValue::Integer(2), base, key]);
 
                         return Ok(Some(CallResult::Call(
                             function_index,
                             ReturnMode::Destination(dest),
                         )));
                     }
-                    _ => {}
+                    StackValue::Bytes(_) => {}
+                    StackValue::Nil
+                    | StackValue::Bool(_)
+                    | StackValue::Integer(_)
+                    | StackValue::Float(_)
+                    | StackValue::Pointer(_)
+                    | StackValue::Coroutine(_) => {
+                        return Err(RuntimeErrorData::AttemptToIndex(
+                            index_base.type_name(&exec_data.heap),
+                        ));
+                    }
                 };
 
-                next_index_base = exec_data.heap.get_metavalue(heap_key, metamethod_key);
+                next_index_base = exec_data.heap.get_metavalue(index_base, metamethod_key);
                 chain_depth += 1;
 
                 if chain_depth > max_chain_depth {
@@ -1925,22 +1894,23 @@ impl CallContext {
         src: u8,
         setter: impl Fn(&mut Table, StackValue, StackValue),
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
-        let StackValue::HeapValue(heap_key) = table_stack_value else {
+        let StackValue::Table(table_key) = table_stack_value else {
             return Err(RuntimeErrorData::AttemptToIndex(
                 table_stack_value.type_name(&exec_data.heap),
             ));
         };
 
+        let heap = &mut exec_data.heap;
         let metamethod_key = exec_data.metatable_keys.newindex.0.key().into();
-        let src_value = value_stack.get_deref(&exec_data.heap, self.register_base + src as usize);
+        let src_value = value_stack.get_deref(heap, self.register_base + src as usize);
 
-        if let Some(function_key) = exec_data.heap.get_metamethod(heap_key, metamethod_key) {
+        if let Some(function_key) = heap.get_metamethod(table_key.into(), metamethod_key) {
             let function_index = value_stack.len() - self.register_base;
 
             value_stack.extend([
-                function_key.into(),
+                function_key,
                 StackValue::Integer(3),
-                heap_key.into(),
+                table_key.into(),
                 key,
                 src_value,
             ]);
@@ -1951,14 +1921,7 @@ impl CallContext {
             )))
         } else {
             let gc = &mut exec_data.gc;
-            let heap = &mut exec_data.heap;
-            let table_value = heap.get_mut(gc, heap_key).unwrap();
-
-            let HeapValue::Table(table) = table_value else {
-                let value = heap.get(heap_key).unwrap();
-                let type_name = value.type_name(heap);
-                return Err(RuntimeErrorData::AttemptToIndex(type_name));
-            };
+            let table = heap.get_table_mut(gc, table_key).unwrap();
 
             let original_size = table.heap_size();
 
@@ -2020,8 +1983,8 @@ impl CallContext {
 
             let value = slice[src_index].get_deref(heap);
 
-            if let StackValue::Pointer(heap_key) = slice[dest_index] {
-                heap.set(gc, heap_key, HeapValue::StackValue(value));
+            if let StackValue::Pointer(key) = slice[dest_index] {
+                heap.set_stack_value(gc, key, value);
             } else {
                 slice[dest_index] = value;
             }
@@ -2030,25 +1993,20 @@ impl CallContext {
 }
 
 fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<[u8]>> {
-    let heap_key = match value {
-        StackValue::HeapValue(heap_key) => heap_key,
-        StackValue::Integer(i) => return Some(i.to_string().into_bytes().into()),
-        StackValue::Float(f) => return Some(format!("{f:?}").into_bytes().into()),
-        StackValue::Pointer(key) => {
-            let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
-                unreachable!();
-            };
-
-            return stringify(heap, value);
+    match value {
+        StackValue::Bytes(key) => {
+            let bytes = heap.get_bytes(key).unwrap();
+            Some(Cow::Borrowed(bytes.as_bytes()))
         }
-        StackValue::Nil | StackValue::Bool(_) => return None,
-    };
+        StackValue::Integer(i) => Some(i.to_string().into_bytes().into()),
+        StackValue::Float(f) => Some(format!("{f:?}").into_bytes().into()),
+        StackValue::Pointer(key) => {
+            let value = *heap.get_stack_value(key).unwrap();
 
-    let HeapValue::Bytes(bytes) = heap.get(heap_key).unwrap() else {
-        return None;
-    };
-
-    Some(Cow::Borrowed(bytes.as_bytes()))
+            stringify(heap, value)
+        }
+        _ => None,
+    }
 }
 
 fn cast_integer(
@@ -2088,15 +2046,11 @@ fn coerce_stack_value_to_integer(
         }
         StackValue::Integer(int) => Ok(int),
         StackValue::Pointer(key) => {
-            let HeapValue::StackValue(value) = *heap.get(key).unwrap() else {
-                unreachable!();
-            };
+            let value = *heap.get_stack_value(key).unwrap();
 
             coerce_stack_value_to_integer(heap, value, generate_err)
         }
-        StackValue::HeapValue(_) | StackValue::Nil | StackValue::Bool(_) => {
-            Err(generate_err(value.type_name(heap)))
-        }
+        _ => Err(generate_err(value.type_name(heap))),
     }
 }
 
@@ -2117,30 +2071,23 @@ fn resolve_call(
     exec_data: &mut ExecutionAccessibleData,
     mut value: StackValue,
     mut prepend_arg: impl FnMut(&mut Heap, StackValue),
-) -> Result<HeapKey, RuntimeErrorData> {
+) -> Result<StackValue, RuntimeErrorData> {
     let call_key = exec_data.metatable_keys.call.0.key().into();
     let max_chain_depth = exec_data.limits.metatable_chain_depth;
     let mut chain_depth = 0;
 
     loop {
-        let StackValue::HeapValue(heap_key) = value else {
-            return Err(RuntimeErrorData::InvalidCall(
-                value.type_name(&exec_data.heap),
-            ));
+        match value {
+            StackValue::Function(_) | StackValue::NativeFunction(_) => return Ok(value),
+            StackValue::Bytes(_) | StackValue::Table(_) => {}
+            _ => {
+                return Err(RuntimeErrorData::InvalidCall(
+                    value.type_name(&exec_data.heap),
+                ))
+            }
         };
 
-        let Some(heap_value) = exec_data.heap.get(heap_key) else {
-            return Err(RuntimeErrorData::InvalidRef);
-        };
-
-        if matches!(
-            heap_value,
-            HeapValue::Function(_) | HeapValue::NativeFunction(_)
-        ) {
-            break Ok(heap_key);
-        }
-
-        let next_value = exec_data.heap.get_metavalue(heap_key, call_key);
+        let next_value = exec_data.heap.get_metavalue(value, call_key);
         prepend_arg(&mut exec_data.heap, value);
         value = next_value;
 

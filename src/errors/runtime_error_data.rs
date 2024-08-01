@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub enum RuntimeErrorData {
     IllegalInstruction(IllegalInstruction),
     InvalidRef,
+    InvalidInternalState,
     MissingMain,
     StackOverflow,
     InvalidCall(TypeName),
@@ -106,6 +107,7 @@ impl std::fmt::Display for RuntimeErrorData {
                 write!(f, "illegal instruction, {instruction}")
             }
             RuntimeErrorData::InvalidRef => write!(f, "invalid ref"),
+            RuntimeErrorData::InvalidInternalState => write!(f, "invalid internal state"),
             RuntimeErrorData::MissingMain => write!(f, "module missing main chunk"),
             RuntimeErrorData::StackOverflow => write!(f, "stack overflow"),
             RuntimeErrorData::InvalidCall(type_name) => {

@@ -1,4 +1,4 @@
-use super::heap::HeapKey;
+use super::heap::{BytesObjectKey, FnObjectKey};
 use super::instruction::Instruction;
 use super::value_stack::ValueStack;
 use super::{SourceMapping, UpValueSource};
@@ -17,9 +17,9 @@ pub(crate) struct FunctionDefinition {
     pub(crate) label: Rc<str>,
     pub(crate) env: Option<usize>,
     pub(crate) up_values: Vec<UpValueSource>,
-    pub(crate) byte_strings: Vec<HeapKey>,
+    pub(crate) byte_strings: Vec<BytesObjectKey>,
     pub(crate) numbers: Vec<i64>,
-    pub(crate) functions: Vec<HeapKey>,
+    pub(crate) functions: Vec<FnObjectKey>,
     pub(crate) instructions: Vec<Instruction>,
     pub(crate) source_map: Vec<SourceMapping>,
 }
@@ -42,11 +42,11 @@ impl FunctionDefinition {
         // byte_strings
         size += self.up_values.len() * std::mem::size_of::<UpValueSource>();
         // byte_strings
-        size += self.byte_strings.len() * std::mem::size_of::<HeapKey>();
+        size += self.byte_strings.len() * std::mem::size_of::<BytesObjectKey>();
         // numbers
         size += self.numbers.len() * std::mem::size_of::<i64>();
         // functions
-        size += self.functions.len() * std::mem::size_of::<HeapKey>();
+        size += self.functions.len() * std::mem::size_of::<FnObjectKey>();
         // instructions
         size += self.instructions.len() * std::mem::size_of::<Instruction>();
         // source_map

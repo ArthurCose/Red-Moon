@@ -1,4 +1,4 @@
-use super::heap::{HeapRef, HeapValue};
+use super::heap::{HeapRef, Storage, TableObjectKey};
 use super::table::Table;
 use super::value_stack::StackValue;
 use super::{FromValue, IntoValue, Value, VmContext};
@@ -6,21 +6,17 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TableRef(pub(crate) HeapRef);
+pub struct TableRef(pub(crate) HeapRef<TableObjectKey>);
 
 impl TableRef {
     #[inline]
     pub fn id(&self) -> u64 {
-        self.0.key().data().as_ffi()
+        Storage::key_to_id(self.0.key().data(), Storage::TABLES_TAG)
     }
 
     pub fn metatable(&self, ctx: &mut VmContext) -> Result<Option<TableRef>, RuntimeError> {
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(table_value) = heap.get(self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
-
-        let HeapValue::Table(table) = table_value else {
+        let Some(table) = heap.get_table(self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -40,7 +36,7 @@ impl TableRef {
             .map(|metatable_ref| {
                 let key = metatable_ref.0.key();
 
-                if heap.get(key).is_some() {
+                if heap.get_table(key).is_some() {
                     Ok(key)
                 } else {
                     Err(RuntimeErrorData::InvalidRef)
@@ -48,11 +44,7 @@ impl TableRef {
             })
             .transpose()?;
 
-        let Some(heap_value) = heap.get_mut(gc, self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
-
-        let HeapValue::Table(table) = heap_value else {
+        let Some(table) = heap.get_table_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -70,7 +62,7 @@ impl TableRef {
         let key = key.into_value(ctx)?.to_stack_value();
         let heap = &mut ctx.vm.execution_data.heap;
 
-        let Some(HeapValue::Table(table)) = heap.get(self.0.key()) else {
+        let Some(table) = heap.get_table(self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -97,7 +89,7 @@ impl TableRef {
         key.test_validity(heap)?;
         value.test_validity(heap)?;
 
-        let Some(HeapValue::Table(table)) = heap.get_mut(gc, self.0.key()) else {
+        let Some(table) = heap.get_table_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -117,7 +109,7 @@ impl TableRef {
     /// Gets the length of the sequential part of the table without invoking the `__len` metamethod.
     pub fn raw_len(&self, ctx: &VmContext) -> Result<usize, RuntimeError> {
         let heap = &ctx.vm.execution_data.heap;
-        let Some(HeapValue::Table(table)) = heap.get(self.0.key()) else {
+        let Some(table) = heap.get_table(self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -134,7 +126,7 @@ impl TableRef {
         let method_key = ctx.metatable_keys().index.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        if let Some(function_key) = heap.get_metamethod(table_key, method_key.into()) {
+        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key.into()) {
             return ctx.call_function_key(function_key, (self.clone(), key));
         };
 
@@ -156,7 +148,7 @@ impl TableRef {
         let method_key = ctx.metatable_keys().newindex.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        if let Some(function_key) = heap.get_metamethod(table_key, method_key.into()) {
+        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key.into()) {
             return ctx.call_function_key(function_key, (self.clone(), key, value));
         };
 
@@ -168,7 +160,7 @@ impl TableRef {
     pub fn len(&self, ctx: &mut VmContext) -> Result<usize, RuntimeError> {
         let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
+        let Some(table) = heap.get_table(table_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -176,7 +168,7 @@ impl TableRef {
         let len_key = ctx.metatable_keys().len.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(function_key) = heap.get_metamethod(table_key, len_key.into()) else {
+        let Some(function_key) = heap.get_metamethod(table_key.into(), len_key.into()) else {
             return Ok(len);
         };
 
@@ -187,7 +179,7 @@ impl TableRef {
     pub fn clear(&self, ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(HeapValue::Table(table)) = heap.get_mut(gc, self.0.key()) else {
+        let Some(table) = heap.get_table_mut(gc, self.0.key()) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -216,7 +208,7 @@ impl TableRef {
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -245,7 +237,7 @@ impl TableRef {
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get_mut(gc, table_key) else {
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -275,7 +267,7 @@ impl TableRef {
 
         let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
+        let Some(table) = heap.get_table(table_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -295,7 +287,7 @@ impl TableRef {
     pub fn is_map_empty(&self, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
         let heap = &mut ctx.vm.execution_data.heap;
         let table_key = self.0.key();
-        let Some(HeapValue::Table(table)) = heap.get(table_key) else {
+        let Some(table) = heap.get_table(table_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 

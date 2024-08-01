@@ -1,4 +1,4 @@
-use super::heap::HeapKey;
+use super::heap::TableObjectKey;
 use super::value_stack::{StackValue, ValueStack};
 use super::MultiValue;
 use crate::vec_cell::VecCell;
@@ -10,7 +10,7 @@ pub(crate) struct CachePools {
     pub(crate) multivalues: VecCell<MultiValue>,
     pub(crate) value_stacks: VecCell<ValueStack>,
     pub(crate) short_value_stacks: VecCell<ValueStack>,
-    pub(crate) weak_associations: VecCell<Vec<(HeapKey, StackValue)>>,
+    pub(crate) weak_associations: VecCell<Vec<(TableObjectKey, StackValue)>>,
 }
 
 impl CachePools {
@@ -51,11 +51,11 @@ impl CachePools {
         }
     }
 
-    pub(crate) fn create_weak_associations_list(&self) -> Vec<(HeapKey, StackValue)> {
+    pub(crate) fn create_weak_associations_list(&self) -> Vec<(TableObjectKey, StackValue)> {
         self.weak_associations.pop().unwrap_or_default()
     }
 
-    pub(crate) fn store_weak_associations_list(&self, mut list: Vec<(HeapKey, StackValue)>) {
+    pub(crate) fn store_weak_associations_list(&self, mut list: Vec<(TableObjectKey, StackValue)>) {
         if self.weak_associations.len() < RECYCLE_LIMIT {
             list.clear();
             self.weak_associations.push(list);

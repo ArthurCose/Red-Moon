@@ -1,6 +1,6 @@
-use super::heap::HeapKey;
+use super::execution::ExecutionContext;
+use super::heap::{CoroutineObjectKey, NativeFnObjectKey, StorageKey};
 use super::value_stack::ValueStack;
-use super::{execution::ExecutionContext, heap::HeapValue};
 use super::{MultiValue, ReturnMode, Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use std::rc::Rc;
@@ -17,8 +17,8 @@ pub(crate) struct YieldPermissions {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) enum Continuation {
-    Entry(HeapKey),
-    Callback(HeapKey, ValueStack),
+    Entry(StorageKey),
+    Callback(NativeFnObjectKey, ValueStack),
     Execution {
         execution: ExecutionContext,
         return_mode: ReturnMode,
@@ -54,7 +54,7 @@ impl Coroutine {
         size
     }
 
-    pub(crate) fn new(function_key: HeapKey) -> Self {
+    pub(crate) fn new(function_key: StorageKey) -> Self {
         Self {
             status: CoroutineStatus::Suspended,
             continuation_stack: vec![(Continuation::Entry(function_key), true)],
@@ -63,7 +63,7 @@ impl Coroutine {
     }
 
     pub fn resume(
-        co_heap_key: HeapKey,
+        co_key: CoroutineObjectKey,
         mut args: MultiValue,
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
@@ -75,7 +75,7 @@ impl Coroutine {
             value.test_validity(heap)?;
         }
 
-        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
+        let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -88,7 +88,7 @@ impl Coroutine {
 
         coroutine.status = CoroutineStatus::Running;
         let coroutine_data = &mut vm.execution_data.coroutine_data;
-        coroutine_data.coroutine_stack.push(co_heap_key);
+        coroutine_data.coroutine_stack.push(co_key);
 
         let previous_yield_permissions = coroutine_data.yield_permissions;
 
@@ -107,14 +107,14 @@ impl Coroutine {
             coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
 
             let result = match continuation {
-                Continuation::Entry(key) => match vm.execution_data.heap.get(key).unwrap() {
-                    HeapValue::Function(func) => {
-                        let context =
-                            ExecutionContext::new_function_call(key, func.clone(), args, vm);
+                Continuation::Entry(key) => match key {
+                    StorageKey::Function(key) => {
+                        let context = ExecutionContext::new_function_call(key, args, vm);
                         vm.execution_stack.push(context);
                         ExecutionContext::resume(vm)
                     }
-                    HeapValue::NativeFunction(native_function) => {
+                    StorageKey::NativeFunction(key) => {
+                        let native_function = vm.execution_data.heap.get_native_fn(key).unwrap();
                         native_function.shallow_clone().call(key, args, ctx)
                     }
                     _ => unreachable!(),
@@ -153,10 +153,10 @@ impl Coroutine {
                     let vm = &mut *ctx.vm;
 
                     if let RuntimeErrorData::Yield(args) = err.data {
-                        Self::handle_yield(co_heap_key, vm);
+                        Self::handle_yield(co_key, vm);
                         break Ok(args);
                     } else {
-                        match Self::unwind_error(co_heap_key, err, ctx) {
+                        match Self::unwind_error(co_key, err, ctx) {
                             // converted to Ok ("pcall"-like function)
                             Ok(value) => args = value,
                             Err(new_err) => {
@@ -164,7 +164,7 @@ impl Coroutine {
 
                                 if let RuntimeErrorData::Yield(args) = err.data {
                                     // continuation callback yielded
-                                    Self::handle_yield(co_heap_key, ctx.vm);
+                                    Self::handle_yield(co_key, ctx.vm);
                                     break Ok(args);
                                 }
 
@@ -172,8 +172,7 @@ impl Coroutine {
                                 let vm = &mut *ctx.vm;
                                 let heap = &mut vm.execution_data.heap;
 
-                                let Some(HeapValue::Coroutine(coroutine)) =
-                                    heap.get_mut_unmarked(co_heap_key)
+                                let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key)
                                 else {
                                     unreachable!();
                                 };
@@ -191,7 +190,7 @@ impl Coroutine {
             let vm = &mut *ctx.vm;
             let heap = &mut vm.execution_data.heap;
 
-            let Some(HeapValue::Coroutine(co)) = heap.get_mut_unmarked(co_heap_key) else {
+            let Some(co) = heap.get_coroutine_mut_unmarked(co_key) else {
                 return Err(RuntimeErrorData::InvalidRef.into());
             };
 
@@ -202,7 +201,7 @@ impl Coroutine {
         let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
 
-        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
+        let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
         let new_size = coroutine.heap_size();
@@ -226,12 +225,12 @@ impl Coroutine {
         result
     }
 
-    fn handle_yield(co_heap_key: HeapKey, vm: &mut Vm) {
+    fn handle_yield(co_heap_key: CoroutineObjectKey, vm: &mut Vm) {
         let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
 
         // using get_mut instead of get_mut_unmarked as we're adding to the continuation_stack
-        let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut(gc, co_heap_key) else {
+        let Some(coroutine) = heap.get_coroutine_mut(gc, co_heap_key) else {
             unreachable!();
         };
 
@@ -245,7 +244,7 @@ impl Coroutine {
     }
 
     fn unwind_error(
-        co_heap_key: HeapKey,
+        co_key: CoroutineObjectKey,
         mut err: RuntimeError,
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
@@ -261,7 +260,7 @@ impl Coroutine {
 
             let vm = &mut *ctx.vm;
             let heap = &mut vm.execution_data.heap;
-            let Some(HeapValue::Coroutine(coroutine)) = heap.get_mut_unmarked(co_heap_key) else {
+            let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
                 unreachable!();
             };
 

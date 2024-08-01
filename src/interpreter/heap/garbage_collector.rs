@@ -1,5 +1,7 @@
-use super::HeapValue;
-use super::{Heap, HeapKey};
+use super::Heap;
+use super::NativeFnObjectKey;
+use super::StorageKey;
+use super::TableObjectKey;
 use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::execution::ExecutionContext;
@@ -69,13 +71,13 @@ pub(crate) struct GarbageCollector {
     traversed_definitions: FastHashSet<usize>,
     /// gray + black, excluded keys are white
     #[cfg_attr(feature = "serde", serde(skip))]
-    marked: slotmap::SecondaryMap<HeapKey, Mark>,
+    marked: FastHashMap<StorageKey, Mark>,
     /// gray or pending sweep
     #[cfg_attr(feature = "serde", serde(skip))]
-    phase_queue: Vec<HeapKey>,
+    phase_queue: Vec<StorageKey>,
     /// element_key/value -> Vec<(table_key, element_key)>
     #[cfg_attr(feature = "serde", serde(skip))]
-    weak_associations: FastHashMap<HeapKey, Vec<(HeapKey, StackValue)>>,
+    weak_associations: FastHashMap<StorageKey, Vec<(TableObjectKey, StackValue)>>,
 }
 
 impl Clone for GarbageCollector {
@@ -115,8 +117,8 @@ impl GarbageCollector {
         self.accumulated = (self.accumulated as isize + change).max(0) as usize;
     }
 
-    pub(crate) fn acknowledge_write(&mut self, heap_key: HeapKey) {
-        let Some(mark) = self.marked.get_mut(heap_key) else {
+    pub(crate) fn acknowledge_write(&mut self, key: StorageKey) {
+        let Some(mark) = self.marked.get_mut(&key) else {
             // not marked, we'll handle this through normal traversal
             return;
         };
@@ -128,7 +130,7 @@ impl GarbageCollector {
 
         // mark as gray again and place in the queue
         *mark = Mark::Gray;
-        self.phase_queue.push(heap_key);
+        self.phase_queue.push(key);
     }
 
     pub(crate) fn is_running(&self) -> bool {
@@ -248,9 +250,9 @@ impl GarbageCollector {
 
         for (continuation, _) in &coroutine_data.in_progress_yield {
             match continuation {
-                Continuation::Entry(key) => self.mark_heap_key(*key),
+                Continuation::Entry(key) => self.mark_storage_key(*key),
                 Continuation::Callback(key, state) => {
-                    self.mark_heap_key(*key);
+                    self.mark_storage_key(key.into());
                     self.mark_value_stack(state);
                 }
                 Continuation::Execution { execution, .. } => self.mark_execution_context(execution),
@@ -291,7 +293,7 @@ impl GarbageCollector {
         debug_assert!(self.phase_queue.is_empty());
 
         for key in heap.storage.keys() {
-            if !self.marked.contains_key(key) {
+            if !self.marked.contains_key(&key) {
                 self.phase_queue.push(key);
             }
         }
@@ -307,25 +309,23 @@ impl GarbageCollector {
         while let Some(key) = self.phase_queue.pop() {
             // clear weak associations
             if let Some(list) = self.weak_associations.remove(&key) {
-                for &(table_key, element_key) in &list {
-                    let Some(table_heap_value) = heap.storage.get_mut(table_key) else {
-                        continue;
-                    };
+                let key_stack_value: StackValue = key.into();
 
-                    let HeapValue::Table(table) = table_heap_value else {
-                        unreachable!();
+                for &(table_key, element_key) in &list {
+                    let Some(table) = heap.storage.tables.get_mut(table_key) else {
+                        continue;
                     };
 
                     // we need to test to see if the association is still true
 
                     // test key
-                    if element_key == StackValue::HeapValue(key) {
+                    if element_key == key_stack_value {
                         table.set(element_key, StackValue::default());
                         continue;
                     }
 
                     // test value
-                    if table.get(element_key) == StackValue::HeapValue(key) {
+                    if table.get(element_key) == key_stack_value {
                         table.set(element_key, StackValue::default());
                     }
                 }
@@ -334,27 +334,42 @@ impl GarbageCollector {
             };
 
             // delete
-            let value = heap.storage.remove(key).unwrap();
-
-            self.used_memory -= value.gc_size();
-
-            match value {
-                HeapValue::Bytes(bytes) => {
-                    heap.byte_strings.remove(&bytes);
+            match key {
+                StorageKey::StackValue(key) => {
+                    heap.storage.stack_values.remove(key);
+                    self.used_memory -= std::mem::size_of::<StackValue>();
                 }
-                HeapValue::Table(mut table) => {
+                StorageKey::Bytes(key) => {
+                    let bytes = heap.storage.byte_strings.remove(key).unwrap();
+                    heap.byte_strings.remove(&bytes);
+                    self.used_memory -= std::mem::size_of_val(&bytes) + bytes.heap_size();
+                }
+                StorageKey::Table(key) => {
+                    let mut table = heap.storage.tables.remove(key).unwrap();
+                    self.used_memory -= std::mem::size_of_val(&table) + table.heap_size();
+
                     if heap.recycled_tables.len() < RECYCLE_LIMIT {
                         table.reset();
                         heap.recycled_tables.push(table);
                     }
                 }
-                HeapValue::NativeFunction(_) => {
+                StorageKey::NativeFunction(key) => {
+                    let native_fn = heap.storage.native_functions.remove(key).unwrap();
+                    self.used_memory -= std::mem::size_of_val(&native_fn);
+
                     if let Some(callback) = heap.resume_callbacks.remove(&key) {
-                        self.used_memory -=
-                            std::mem::size_of::<HeapKey>() + std::mem::size_of_val(&callback);
+                        self.used_memory -= std::mem::size_of::<NativeFnObjectKey>()
+                            + std::mem::size_of_val(&callback);
                     }
                 }
-                _ => {}
+                StorageKey::Function(key) => {
+                    let function = heap.storage.functions.remove(key).unwrap();
+                    self.used_memory -= std::mem::size_of_val(&function) + function.heap_size();
+                }
+                StorageKey::Coroutine(key) => {
+                    let co = heap.storage.coroutines.remove(key).unwrap();
+                    self.used_memory -= std::mem::size_of_val(&co) + co.heap_size();
+                }
             }
 
             // test against limit
@@ -372,19 +387,19 @@ impl GarbageCollector {
     }
 
     fn mark_table_value(&mut self, value: &StackValue) {
-        let StackValue::HeapValue(key) = value else {
+        let Some(key) = value.as_storage_key() else {
             return;
         };
 
-        self.mark_heap_key(*key);
+        self.mark_storage_key(key);
     }
 
     fn mark_stack_value(&mut self, value: &StackValue) {
-        let (StackValue::HeapValue(key) | StackValue::Pointer(key)) = value else {
+        let Some(key) = value.as_storage_key() else {
             return;
         };
 
-        self.mark_heap_key(*key);
+        self.mark_storage_key(key);
     }
 
     fn mark_value_stack(&mut self, value_stack: &ValueStack) {
@@ -393,8 +408,8 @@ impl GarbageCollector {
         }
     }
 
-    fn mark_heap_key(&mut self, key: HeapKey) {
-        if self.marked.contains_key(key) {
+    fn mark_storage_key(&mut self, key: StorageKey) {
+        if self.marked.contains_key(&key) {
             return;
         }
 
@@ -407,57 +422,54 @@ impl GarbageCollector {
         metatable_keys: &MetatableKeys,
         cache_pools: &CachePools,
         heap: &mut Heap,
-        key: HeapKey,
+        key: StorageKey,
     ) {
-        let value = heap.storage.get(key).unwrap();
+        match key {
+            StorageKey::Function(key) => {
+                let function = heap.get_interpreted_fn(key).unwrap();
 
-        match value {
-            HeapValue::Function(function) => {
                 self.mark_value_stack(&function.up_values);
 
                 let definition_key = Rc::as_ptr(&function.definition) as usize;
 
                 if self.traversed_definitions.insert(definition_key) {
                     for key in &function.definition.byte_strings {
-                        self.mark_heap_key(*key);
+                        self.mark_storage_key(key.into());
                     }
 
                     for key in &function.definition.functions {
-                        self.mark_heap_key(*key);
+                        self.mark_storage_key(key.into());
                     }
                 }
             }
-            HeapValue::Table(table) => {
+            StorageKey::Table(table_key) => {
+                let table = heap.get_table(table_key).unwrap();
+
                 let mut weak_keys = false;
                 let mut weak_values = false;
 
                 if let Some(key) = table.metatable {
-                    self.mark_heap_key(key);
+                    self.mark_storage_key(key.into());
 
-                    let HeapValue::Table(metatable) = heap.storage.get(key).unwrap() else {
-                        unreachable!();
-                    };
+                    let metatable = heap.get_table(key).unwrap();
 
                     let mode_key = metatable_keys.mode.0.key.into();
                     let mode_value = metatable.get(mode_key);
 
-                    if let StackValue::HeapValue(mode_heap_key) = mode_value {
-                        if let HeapValue::Bytes(bytes) = heap.storage.get(mode_heap_key).unwrap() {
-                            weak_keys = bytes.as_bytes().contains(&b'k');
-                            weak_values = bytes.as_bytes().contains(&b'v');
-                        }
+                    if let StackValue::Bytes(mode_key) = mode_value {
+                        let bytes = heap.get_bytes(mode_key).unwrap();
+                        weak_keys = bytes.as_bytes().contains(&b'k');
+                        weak_values = bytes.as_bytes().contains(&b'v');
                     }
                 }
 
                 if weak_keys {
-                    let table_heap_key = key;
-
                     for &element_key in table.map.keys() {
-                        if let StackValue::HeapValue(heap_key) = element_key {
+                        if let Some(storage_key) = element_key.as_storage_key() {
                             self.acknowledge_weak_association(
                                 cache_pools,
-                                heap_key,
-                                table_heap_key,
+                                storage_key,
+                                table_key,
                                 element_key,
                             );
                         }
@@ -469,30 +481,28 @@ impl GarbageCollector {
                 }
 
                 if weak_values {
-                    let table_heap_key = key;
-
                     for (i, value) in table.list.iter().enumerate() {
-                        let StackValue::HeapValue(heap_key) = value else {
+                        let Some(storage_key) = value.as_storage_key() else {
                             continue;
                         };
 
                         self.acknowledge_weak_association(
                             cache_pools,
-                            *heap_key,
-                            table_heap_key,
+                            storage_key,
+                            table_key,
                             StackValue::Integer((i + 1) as _),
                         );
                     }
 
                     for (element_key, value) in &table.map {
-                        let StackValue::HeapValue(heap_key) = value else {
+                        let Some(storage_key) = value.as_storage_key() else {
                             continue;
                         };
 
                         self.acknowledge_weak_association(
                             cache_pools,
-                            *heap_key,
-                            table_heap_key,
+                            storage_key,
+                            table_key,
                             *element_key,
                         );
                     }
@@ -506,12 +516,14 @@ impl GarbageCollector {
                     }
                 }
             }
-            HeapValue::Coroutine(co) => {
+            StorageKey::Coroutine(key) => {
+                let co = heap.get_coroutine(key).unwrap();
+
                 for (continuation, _) in &co.continuation_stack {
                     match continuation {
-                        Continuation::Entry(key) => self.mark_heap_key(*key),
+                        Continuation::Entry(key) => self.mark_storage_key(*key),
                         Continuation::Callback(key, state) => {
-                            self.mark_heap_key(*key);
+                            self.mark_storage_key(key.into());
                             self.mark_value_stack(state);
                         }
                         Continuation::Execution { execution, .. } => {
@@ -520,12 +532,15 @@ impl GarbageCollector {
                     }
                 }
             }
-            HeapValue::StackValue(StackValue::HeapValue(key)) => self.mark_heap_key(*key),
+            StorageKey::StackValue(key) => {
+                let value = heap.get_stack_value(key).unwrap();
+                self.mark_stack_value(value);
+            }
             _ => {}
         }
     }
 
-    fn mark_heap_key_root(&mut self, key: HeapKey) {
+    fn mark_heap_key_root(&mut self, key: StorageKey) {
         self.marked.insert(key, Mark::Gray);
         self.phase_queue.push(key);
     }
@@ -533,15 +548,15 @@ impl GarbageCollector {
     fn acknowledge_weak_association(
         &mut self,
         cache_pools: &CachePools,
-        heap_key: HeapKey,
-        table_heap_key: HeapKey,
+        key: StorageKey,
+        table_key: TableObjectKey,
         element_key: StackValue,
     ) {
         let list = self
             .weak_associations
-            .entry(heap_key)
+            .entry(key)
             .or_insert_with(|| cache_pools.create_weak_associations_list());
 
-        list.push((table_heap_key, element_key));
+        list.push((table_key, element_key));
     }
 }

@@ -1,21 +1,21 @@
 use super::coroutine::Coroutine;
-use super::heap::{HeapRef, HeapValue};
+use super::heap::{CoroutineObjectKey, HeapRef, Storage};
 use super::{CoroutineStatus, IntoMulti, MultiValue, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CoroutineRef(pub(crate) HeapRef);
+pub struct CoroutineRef(pub(crate) HeapRef<CoroutineObjectKey>);
 
 impl CoroutineRef {
     #[inline]
     pub fn id(&self) -> u64 {
-        self.0.key().data().as_ffi()
+        Storage::key_to_id(self.0.key().data(), Storage::COROUTINES_TAG)
     }
 
     pub fn status(&self, ctx: &mut VmContext) -> Result<CoroutineStatus, RuntimeError> {
         let key = self.0.key();
-        let Some(HeapValue::Coroutine(coroutine)) = ctx.vm.execution_data.heap.get(key) else {
+        let Some(coroutine) = ctx.vm.execution_data.heap.get_coroutine(key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 

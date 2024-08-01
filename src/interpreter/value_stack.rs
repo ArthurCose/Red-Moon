@@ -1,4 +1,7 @@
-use super::heap::{Heap, HeapKey, HeapValue};
+use super::heap::{
+    BytesObjectKey, CoroutineObjectKey, FnObjectKey, Heap, NativeFnObjectKey, StackObjectKey,
+    StorageKey, TableObjectKey,
+};
 use super::{Number, TypeName};
 use crate::vec_cell::VecCell;
 use std::ops::Range;
@@ -17,8 +20,12 @@ pub(crate) enum StackValue {
     Bool(bool),
     Integer(i64),
     Float(f64),
-    HeapValue(HeapKey),
-    Pointer(HeapKey),
+    Pointer(StackObjectKey),
+    Bytes(BytesObjectKey),
+    Table(TableObjectKey),
+    NativeFunction(NativeFnObjectKey),
+    Function(FnObjectKey),
+    Coroutine(CoroutineObjectKey),
 }
 
 impl Eq for StackValue {}
@@ -30,15 +37,15 @@ impl std::hash::Hash for StackValue {
             StackValue::Bool(b) => b.hash(state),
             StackValue::Integer(i) => i.hash(state),
             StackValue::Float(f) => f.to_bits().hash(state),
-            StackValue::HeapValue(key) => key.hash(state),
+            // todo: maybe hash with object type
+            // but not expecting hashing with mixed types currently
+            StackValue::Bytes(key) => key.hash(state),
+            StackValue::Table(key) => key.hash(state),
+            StackValue::NativeFunction(key) => key.hash(state),
+            StackValue::Function(key) => key.hash(state),
+            StackValue::Coroutine(key) => key.hash(state),
             StackValue::Pointer(key) => key.hash(state),
         }
-    }
-}
-
-impl From<HeapKey> for StackValue {
-    fn from(value: HeapKey) -> Self {
-        StackValue::HeapValue(value)
     }
 }
 
@@ -58,11 +65,7 @@ impl StackValue {
             return self;
         };
 
-        let HeapValue::StackValue(value) = heap.get(key).unwrap() else {
-            unreachable!();
-        };
-
-        *value
+        *heap.get_stack_value(key).unwrap()
     }
 
     pub(crate) fn type_name(self, heap: &Heap) -> TypeName {
@@ -70,9 +73,54 @@ impl StackValue {
             StackValue::Nil => TypeName::Nil,
             StackValue::Bool(_) => TypeName::Bool,
             StackValue::Integer(_) | StackValue::Float(_) => TypeName::Number,
-            StackValue::HeapValue(key) | StackValue::Pointer(key) => {
-                heap.get(key).unwrap().type_name(heap)
-            }
+            StackValue::Bytes(_) => TypeName::String,
+            StackValue::Table(_) => TypeName::Table,
+            StackValue::NativeFunction(_) => TypeName::Function,
+            StackValue::Function(_) => TypeName::Function,
+            StackValue::Coroutine(_) => TypeName::Thread,
+            StackValue::Pointer(key) => heap.get_stack_value(key).unwrap().type_name(heap),
+        }
+    }
+
+    pub(crate) fn as_storage_key(self) -> Option<StorageKey> {
+        match self {
+            StackValue::Nil => None,
+            StackValue::Bool(_) => None,
+            StackValue::Integer(_) | StackValue::Float(_) => None,
+            StackValue::Bytes(key) => Some(StorageKey::Bytes(key)),
+            StackValue::Table(key) => Some(StorageKey::Table(key)),
+            StackValue::NativeFunction(key) => Some(StorageKey::NativeFunction(key)),
+            StackValue::Function(key) => Some(StorageKey::Function(key)),
+            StackValue::Coroutine(key) => Some(StorageKey::Coroutine(key)),
+            StackValue::Pointer(key) => Some(StorageKey::StackValue(key)),
+        }
+    }
+
+    pub(crate) fn lives_in_heap(&self) -> bool {
+        match self {
+            StackValue::Nil
+            | StackValue::Bool(_)
+            | StackValue::Integer(_)
+            | StackValue::Float(_) => false,
+            StackValue::Bytes(_)
+            | StackValue::Table(_)
+            | StackValue::NativeFunction(_)
+            | StackValue::Function(_)
+            | StackValue::Coroutine(_)
+            | StackValue::Pointer(_) => true,
+        }
+    }
+}
+
+impl From<StorageKey> for StackValue {
+    fn from(value: StorageKey) -> Self {
+        match value {
+            StorageKey::StackValue(key) => StackValue::Pointer(key),
+            StorageKey::Bytes(key) => StackValue::Bytes(key),
+            StorageKey::Table(key) => StackValue::Table(key),
+            StorageKey::NativeFunction(key) => StackValue::NativeFunction(key),
+            StorageKey::Function(key) => StackValue::Function(key),
+            StorageKey::Coroutine(key) => StackValue::Coroutine(key),
         }
     }
 }

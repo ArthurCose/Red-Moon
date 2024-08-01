@@ -1,33 +1,42 @@
-use super::{CounterRef, HeapKey};
+use super::CounterRef;
 
 #[derive(Clone)]
-pub(crate) struct HeapRef {
-    pub(super) key: HeapKey,
+pub(crate) struct HeapRef<K> {
+    pub(super) key: K,
     #[allow(dead_code)]
     pub(super) counter_ref: CounterRef,
 }
 
-impl HeapRef {
-    pub(crate) fn key(&self) -> HeapKey {
+impl<K: Copy> HeapRef<K> {
+    pub(crate) fn key(&self) -> K {
         self.key
     }
 }
 
-impl PartialEq for HeapRef {
+impl<K> PartialEq for HeapRef<K>
+where
+    K: PartialEq,
+{
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
     }
 }
 
-impl Eq for HeapRef {}
+impl<K> Eq for HeapRef<K> where K: Eq {}
 
-impl std::fmt::Debug for HeapRef {
+impl<K> std::fmt::Debug for HeapRef<K>
+where
+    K: std::fmt::Debug,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.key)
     }
 }
 
-impl std::hash::Hash for HeapRef {
+impl<K> std::hash::Hash for HeapRef<K>
+where
+    K: std::hash::Hash,
+{
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.key.hash(state);
     }
