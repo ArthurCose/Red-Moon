@@ -1497,33 +1497,7 @@ impl CallContext {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
-        let resolved_a = match self.resolve_binary_operand(
-            (heap, value_stack),
-            metamethod_key,
-            dest,
-            value_a,
-            value_b,
-            value_a,
-            |_, value| Ok(value),
-        )? {
-            ValueOrCallResult::Value(value) => value,
-            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
-        };
-
-        let resolved_b = match self.resolve_binary_operand(
-            (heap, value_stack),
-            metamethod_key,
-            dest,
-            value_a,
-            value_b,
-            value_b,
-            |_, value| Ok(value),
-        )? {
-            ValueOrCallResult::Value(value) => value,
-            ValueOrCallResult::CallResult(call_result) => return Ok(Some(call_result)),
-        };
-
-        let value = match (resolved_a, resolved_b) {
+        let value = match (value_a, value_b) {
             (StackValue::Integer(a), StackValue::Integer(b)) => {
                 StackValue::Integer(integer_operation(a, b))
             }
@@ -1537,14 +1511,36 @@ impl CallContext {
                 StackValue::Float(float_operation(a as f64, b))
             }
             (StackValue::Integer(_) | StackValue::Float(_), _) => {
-                return Err(RuntimeErrorData::InvalidArithmetic(
-                    resolved_b.type_name(heap),
-                ));
+                return Err(RuntimeErrorData::InvalidArithmetic(value_b.type_name(heap)));
             }
             _ => {
-                return Err(RuntimeErrorData::InvalidArithmetic(
-                    resolved_a.type_name(heap),
-                ));
+                if value_a.lives_in_heap() {
+                    if let Some(call_result) = self.binary_metamethod(
+                        heap,
+                        value_stack,
+                        (value_a, metamethod_key),
+                        dest,
+                        value_a,
+                        value_b,
+                    ) {
+                        return Ok(Some(call_result));
+                    }
+                }
+
+                if value_b.lives_in_heap() {
+                    if let Some(call_result) = self.binary_metamethod(
+                        heap,
+                        value_stack,
+                        (value_b, metamethod_key),
+                        dest,
+                        value_a,
+                        value_b,
+                    ) {
+                        return Ok(Some(call_result));
+                    }
+                }
+
+                return Err(RuntimeErrorData::InvalidArithmetic(value_a.type_name(heap)));
             }
         };
 
