@@ -354,7 +354,12 @@ impl Heap {
     pub(crate) fn get_metavalue(&self, value: StackValue, name: BytesObjectKey) -> StackValue {
         let metatable_key = match value {
             StackValue::Table(key) => {
-                let table = &self.storage.tables[key];
+                let Some(table) = self.storage.tables.get(key) else {
+                    #[cfg(debug_assertions)]
+                    unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return StackValue::Nil;
+                };
 
                 let Some(key) = table.metatable() else {
                     return StackValue::Nil;
