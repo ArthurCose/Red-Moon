@@ -584,10 +584,14 @@ impl CallContext {
         value_stack: &mut ValueStack,
         exec_data: &mut ExecutionAccessibleData,
     ) -> Result<CallResult, RuntimeErrorData> {
-        let definition = &self.function.definition;
         let mut for_loop_jump = false;
 
-        while let Some(&instruction) = definition.instructions.get(self.next_instruction_index) {
+        while let Some(&instruction) = self
+            .function
+            .definition
+            .instructions
+            .get(self.next_instruction_index)
+        {
             if exec_data.tracked_stack_size + value_stack.len() > exec_data.limits.stack_size {
                 return Err(RuntimeErrorData::StackOverflow);
             }
@@ -611,6 +615,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadInt(dest, index) => {
+                    let definition = &self.function.definition;
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
@@ -618,6 +623,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadFloat(dest, index) => {
+                    let definition = &self.function.definition;
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
@@ -625,6 +631,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::LoadBytes(dest, index) => {
+                    let definition = &self.function.definition;
                     let Some(&bytes_key) = definition.byte_strings.get(index as usize) else {
                         return Err(IllegalInstruction::MissingByteStringConstant(index).into());
                     };
@@ -636,6 +643,7 @@ impl CallContext {
                     value_stack.resize(dest_index);
                 }
                 Instruction::PrepMulti(dest, index) => {
+                    let definition = &self.function.definition;
                     let Some(number) = definition.numbers.get(index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(index).into());
                     };
@@ -646,6 +654,7 @@ impl CallContext {
                     value_stack.resize(dest_index + 1);
                 }
                 Instruction::CreateTable(dest, len_index) => {
+                    let definition = &self.function.definition;
                     let Some(&len) = definition.numbers.get(len_index as usize) else {
                         return Err(IllegalInstruction::MissingNumberConstant(len_index).into());
                     };
@@ -659,95 +668,26 @@ impl CallContext {
                     }
                 }
                 Instruction::FlushToTable(dest, total, index_offset) => {
-                    // get the table
-                    let dest_index = self.register_base + dest as usize;
-
-                    let StackValue::Table(table_key) = value_stack.get(dest_index) else {
-                        return Err(RuntimeErrorData::InvalidInternalState);
-                    };
-
-                    let Some(table) = heap.get_table_mut(gc, table_key) else {
-                        return Err(RuntimeErrorData::InvalidInternalState);
-                    };
-
-                    // get the index offset
-                    let mut index_offset = index_offset as usize;
-
-                    if let Some(&Instruction::Constant(index)) =
-                        definition.instructions.get(self.next_instruction_index)
+                    if let Some(call_result) =
+                        self.flush_to_table(exec_data, value_stack, dest, total, index_offset)?
                     {
-                        self.next_instruction_index += 1;
-
-                        let Some(&len) = definition.numbers.get(index as usize) else {
-                            return Err(IllegalInstruction::MissingNumberConstant(index).into());
-                        };
-
-                        index_offset += len as usize;
-                    }
-
-                    let start = dest_index + 2;
-                    let end = start + total as usize;
-
-                    let original_size = table.heap_size();
-
-                    table.flush(index_offset, value_stack.get_slice(start..end));
-
-                    let new_size = table.heap_size();
-                    gc.modify_used_memory(new_size as isize - original_size as isize);
-
-                    if gc.should_step() {
-                        return Ok(CallResult::StepGc);
+                        return Ok(call_result);
                     }
                 }
                 Instruction::VariadicToTable(dest, src_start, index_offset) => {
-                    // grab the table
-                    let dest_index = self.register_base + dest as usize;
-
-                    let StackValue::Table(table_key) = value_stack.get(dest_index) else {
-                        return Err(RuntimeErrorData::InvalidInternalState);
-                    };
-
-                    let Some(table) = heap.get_table_mut(gc, table_key) else {
-                        return Err(RuntimeErrorData::InvalidInternalState);
-                    };
-
-                    // get the index offset
-                    let mut index_offset = index_offset as usize;
-
-                    if let Some(&Instruction::Constant(index)) =
-                        definition.instructions.get(self.next_instruction_index)
-                    {
-                        self.next_instruction_index += 1;
-
-                        let Some(&len) = definition.numbers.get(index as usize) else {
-                            return Err(IllegalInstruction::MissingNumberConstant(index).into());
-                        };
-
-                        index_offset += len as usize;
-                    }
-
-                    // grab the count
-                    let count_index = dest_index + 1;
-                    let StackValue::Integer(count) = value_stack.get(count_index) else {
-                        return Err(IllegalInstruction::MissingVariadicCount.into());
-                    };
-
-                    let start = self.register_base + src_start as usize;
-                    let end = start + count as usize;
-
-                    let original_size = table.heap_size();
-
-                    table.reserve_list(count as usize);
-                    table.flush(index_offset, value_stack.get_slice(start..end));
-
-                    let new_size = table.heap_size();
-                    gc.modify_used_memory(new_size as isize - original_size as isize);
-
-                    if gc.should_step() {
-                        return Ok(CallResult::StepGc);
+                    if let Some(call_result) = self.variadic_to_table(
+                        exec_data,
+                        value_stack,
+                        dest,
+                        src_start,
+                        index_offset,
+                    )? {
+                        return Ok(call_result);
                     }
                 }
                 Instruction::CopyTableField(dest, table_index) => {
+                    let definition = &self.function.definition;
+
                     // resolve field key
                     let Some(Instruction::Constant(bytes_index)) =
                         definition.instructions.get(self.next_instruction_index)
@@ -779,6 +719,8 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyToTableField(table_index, src) => {
+                    let definition = &self.function.definition;
+
                     // resolve field key
                     let Some(Instruction::Constant(bytes_index)) =
                         definition.instructions.get(self.next_instruction_index)
@@ -841,129 +783,21 @@ impl CallContext {
                         return Ok(call_result);
                     }
                 }
-                Instruction::CopyArg(dest, index) => {
-                    let arg_index = self.stack_start + 2 + index as usize;
-                    let dest_index = self.register_base + dest as usize;
-
-                    if arg_index >= self.register_base {
-                        // out of args, set nil
-                        value_stack.set(dest_index, Default::default());
-                    } else {
-                        let value = value_stack.get(arg_index);
-                        value_stack.set(dest_index, value);
-                    }
-                }
+                Instruction::CopyArg(dest, index) => self.copy_arg(value_stack, dest, index),
                 Instruction::CopyArgs(dest, count) => {
                     self.copy_args(value_stack, dest, count);
                 }
                 Instruction::CopyVariadic(dest, count_register, skip) => {
-                    let dest_index = self.register_base + dest as usize;
-                    let arg_index = self.stack_start + 2 + skip as usize;
-                    let count_index = self.register_base + count_register as usize;
-
-                    let StackValue::Integer(count) = value_stack.get(count_index) else {
-                        return Err(IllegalInstruction::MissingVariadicCount.into());
-                    };
-
-                    let total = self.register_base.saturating_sub(arg_index);
-
-                    if total > 0 {
-                        // todo: recycle?
-                        let mut values = Vec::new();
-
-                        for i in 0..total {
-                            values.push(value_stack.get(arg_index + i));
-                        }
-
-                        for (i, value) in values.into_iter().enumerate() {
-                            value_stack.set(dest_index + i, value);
-                        }
-
-                        let count_value = StackValue::Integer(count + total as i64);
-                        value_stack.set(count_index, count_value);
-                    }
+                    self.copy_variadic(value_stack, dest, count_register, skip)?;
                 }
                 Instruction::CopyUnsizedVariadic(dest, skip) => {
-                    let dest_index = self.register_base + dest as usize;
-                    let arg_index = self.stack_start + 2 + skip as usize;
-
-                    let total = self.register_base.saturating_sub(arg_index);
-
-                    if total > 0 {
-                        // todo: recycle?
-                        let mut values = Vec::new();
-
-                        for i in 0..total {
-                            values.push(value_stack.get(arg_index + i));
-                        }
-
-                        for (i, value) in values.into_iter().enumerate() {
-                            value_stack.set(dest_index + i, value);
-                        }
-                    }
+                    self.copy_unsized_variadic(value_stack, dest, skip);
                 }
                 Instruction::Closure(dest, function_index) => {
-                    let Some(&function_key) = definition.functions.get(function_index as usize)
-                    else {
-                        return Err(
-                            IllegalInstruction::MissingFunctionConstant(function_index).into()
-                        );
-                    };
-
-                    let Some(func) = heap.get_interpreted_fn(function_key) else {
-                        return Err(RuntimeErrorData::InvalidInternalState);
-                    };
-
-                    if func.definition.up_values.is_empty() {
-                        value_stack.set(self.register_base + dest as usize, function_key.into());
-                    } else {
-                        // copy the function to pass captures
-                        let mut func = func.clone();
-
-                        // resolve captures
-                        let mut up_values = Vec::new();
-                        up_values.reserve_exact(func.definition.up_values.len());
-
-                        for capture_source in &func.definition.up_values {
-                            let key = match capture_source {
-                                UpValueSource::Stack(src) => {
-                                    let src_index = self.register_base + *src as usize;
-                                    let value = value_stack.get(src_index);
-
-                                    if let StackValue::Pointer(key) = value {
-                                        key
-                                    } else {
-                                        // move the stack value to the heap
-                                        let key = heap.store_stack_value(gc, value);
-                                        value_stack.set(src_index, StackValue::Pointer(key));
-                                        key
-                                    }
-                                }
-                                UpValueSource::UpValue(src) => {
-                                    let src_index = *src as usize;
-
-                                    let Some(key) = self.function.up_values.get(src_index) else {
-                                        crate::debug_unreachable!();
-                                        #[cfg(not(debug_assertions))]
-                                        return Err(RuntimeErrorData::InvalidInternalState);
-                                    };
-
-                                    *key
-                                }
-                            };
-
-                            up_values.push(key);
-                        }
-
-                        func.up_values = up_values.into();
-
-                        // store the new function
-                        let function_key = heap.store_interpreted_fn(gc, func);
-                        value_stack.set(self.register_base + dest as usize, function_key.into());
-
-                        if gc.should_step() {
-                            return Ok(CallResult::StepGc);
-                        }
+                    if let Some(call_result) =
+                        self.create_closure(exec_data, value_stack, dest, function_index as _)?
+                    {
+                        return Ok(call_result);
                     }
                 }
                 Instruction::CopyUpValue(dest, src) => {
@@ -1026,40 +860,11 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, StackValue::Bool(value));
                 }
                 Instruction::Len(dest, src) => {
-                    let metamethod_key = exec_data.metatable_keys.len.0.key();
-
-                    let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
-
-                    // default behavior
-                    let len = match value_a {
-                        StackValue::Table(key) => {
-                            let Some(table) = heap.get_table(key) else {
-                                return Err(RuntimeErrorData::InvalidInternalState);
-                            };
-
-                            table.list_len()
-                        }
-                        StackValue::Bytes(key) => {
-                            let Some(bytes) = heap.get_bytes(key) else {
-                                return Err(RuntimeErrorData::InvalidInternalState);
-                            };
-
-                            bytes.len()
-                        }
-                        _ => return Err(RuntimeErrorData::NoLength(value_a.type_name(heap))),
-                    };
-
-                    // try metamethod before using the default value
-                    if matches!(value_a, StackValue::Table(_)) {
-                        if let Some(call_result) =
-                            self.unary_metamethod(heap, value_stack, metamethod_key, dest, value_a)
-                        {
-                            return Ok(call_result);
-                        }
+                    if let Some(call_result) =
+                        self.resolve_len(exec_data, value_stack, dest, src)?
+                    {
+                        return Ok(call_result);
                     }
-
-                    let value = StackValue::Integer(len as i64);
-                    value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
                     let metamethod_key = exec_data.metatable_keys.unm.0.key();
@@ -1335,47 +1140,9 @@ impl CallContext {
                     };
                 }
                 Instruction::Concat(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.concat.0.key();
-
-                    let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
-                    let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
-
-                    // default behavior
-                    let string_a = stringify(heap, value_a);
-                    let string_b = stringify(heap, value_b);
-
-                    if let (Some(string_a), Some(string_b)) = (string_a, string_b) {
-                        let mut bytes = Vec::<u8>::with_capacity(string_a.len() + string_b.len());
-
-                        bytes.extend(string_a.iter());
-                        bytes.extend(string_b.iter());
-                        let bytes_key = heap.intern_bytes(gc, &bytes);
-                        value_stack.set(self.register_base + dest as usize, bytes_key.into());
-
-                        if gc.should_step() {
-                            return Ok(CallResult::StepGc);
-                        }
-                    } else {
-                        // try metamethod as a fallback using the default value
-                        let call_result = self
-                            .try_binary_metamethods(
-                                (heap, value_stack),
-                                metamethod_key,
-                                dest,
-                                value_a,
-                                value_b,
-                            )
-                            .ok_or_else(|| {
-                                let type_name_a = value_a.type_name(heap);
-
-                                match type_name_a {
-                                    TypeName::String => {
-                                        RuntimeErrorData::AttemptToConcat(value_b.type_name(heap))
-                                    }
-                                    _ => RuntimeErrorData::AttemptToConcat(type_name_a),
-                                }
-                            })?;
-
+                    if let Some(call_result) =
+                        self.concat_values(exec_data, value_stack, dest, a, b)?
+                    {
                         return Ok(call_result);
                     }
                 }
@@ -1392,39 +1159,8 @@ impl CallContext {
                     }
                 }
                 Instruction::NumericFor(src, local) => {
-                    let limit = coerce_stack_value_to_integer(
-                        heap,
-                        value_stack.get(self.register_base + src as usize),
-                        |type_name| RuntimeErrorData::InvalidForLimit(type_name),
-                    )?;
-                    let step = coerce_stack_value_to_integer(
-                        heap,
-                        value_stack.get(self.register_base + src as usize + 1),
-                        |type_name| RuntimeErrorData::InvalidForStep(type_name),
-                    )?;
-                    let mut value = coerce_stack_value_to_integer(
-                        heap,
-                        value_stack.get(self.register_base + local as usize),
-                        |type_name| RuntimeErrorData::InvalidForInitialValue(type_name),
-                    )?;
-
-                    if for_loop_jump {
-                        value += step;
-                        for_loop_jump = false;
-                    }
-
-                    let stop = match step.is_positive() {
-                        true => value > limit,
-                        false => value < limit,
-                    };
-
-                    if !stop {
-                        value_stack.set(
-                            self.register_base + local as usize,
-                            StackValue::Integer(value),
-                        );
-                        self.next_instruction_index += 1;
-                    }
+                    for_loop_jump =
+                        self.numeric_for(heap, value_stack, for_loop_jump, src, local)?;
                 }
                 Instruction::JumpToForLoop(i) => {
                     self.next_instruction_index = i.into();
@@ -1444,6 +1180,295 @@ impl CallContext {
 
         // exhausted instructions
         Ok(CallResult::Return(0))
+    }
+
+    fn flush_to_table(
+        &mut self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        total: Register,
+        index_offset: Register,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let definition = &self.function.definition;
+
+        // get the table
+        let dest_index = self.register_base + dest as usize;
+
+        let StackValue::Table(table_key) = value_stack.get(dest_index) else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
+
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
+
+        // get the index offset
+        let mut index_offset = index_offset as usize;
+
+        if let Some(&Instruction::Constant(index)) =
+            definition.instructions.get(self.next_instruction_index)
+        {
+            self.next_instruction_index += 1;
+
+            let Some(&len) = definition.numbers.get(index as usize) else {
+                return Err(IllegalInstruction::MissingNumberConstant(index).into());
+            };
+
+            index_offset += len as usize;
+        }
+
+        let start = dest_index + 2;
+        let end = start + total as usize;
+
+        let original_size = table.heap_size();
+
+        table.flush(index_offset, value_stack.get_slice(start..end));
+
+        let new_size = table.heap_size();
+        gc.modify_used_memory(new_size as isize - original_size as isize);
+
+        if gc.should_step() {
+            return Ok(Some(CallResult::StepGc));
+        }
+
+        Ok(None)
+    }
+
+    fn variadic_to_table(
+        &mut self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        src_start: Register,
+        index_offset: Register,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        // grab the table
+        let dest_index = self.register_base + dest as usize;
+
+        let StackValue::Table(table_key) = value_stack.get(dest_index) else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
+
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
+
+        // get the index offset
+        let mut index_offset = index_offset as usize;
+
+        let definition = &self.function.definition;
+
+        if let Some(&Instruction::Constant(index)) =
+            definition.instructions.get(self.next_instruction_index)
+        {
+            self.next_instruction_index += 1;
+
+            let Some(&len) = definition.numbers.get(index as usize) else {
+                return Err(IllegalInstruction::MissingNumberConstant(index).into());
+            };
+
+            index_offset += len as usize;
+        }
+
+        // grab the count
+        let count_index = dest_index + 1;
+        let StackValue::Integer(count) = value_stack.get(count_index) else {
+            return Err(IllegalInstruction::MissingVariadicCount.into());
+        };
+
+        let start = self.register_base + src_start as usize;
+        let end = start + count as usize;
+
+        let original_size = table.heap_size();
+
+        table.reserve_list(count as usize);
+        table.flush(index_offset, value_stack.get_slice(start..end));
+
+        let new_size = table.heap_size();
+        gc.modify_used_memory(new_size as isize - original_size as isize);
+
+        if gc.should_step() {
+            return Ok(Some(CallResult::StepGc));
+        }
+
+        Ok(None)
+    }
+
+    fn create_closure(
+        &self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        function_index: usize,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let Some(&function_key) = self.function.definition.functions.get(function_index) else {
+            return Err(IllegalInstruction::MissingFunctionConstant(function_index as _).into());
+        };
+
+        let heap = &mut exec_data.heap;
+
+        let Some(func) = heap.get_interpreted_fn(function_key) else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
+
+        if func.definition.up_values.is_empty() {
+            value_stack.set(self.register_base + dest as usize, function_key.into());
+        } else {
+            // copy the function to pass captures
+            let mut func = func.clone();
+
+            // resolve captures
+            let mut up_values = Vec::new();
+            up_values.reserve_exact(func.definition.up_values.len());
+
+            for capture_source in &func.definition.up_values {
+                let key = match capture_source {
+                    UpValueSource::Stack(src) => {
+                        let src_index = self.register_base + *src as usize;
+                        let value = value_stack.get(src_index);
+
+                        if let StackValue::Pointer(key) = value {
+                            key
+                        } else {
+                            // move the stack value to the heap
+                            let key = heap.store_stack_value(&mut exec_data.gc, value);
+                            value_stack.set(src_index, StackValue::Pointer(key));
+                            key
+                        }
+                    }
+                    UpValueSource::UpValue(src) => {
+                        let src_index = *src as usize;
+
+                        let Some(key) = self.function.up_values.get(src_index) else {
+                            crate::debug_unreachable!();
+                            #[cfg(not(debug_assertions))]
+                            return Err(RuntimeErrorData::InvalidInternalState);
+                        };
+
+                        *key
+                    }
+                };
+
+                up_values.push(key);
+            }
+
+            func.up_values = up_values.into();
+
+            // store the new function
+            let function_key = heap.store_interpreted_fn(&mut exec_data.gc, func);
+            value_stack.set(self.register_base + dest as usize, function_key.into());
+
+            if exec_data.gc.should_step() {
+                return Ok(Some(CallResult::StepGc));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn resolve_len(
+        &self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        src: Register,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let metamethod_key = exec_data.metatable_keys.len.0.key();
+        let heap = &mut exec_data.heap;
+
+        let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
+
+        // default behavior
+        let len = match value_a {
+            StackValue::Table(key) => {
+                let Some(table) = heap.get_table(key) else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                table.list_len()
+            }
+            StackValue::Bytes(key) => {
+                let Some(bytes) = heap.get_bytes(key) else {
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                bytes.len()
+            }
+            _ => return Err(RuntimeErrorData::NoLength(value_a.type_name(heap))),
+        };
+
+        // try metamethod before using the default value
+        if matches!(value_a, StackValue::Table(_)) {
+            if let Some(call_result) =
+                self.unary_metamethod(heap, value_stack, metamethod_key, dest, value_a)
+            {
+                return Ok(Some(call_result));
+            }
+        }
+
+        let value = StackValue::Integer(len as i64);
+        value_stack.set(self.register_base + dest as usize, value);
+
+        Ok(None)
+    }
+
+    fn concat_values(
+        &self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        a: Register,
+        b: Register,
+    ) -> Result<Option<CallResult>, RuntimeErrorData> {
+        let metamethod_key = exec_data.metatable_keys.concat.0.key();
+
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
+        let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
+        let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
+
+        // default behavior
+        let string_a = stringify(heap, value_a);
+        let string_b = stringify(heap, value_b);
+
+        if let (Some(string_a), Some(string_b)) = (string_a, string_b) {
+            let mut bytes = Vec::<u8>::with_capacity(string_a.len() + string_b.len());
+
+            bytes.extend(string_a.iter());
+            bytes.extend(string_b.iter());
+            let bytes_key = heap.intern_bytes(gc, &bytes);
+            value_stack.set(self.register_base + dest as usize, bytes_key.into());
+
+            if gc.should_step() {
+                return Ok(Some(CallResult::StepGc));
+            }
+        } else {
+            // try metamethod as a fallback using the default value
+            let call_result = self
+                .try_binary_metamethods((heap, value_stack), metamethod_key, dest, value_a, value_b)
+                .ok_or_else(|| {
+                    let type_name_a = value_a.type_name(heap);
+
+                    match type_name_a {
+                        TypeName::String => {
+                            RuntimeErrorData::AttemptToConcat(value_b.type_name(heap))
+                        }
+                        _ => RuntimeErrorData::AttemptToConcat(type_name_a),
+                    }
+                })?;
+
+            return Ok(Some(call_result));
+        }
+
+        Ok(None)
     }
 
     /// Resolves stack value pointers, calls metamethods for heap values, calls coerce functions if necessary
@@ -1974,6 +1999,19 @@ impl CallContext {
         }
     }
 
+    fn copy_arg(&self, value_stack: &mut ValueStack, dest: Register, index: Register) {
+        let arg_index = self.stack_start + 2 + index as usize;
+        let dest_index = self.register_base + dest as usize;
+
+        if arg_index >= self.register_base {
+            // out of args, set nil
+            value_stack.set(dest_index, Default::default());
+        } else {
+            let value = value_stack.get(arg_index);
+            value_stack.set(dest_index, value);
+        }
+    }
+
     fn copy_args(&self, value_stack: &mut ValueStack, dest: Register, count: Register) {
         let dest_start = self.register_base + dest as usize;
         let count = count as usize;
@@ -1992,6 +2030,62 @@ impl CallContext {
         let copied = arg_end_index - arg_start_index;
         for value in &mut slice[dest_start + copied..dest_start + count] {
             *value = StackValue::Nil;
+        }
+    }
+
+    fn copy_variadic(
+        &self,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        count_register: Register,
+        skip: Register,
+    ) -> Result<(), RuntimeErrorData> {
+        let dest_index = self.register_base + dest as usize;
+        let arg_index = self.stack_start + 2 + skip as usize;
+        let count_index = self.register_base + count_register as usize;
+
+        let StackValue::Integer(count) = value_stack.get(count_index) else {
+            return Err(IllegalInstruction::MissingVariadicCount.into());
+        };
+
+        let total = self.register_base.saturating_sub(arg_index);
+
+        if total > 0 {
+            // todo: recycle?
+            let mut values = Vec::new();
+
+            for i in 0..total {
+                values.push(value_stack.get(arg_index + i));
+            }
+
+            for (i, value) in values.into_iter().enumerate() {
+                value_stack.set(dest_index + i, value);
+            }
+
+            let count_value = StackValue::Integer(count + total as i64);
+            value_stack.set(count_index, count_value);
+        }
+
+        Ok(())
+    }
+
+    fn copy_unsized_variadic(&self, value_stack: &mut ValueStack, dest: Register, skip: Register) {
+        let dest_index = self.register_base + dest as usize;
+        let arg_index = self.stack_start + 2 + skip as usize;
+
+        let total = self.register_base.saturating_sub(arg_index);
+
+        if total > 0 {
+            // todo: recycle?
+            let mut values = Vec::new();
+
+            for i in 0..total {
+                values.push(value_stack.get(arg_index + i));
+            }
+
+            for (i, value) in values.into_iter().enumerate() {
+                value_stack.set(dest_index + i, value);
+            }
         }
     }
 
@@ -2033,6 +2127,51 @@ impl CallContext {
         }
 
         Ok(())
+    }
+
+    fn numeric_for(
+        &mut self,
+        heap: &mut Heap,
+        value_stack: &mut ValueStack,
+        mut for_loop_jump: bool,
+        src: Register,
+        local: Register,
+    ) -> Result<bool, RuntimeErrorData> {
+        let limit = coerce_stack_value_to_integer(
+            heap,
+            value_stack.get(self.register_base + src as usize),
+            |type_name| RuntimeErrorData::InvalidForLimit(type_name),
+        )?;
+        let step = coerce_stack_value_to_integer(
+            heap,
+            value_stack.get(self.register_base + src as usize + 1),
+            |type_name| RuntimeErrorData::InvalidForStep(type_name),
+        )?;
+        let mut value = coerce_stack_value_to_integer(
+            heap,
+            value_stack.get(self.register_base + local as usize),
+            |type_name| RuntimeErrorData::InvalidForInitialValue(type_name),
+        )?;
+
+        if for_loop_jump {
+            value += step;
+            for_loop_jump = false;
+        }
+
+        let stop = match step.is_positive() {
+            true => value > limit,
+            false => value < limit,
+        };
+
+        if !stop {
+            value_stack.set(
+                self.register_base + local as usize,
+                StackValue::Integer(value),
+            );
+            self.next_instruction_index += 1;
+        }
+
+        Ok(for_loop_jump)
     }
 }
 
