@@ -125,6 +125,8 @@ macro_rules! impl_serde_deduplicating_rc {
     };
 }
 
+impl_serde_deduplicating_rc!(serde_str_rc, str, &str);
+
 pub(crate) use impl_serde_deduplicating_rc;
 pub(crate) use impl_serde_deserialize_stub_fn;
 pub(crate) use impl_serde_rc;

@@ -127,6 +127,7 @@ impl Serialize for Vm {
         S: serde::Serializer,
     {
         // enable deduplication
+        crate::serde_util::serde_str_rc::enable();
         super::serde_byte_string_rc::enable();
         super::serde_function_definition_rc::enable();
         super::serde_value_stack_rc::enable();
@@ -144,6 +145,7 @@ impl Serialize for Vm {
         })();
 
         // reset + disable deduplication
+        crate::serde_util::serde_str_rc::reset();
         super::serde_byte_string_rc::reset();
         super::serde_function_definition_rc::reset();
         super::serde_value_stack_rc::reset();
@@ -174,6 +176,7 @@ impl<'de> Deserialize<'de> for Vm {
         }
 
         // enable deduplication
+        crate::serde_util::serde_str_rc::enable();
         super::serde_byte_string_rc::enable();
         super::serde_function_definition_rc::enable();
         super::serde_value_stack_rc::enable();
@@ -182,6 +185,7 @@ impl<'de> Deserialize<'de> for Vm {
         let result = Deserialize::deserialize(deserializer);
 
         // reset + disable deduplication
+        crate::serde_util::serde_str_rc::reset();
         super::serde_byte_string_rc::reset();
         super::serde_function_definition_rc::reset();
         super::serde_value_stack_rc::reset();
