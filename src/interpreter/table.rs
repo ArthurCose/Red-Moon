@@ -123,34 +123,34 @@ impl Table {
     }
 
     fn set_in_list(&mut self, index: usize, value: StackValue) -> bool {
-        if self.list.get(index).is_some() {
-            if value == StackValue::Nil && index + 1 == self.list.len() {
-                // shrink the list
-                let reverse_iter = self.list.iter().rev();
-                let nil_count = reverse_iter
-                    .skip(1)
-                    .filter(|v| **v == StackValue::Nil)
-                    .count()
-                    + 1;
+        match index.cmp(&self.list.len()) {
+            std::cmp::Ordering::Less => {
+                if value == StackValue::Nil && index + 1 == self.list.len() {
+                    // shrink the list
+                    let reverse_iter = self.list.iter().rev();
+                    let nil_count = reverse_iter
+                        .skip(1)
+                        .filter(|v| **v == StackValue::Nil)
+                        .count()
+                        + 1;
 
-                let new_len = self.list.len() - nil_count;
-                self.list.truncate(new_len);
-
-                return true;
-            } else {
-                self.list[index] = value;
+                    let new_len = self.list.len() - nil_count;
+                    self.list.truncate(new_len);
+                } else {
+                    self.list[index] = value;
+                }
             }
-        } else if index == self.list.len() {
-            if value == StackValue::Nil {
-                return false;
+            std::cmp::Ordering::Equal => {
+                if value == StackValue::Nil {
+                    return false;
+                }
+
+                self.list.push(value);
+
+                // merge from map
+                self.merge_from_map_into_list();
             }
-
-            self.list.push(value);
-
-            // merge from map
-            self.merge_from_map_into_list();
-        } else {
-            return false;
+            std::cmp::Ordering::Greater => return false,
         }
 
         true
