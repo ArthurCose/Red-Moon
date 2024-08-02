@@ -1242,22 +1242,24 @@ impl CallContext {
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
-                    if let Some(call_result) = self.try_binary_metamethods(
-                        (heap, value_stack),
-                        metamethod_key,
-                        dest,
-                        value_a,
-                        value_b,
-                    ) {
-                        return Ok(call_result);
-                    }
-
                     let equal = match (value_a, value_b) {
                         (StackValue::Float(float), StackValue::Integer(int))
                         | (StackValue::Integer(int), StackValue::Float(float)) => {
                             int as f64 == float
                         }
-                        _ => value_a == value_b,
+                        _ => {
+                            if let Some(call_result) = self.try_binary_metamethods(
+                                (heap, value_stack),
+                                metamethod_key,
+                                dest,
+                                value_a,
+                                value_b,
+                            ) {
+                                return Ok(call_result);
+                            }
+
+                            value_a == value_b
+                        }
                     };
 
                     value_stack.set(self.register_base + dest as usize, StackValue::Bool(equal));
@@ -1687,12 +1689,6 @@ impl CallContext {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
 
-        if let Some(call_result) =
-            self.try_binary_metamethods((heap, value_stack), metamethod_key, dest, value_a, value_b)
-        {
-            return Ok(Some(call_result));
-        }
-
         let result = match (value_a, value_b) {
             (StackValue::Integer(int_a), StackValue::Integer(int_b)) => {
                 integer_comparison(int_a, int_b)
@@ -1705,6 +1701,16 @@ impl CallContext {
                 float_comparison(float_a, float_b)
             }
             _ => {
+                if let Some(call_result) = self.try_binary_metamethods(
+                    (heap, value_stack),
+                    metamethod_key,
+                    dest,
+                    value_a,
+                    value_b,
+                ) {
+                    return Ok(Some(call_result));
+                }
+
                 let Some(result) = heap_comparison(heap, value_a, value_b) else {
                     return Err(RuntimeErrorData::InvalidCompare(
                         value_a.type_name(heap),
