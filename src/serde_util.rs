@@ -46,15 +46,15 @@ macro_rules! impl_serde_rc {
     };
 }
 
+use serde::de::Error;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+
 macro_rules! impl_serde_deduplicating_rc {
     ($module_name:ident, $unboxed:ty, $deserialized:ty) => {
         pub(crate) mod $module_name {
-            #[allow(unused_imports)]
             use super::*;
-            use serde::de::Error;
-            use std::cell::{Cell, RefCell};
-            use std::collections::{HashMap, HashSet};
-            use std::rc::Rc;
 
             thread_local! {
                 static DEDUPLICATING: Cell<bool> = Default::default();
