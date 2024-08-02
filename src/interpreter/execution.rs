@@ -1,5 +1,5 @@
 use super::coroutine::Continuation;
-use super::heap::{FnObjectKey, Heap};
+use super::heap::{BytesObjectKey, FnObjectKey, Heap};
 use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::FunctionDefinition;
 use super::multi::MultiValue;
@@ -1035,7 +1035,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, StackValue::Bool(value));
                 }
                 Instruction::Len(dest, src) => {
-                    let metamethod_key = exec_data.metatable_keys.len.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.len.0.key();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + src as usize);
 
@@ -1071,7 +1071,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, value);
                 }
                 Instruction::UnaryMinus(dest, src) => {
-                    let metamethod_key = exec_data.metatable_keys.unm.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.unm.0.key();
 
                     if let Some(call_result) = self.unary_number_operation(
                         (heap, value_stack),
@@ -1088,7 +1088,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseNot(dest, src) => {
-                    let metamethod_key = exec_data.metatable_keys.bnot.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bnot.0.key();
 
                     if let Some(call_result) = self.unary_number_operation(
                         (heap, value_stack),
@@ -1103,7 +1103,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Add(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.add.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.add.0.key();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -1116,7 +1116,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Subtract(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.sub.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.sub.0.key();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -1129,7 +1129,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Multiply(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.mul.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.mul.0.key();
 
                     if let Some(call_result) = self.binary_number_operation(
                         (heap, value_stack),
@@ -1142,7 +1142,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Division(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.div.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.div.0.key();
 
                     if let Some(call_result) = self.binary_float_operation(
                         (heap, value_stack),
@@ -1154,7 +1154,7 @@ impl CallContext {
                     }
                 }
                 Instruction::IntegerDivision(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.idiv.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.idiv.0.key();
 
                     if let Some(call_result) = self.division_operation(
                         (heap, value_stack),
@@ -1167,7 +1167,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Modulus(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.modulus.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.modulus.0.key();
 
                     if let Some(call_result) = self.division_operation(
                         (heap, value_stack),
@@ -1180,7 +1180,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Power(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.pow.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.pow.0.key();
 
                     if let Some(call_result) = self.binary_float_operation(
                         (heap, value_stack),
@@ -1192,7 +1192,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseAnd(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.band.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.band.0.key();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1204,7 +1204,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseOr(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.bor.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bor.0.key();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1216,7 +1216,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitwiseXor(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.bxor.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.bxor.0.key();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1228,7 +1228,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftLeft(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.shl.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.shl.0.key();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1240,7 +1240,7 @@ impl CallContext {
                     }
                 }
                 Instruction::BitShiftRight(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.shr.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.shr.0.key();
 
                     if let Some(call_result) = self.binary_integer_operation(
                         (heap, value_stack),
@@ -1252,7 +1252,7 @@ impl CallContext {
                     }
                 }
                 Instruction::Equal(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.eq.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.eq.0.key();
 
                     let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
                     let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1278,7 +1278,7 @@ impl CallContext {
                     value_stack.set(self.register_base + dest as usize, StackValue::Bool(equal));
                 }
                 Instruction::LessThan(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.lt.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.lt.0.key();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1310,7 +1310,7 @@ impl CallContext {
                     };
                 }
                 Instruction::LessThanEqual(dest, a, b) => {
-                    let metamethod_key = exec_data.metatable_keys.le.0.key().into();
+                    let metamethod_key = exec_data.metatable_keys.le.0.key();
 
                     if let Some(call_result) = self.comparison_operation(
                         (heap, value_stack),
@@ -1367,7 +1367,7 @@ impl CallContext {
                         let call_result = self
                             .try_binary_metamethods(
                                 (heap, value_stack),
-                                metamethod_key.into(),
+                                metamethod_key,
                                 dest,
                                 value_a,
                                 value_b,
@@ -1458,7 +1458,7 @@ impl CallContext {
     fn resolve_binary_operand<T>(
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
@@ -1490,7 +1490,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         integer_operation: impl Fn(i64, i64) -> i64,
         float_operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
@@ -1554,7 +1554,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
@@ -1599,7 +1599,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         operation: impl Fn(i64, i64) -> i64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
@@ -1643,7 +1643,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         integer_operation: impl Fn(i64, i64) -> i64,
         float_operation: impl Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
@@ -1694,7 +1694,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         integer_comparison: impl Fn(i64, i64) -> bool,
         float_comparison: impl Fn(f64, f64) -> bool,
         heap_comparison: impl Fn(&Heap, StackValue, StackValue) -> Option<bool>,
@@ -1739,7 +1739,7 @@ impl CallContext {
     fn try_binary_metamethods(
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
@@ -1777,7 +1777,7 @@ impl CallContext {
         &self,
         heap: &mut Heap,
         value_stack: &mut ValueStack,
-        (heap_key, metamethod_key): (StackValue, StackValue),
+        (heap_key, metamethod_key): (StackValue, BytesObjectKey),
         dest: Register,
         value_a: StackValue,
         value_b: StackValue,
@@ -1798,7 +1798,7 @@ impl CallContext {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a): (Register, Register),
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         generate_error: impl Fn(TypeName) -> RuntimeErrorData,
         primitive_operation: impl Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
@@ -1822,7 +1822,7 @@ impl CallContext {
         &self,
         heap: &mut Heap,
         value_stack: &mut ValueStack,
-        metamethod_key: StackValue,
+        metamethod_key: BytesObjectKey,
         dest: Register,
         value: StackValue,
     ) -> Option<CallResult> {
@@ -1864,7 +1864,7 @@ impl CallContext {
 
         if value == StackValue::Nil {
             // resolve using __index
-            let metamethod_key = exec_data.metatable_keys.index.0.key().into();
+            let metamethod_key = exec_data.metatable_keys.index.0.key();
             let max_chain_depth = exec_data.limits.metatable_chain_depth;
             let mut chain_depth = 0;
 
@@ -1938,7 +1938,7 @@ impl CallContext {
         };
 
         let heap = &mut exec_data.heap;
-        let metamethod_key = exec_data.metatable_keys.newindex.0.key().into();
+        let metamethod_key = exec_data.metatable_keys.newindex.0.key();
         let src_value = value_stack.get_deref(heap, self.register_base + src as usize);
 
         if let Some(function_key) = heap.get_metamethod(table_key.into(), metamethod_key) {
@@ -2134,7 +2134,7 @@ fn resolve_call(
     mut value: StackValue,
     mut prepend_arg: impl FnMut(&mut Heap, StackValue),
 ) -> Result<StackValue, RuntimeErrorData> {
-    let call_key = exec_data.metatable_keys.call.0.key().into();
+    let call_key = exec_data.metatable_keys.call.0.key();
     let max_chain_depth = exec_data.limits.metatable_chain_depth;
     let mut chain_depth = 0;
 

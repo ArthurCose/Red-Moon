@@ -351,7 +351,7 @@ impl Heap {
         self.storage.native_functions[key] = value;
     }
 
-    pub(crate) fn get_metavalue(&self, value: StackValue, name: StackValue) -> StackValue {
+    pub(crate) fn get_metavalue(&self, value: StackValue, name: BytesObjectKey) -> StackValue {
         let metatable_key = match value {
             StackValue::Table(key) => {
                 let table = &self.storage.tables[key];
@@ -373,10 +373,14 @@ impl Heap {
             return StackValue::Nil;
         };
 
-        metatable.get(name)
+        metatable.get(name.into())
     }
 
-    pub(crate) fn get_metamethod(&self, value: StackValue, name: StackValue) -> Option<StackValue> {
+    pub(crate) fn get_metamethod(
+        &self,
+        value: StackValue,
+        name: BytesObjectKey,
+    ) -> Option<StackValue> {
         let value = self.get_metavalue(value, name);
 
         if !matches!(

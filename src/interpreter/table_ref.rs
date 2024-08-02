@@ -126,7 +126,7 @@ impl TableRef {
         let method_key = ctx.metatable_keys().index.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key.into()) {
+        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key) {
             return ctx.call_function_key(function_key, (self.clone(), key));
         };
 
@@ -148,7 +148,7 @@ impl TableRef {
         let method_key = ctx.metatable_keys().newindex.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key.into()) {
+        if let Some(function_key) = heap.get_metamethod(table_key.into(), method_key) {
             return ctx.call_function_key(function_key, (self.clone(), key, value));
         };
 
@@ -168,7 +168,7 @@ impl TableRef {
         let len_key = ctx.metatable_keys().len.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(function_key) = heap.get_metamethod(table_key.into(), len_key.into()) else {
+        let Some(function_key) = heap.get_metamethod(table_key.into(), len_key) else {
             return Ok(len);
         };
 

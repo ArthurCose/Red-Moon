@@ -297,7 +297,6 @@ impl Value {
         ctx: &mut VmContext,
     ) -> Option<Result<T, RuntimeError>> {
         let heap = &ctx.vm.execution_data.heap;
-        let method_name = method_name.into();
 
         let key = self.to_stack_value();
         if let Some(key) = heap.get_metamethod(key, method_name) {
