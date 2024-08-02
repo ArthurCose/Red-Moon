@@ -330,14 +330,13 @@ impl Heap {
         self.storage.coroutines.get_mut(key)
     }
 
-    pub(crate) fn set_stack_value(
+    pub(crate) fn get_stack_value_mut(
         &mut self,
         gc: &mut GarbageCollector,
         key: StackObjectKey,
-        value: StackValue,
-    ) {
+    ) -> Option<&mut StackValue> {
         gc.acknowledge_write(key.into());
-        self.storage.stack_values[key] = value;
+        self.storage.stack_values.get_mut(key)
     }
 
     #[cfg(feature = "serde")]

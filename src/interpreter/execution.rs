@@ -990,7 +990,13 @@ impl CallContext {
                         return Err(RuntimeErrorData::InvalidInternalState);
                     };
 
-                    heap.set_stack_value(gc, *key, value);
+                    let Some(stored) = heap.get_stack_value_mut(gc, *key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        return Err(RuntimeErrorData::InvalidInternalState);
+                    };
+
+                    *stored = value
                 }
                 Instruction::Copy(dest, src) => {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
@@ -1001,13 +1007,19 @@ impl CallContext {
                     let dest_index = self.register_base + dest as usize;
 
                     if let StackValue::Pointer(key) = value_stack.get(dest_index) {
-                        heap.set_stack_value(gc, key, value);
+                        let Some(stored) = heap.get_stack_value_mut(gc, key) else {
+                            crate::debug_unreachable!();
+                            #[cfg(not(debug_assertions))]
+                            return Err(RuntimeErrorData::InvalidInternalState);
+                        };
+
+                        *stored = value
                     } else {
                         value_stack.set(dest_index, value);
                     }
                 }
                 Instruction::CopyRangeToDeref(dest, src, count) => {
-                    self.copy_range_to_deref(exec_data, value_stack, dest, src, count);
+                    self.copy_range_to_deref(exec_data, value_stack, dest, src, count)?;
                 }
                 Instruction::Not(dest, src) => {
                     let value = !value_stack.is_truthy(self.register_base + src as usize);
@@ -1990,7 +2002,7 @@ impl CallContext {
         dest: Register,
         src: Register,
         count: Register,
-    ) {
+    ) -> Result<(), RuntimeErrorData> {
         let gc = &mut exec_data.gc;
         let heap = &mut exec_data.heap;
 
@@ -2008,11 +2020,19 @@ impl CallContext {
             let value = slice[src_index].get_deref(heap);
 
             if let StackValue::Pointer(key) = slice[dest_index] {
-                heap.set_stack_value(gc, key, value);
+                let Some(stored) = heap.get_stack_value_mut(gc, key) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                *stored = value
             } else {
                 slice[dest_index] = value;
             }
         }
+
+        Ok(())
     }
 }
 
