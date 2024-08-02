@@ -112,11 +112,11 @@ macro_rules! impl_serde_deduplicating_rc {
                 }
             }
 
-            pub(crate) fn enable() {
+            pub(crate) fn begin_dedup() {
                 DEDUPLICATING.set(true);
             }
 
-            pub(crate) fn reset() {
+            pub(crate) fn end_dedup() {
                 MAP.with_borrow_mut(|map| map.clear());
                 SET.with_borrow_mut(|set| set.clear());
                 DEDUPLICATING.set(false);
