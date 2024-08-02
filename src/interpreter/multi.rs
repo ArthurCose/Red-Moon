@@ -5,10 +5,11 @@ use super::value_stack::{StackValue, ValueStack};
 use super::vm::VmContext;
 use super::Value;
 use crate::errors::{IllegalInstruction, RuntimeError};
+use thin_vec::ThinVec;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MultiValue {
-    pub(crate) values: Vec<Value>,
+    pub(crate) values: ThinVec<Value>,
 }
 
 impl MultiValue {
@@ -71,7 +72,7 @@ impl MultiValue {
     #[inline]
     pub fn to_vec(mut self) -> Vec<Value> {
         self.values.reverse();
-        self.values
+        self.values.to_vec()
     }
 
     #[inline]

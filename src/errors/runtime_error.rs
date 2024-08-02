@@ -1,7 +1,6 @@
 use super::stack_trace::StackTrace;
 use super::RuntimeErrorData;
 use crate::interpreter::ByteString;
-use std::borrow::Cow;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -16,7 +15,7 @@ pub struct RuntimeError {
 impl RuntimeError {
     pub fn new_bad_argument(position: usize, mut error: RuntimeError) -> Self {
         error.data = RuntimeErrorData::BadArgument {
-            position,
+            position: position as _,
             reason: error.data.into(),
         };
 
@@ -24,11 +23,11 @@ impl RuntimeError {
     }
 
     pub fn new_string(message: String) -> Self {
-        RuntimeError::from(RuntimeErrorData::String(Cow::Owned(message)))
+        RuntimeError::from(RuntimeErrorData::ByteString(message.as_str().into()))
     }
 
     pub fn new_static_string(message: &'static str) -> Self {
-        RuntimeError::from(RuntimeErrorData::String(Cow::Borrowed(message)))
+        RuntimeError::from(RuntimeErrorData::ByteString(message.into()))
     }
 
     pub fn new_byte_string(message: ByteString) -> RuntimeError {

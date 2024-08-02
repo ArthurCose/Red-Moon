@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use thin_vec::ThinVec;
 
 #[cfg(feature = "serde")]
 use {
@@ -41,7 +42,7 @@ impl StackTraceFrame {
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StackTrace {
-    frames: Vec<StackTraceFrame>,
+    frames: ThinVec<StackTraceFrame>,
 }
 
 impl StackTrace {

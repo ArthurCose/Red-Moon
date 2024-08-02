@@ -16,9 +16,9 @@ pub(crate) struct CachePools {
 impl CachePools {
     #[inline]
     pub(crate) fn create_multi(&self) -> MultiValue {
-        self.multivalues
-            .pop()
-            .unwrap_or_else(|| MultiValue { values: Vec::new() })
+        self.multivalues.pop().unwrap_or_else(|| MultiValue {
+            values: Default::default(),
+        })
     }
 
     #[inline]

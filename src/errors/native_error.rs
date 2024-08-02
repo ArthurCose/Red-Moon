@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct NativeError {
-    rc: Rc<dyn std::error::Error>,
+    rc: Rc<Box<dyn std::error::Error>>,
 }
 
 impl PartialEq for NativeError {
@@ -23,7 +23,7 @@ where
 {
     fn from(value: T) -> Self {
         Self {
-            rc: Rc::from(value),
+            rc: Rc::new(Box::new(value)),
         }
     }
 }

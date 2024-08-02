@@ -52,24 +52,26 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 macro_rules! impl_serde_deduplicating_rc {
-    ($module_name:ident, $unboxed:ty, $deserialized:ty) => {
+    ($module_name:ident, $boxed:ty, $id_callback:expr, $se_conversion:expr, $de_conversion:expr) => {
         pub(crate) mod $module_name {
             use super::*;
 
             thread_local! {
                 static DEDUPLICATING: Cell<bool> = Default::default();
-                static MAP: RefCell<HashMap<usize, Rc<$unboxed>>> = Default::default();
+                static MAP: RefCell<HashMap<usize, $boxed>> = Default::default();
                 static SET: RefCell<HashSet<usize>> = Default::default();
             }
 
-            pub(crate) fn serialize<S>(rc: &Rc<$unboxed>, serializer: S) -> Result<S::Ok, S::Error>
+            pub(crate) fn serialize<S>(rc: &$boxed, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,
             {
+                let conversion = $se_conversion;
+
                 if DEDUPLICATING.get() {
-                    let id = Rc::as_ptr(&rc) as *const () as usize;
+                    let id: usize = ($id_callback)(rc);
                     let data = if SET.with_borrow_mut(|set| set.insert(id)) {
-                        let s: &$unboxed = &**rc;
+                        let s = conversion(&**rc);
                         Some(s)
                     } else {
                         None
@@ -77,22 +79,23 @@ macro_rules! impl_serde_deduplicating_rc {
 
                     serde::Serialize::serialize(&(id, data), serializer)
                 } else {
-                    let s: &$unboxed = &**rc;
+                    let s = conversion(&**rc);
                     serde::Serialize::serialize(&s, serializer)
                 }
             }
 
-            pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Rc<$unboxed>, D::Error>
+            pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<$boxed, D::Error>
             where
                 D: serde::Deserializer<'de>,
             {
+                let conversion = $de_conversion;
+
                 if DEDUPLICATING.get() {
-                    let (id, data): (usize, Option<$deserialized>) =
-                        serde::Deserialize::deserialize(deserializer)?;
+                    let (id, data) = serde::Deserialize::deserialize(deserializer)?;
 
                     match data {
                         Some(data) => {
-                            let rc: Rc<$unboxed> = data.into();
+                            let rc: $boxed = conversion(data);
                             MAP.with_borrow_mut(|map| {
                                 map.insert(id, rc.clone());
                             });
@@ -102,13 +105,13 @@ macro_rules! impl_serde_deduplicating_rc {
                             Some(rc) => Ok(rc.clone()),
                             None => Err(D::Error::invalid_value(
                                 serde::de::Unexpected::Option,
-                                &stringify!($unboxed),
+                                &stringify!($boxed),
                             )),
                         }),
                     }
                 } else {
-                    let data: $deserialized = serde::Deserialize::deserialize(deserializer)?;
-                    Ok(data.into())
+                    let data = serde::Deserialize::deserialize(deserializer)?;
+                    Ok(conversion(data))
                 }
             }
 
@@ -126,30 +129,57 @@ macro_rules! impl_serde_deduplicating_rc {
 }
 
 use crate::interpreter::{FunctionDefinition, StackObjectKey};
+use erasable::Thin;
+use slice_dst::SliceWithHeader;
 
-impl_serde_deduplicating_rc!(serde_str_rc, str, &str);
+fn rc_id<T: ?Sized>(rc: &Rc<T>) -> usize {
+    Rc::as_ptr(rc) as *const () as usize
+}
+
+// self.keys.slice.as_ptr()
+
+impl_serde_deduplicating_rc!(
+    serde_str_rc,
+    Rc<str>,
+    rc_id,
+    |data| { data },
+    |data: &str| { data.into() }
+);
 // todo: should we use &[u8] instead of Box<[u8]>? can we use some cow type?
-impl_serde_deduplicating_rc!(serde_u8_slice_rc, [u8], Box<[u8]>);
+impl_serde_deduplicating_rc!(
+    serde_u8_thin_slice_rc,
+    Thin<Rc<SliceWithHeader<(), u8>>>,
+    |x: &Thin<Rc<slice_dst::SliceWithHeader<(), u8>>>| { x.slice.as_ptr() as *const () as usize },
+    |data| {
+        let data: &slice_dst::SliceWithHeader<(), u8> = data;
+        &data.slice
+    },
+    |data: Vec<u8>| slice_dst::SliceWithHeader::new::<Rc<_>, _>((), data).into()
+);
 impl_serde_deduplicating_rc!(
     serde_stack_object_key_slice_rc,
-    [StackObjectKey],
-    Box<[StackObjectKey]>
+    Rc<[StackObjectKey]>,
+    rc_id,
+    |data| { data },
+    |data: Box<[StackObjectKey]>| { data.into() }
 );
 impl_serde_deduplicating_rc!(
     serde_function_definition_rc,
-    FunctionDefinition,
-    FunctionDefinition
+    Rc<FunctionDefinition>,
+    rc_id,
+    |data| { data },
+    |data: FunctionDefinition| { data.into() }
 );
 
 pub(crate) fn begin_dedup() {
     serde_str_rc::begin_dedup();
-    serde_u8_slice_rc::begin_dedup();
-    serde_function_definition_rc::begin_dedup();
+    serde_u8_thin_slice_rc::begin_dedup();
     serde_stack_object_key_slice_rc::begin_dedup();
+    serde_function_definition_rc::begin_dedup();
 }
 pub(crate) fn end_dedup() {
     serde_str_rc::end_dedup();
-    serde_u8_slice_rc::end_dedup();
+    serde_u8_thin_slice_rc::end_dedup();
     serde_stack_object_key_slice_rc::end_dedup();
     serde_function_definition_rc::end_dedup();
 }
