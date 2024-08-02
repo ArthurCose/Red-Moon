@@ -1,13 +1,13 @@
 use super::heap::{BytesObjectKey, FnObjectKey};
 use super::instruction::Instruction;
-use super::value_stack::ValueStack;
+use super::up_values::UpValues;
 use super::{SourceMapping, UpValueSource};
 use crate::errors::StackTraceFrame;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use {
-    crate::serde_util::{serde_function_definition_rc, serde_str_rc, serde_value_stack_rc},
+    crate::serde_util::{serde_function_definition_rc, serde_str_rc},
     serde::{Deserialize, Serialize},
 };
 
@@ -75,8 +75,7 @@ impl FunctionDefinition {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Function {
-    #[cfg_attr(feature = "serde", serde(with = "serde_value_stack_rc"))]
-    pub(crate) up_values: Rc<ValueStack>,
+    pub(crate) up_values: UpValues,
     #[cfg_attr(feature = "serde", serde(with = "serde_function_definition_rc"))]
     pub(crate) definition: Rc<FunctionDefinition>,
 }
@@ -84,10 +83,7 @@ pub(crate) struct Function {
 impl Function {
     pub(crate) fn heap_size(&self) -> usize {
         let mut size = 0;
-        // value_stack: weak count + strong count + data
-        size += std::mem::size_of::<usize>() * 2
-            + std::mem::size_of::<ValueStack>()
-            + self.up_values.heap_size();
+        size += self.up_values.heap_size();
         // definition: RcBox, we're excluding the data since there will be multiple copies in the same vm
         // the deduplicated size should be handled externally to avoid duplicated calculations
         size += std::mem::size_of::<usize>() * 2;

@@ -157,10 +157,6 @@ impl Clone for ValueStack {
 }
 
 impl ValueStack {
-    pub(crate) fn heap_size(&self) -> usize {
-        self.values.len() * std::mem::size_of::<StackValue>()
-    }
-
     pub(crate) fn len(&self) -> usize {
         self.values.len()
     }

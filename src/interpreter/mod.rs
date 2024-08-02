@@ -16,6 +16,7 @@ mod number;
 mod string_ref;
 mod table;
 mod table_ref;
+mod up_values;
 mod value;
 mod value_stack;
 mod vm;
@@ -38,4 +39,4 @@ pub use vm::{Vm, VmContext, VmLimits};
 pub(crate) use coroutine::Continuation;
 
 #[cfg(feature = "serde")]
-pub(crate) use {interpreted_function::FunctionDefinition, value_stack::ValueStack};
+pub(crate) use {heap::StackObjectKey, interpreted_function::FunctionDefinition};

@@ -6,6 +6,7 @@ use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::execution::ExecutionContext;
 use crate::interpreter::metatable_keys::MetatableKeys;
+use crate::interpreter::up_values::UpValues;
 use crate::interpreter::value_stack::{StackValue, ValueStack};
 use crate::interpreter::vm::CoroutineData;
 use crate::interpreter::Continuation;
@@ -264,7 +265,7 @@ impl GarbageCollector {
         self.mark_value_stack(&execution.value_stack);
 
         for call in &execution.call_stack {
-            self.mark_value_stack(&call.function.up_values)
+            self.mark_up_values(&call.function.up_values)
         }
     }
 
@@ -422,6 +423,12 @@ impl GarbageCollector {
         self.mark_storage_key(key);
     }
 
+    fn mark_up_values(&mut self, up_values: &UpValues) {
+        for key in up_values.iter() {
+            self.mark_storage_key(key.into());
+        }
+    }
+
     fn mark_value_stack(&mut self, value_stack: &ValueStack) {
         for value in value_stack.iter() {
             self.mark_stack_value(value);
@@ -452,7 +459,7 @@ impl GarbageCollector {
                     return;
                 };
 
-                self.mark_value_stack(&function.up_values);
+                self.mark_up_values(&function.up_values);
 
                 let definition_key = Rc::as_ptr(&function.definition) as usize;
 

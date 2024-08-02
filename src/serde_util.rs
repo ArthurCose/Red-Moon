@@ -125,12 +125,16 @@ macro_rules! impl_serde_deduplicating_rc {
     };
 }
 
-use crate::interpreter::{FunctionDefinition, ValueStack};
+use crate::interpreter::{FunctionDefinition, StackObjectKey};
 
 impl_serde_deduplicating_rc!(serde_str_rc, str, &str);
 // todo: should we use &[u8] instead of Box<[u8]>? can we use some cow type?
 impl_serde_deduplicating_rc!(serde_u8_slice_rc, [u8], Box<[u8]>);
-impl_serde_deduplicating_rc!(serde_value_stack_rc, ValueStack, ValueStack);
+impl_serde_deduplicating_rc!(
+    serde_stack_object_key_slice_rc,
+    [StackObjectKey],
+    Box<[StackObjectKey]>
+);
 impl_serde_deduplicating_rc!(
     serde_function_definition_rc,
     FunctionDefinition,
@@ -141,13 +145,13 @@ pub(crate) fn begin_dedup() {
     serde_str_rc::begin_dedup();
     serde_u8_slice_rc::begin_dedup();
     serde_function_definition_rc::begin_dedup();
-    serde_value_stack_rc::begin_dedup();
+    serde_stack_object_key_slice_rc::begin_dedup();
 }
 pub(crate) fn end_dedup() {
     serde_str_rc::end_dedup();
     serde_u8_slice_rc::end_dedup();
+    serde_stack_object_key_slice_rc::end_dedup();
     serde_function_definition_rc::end_dedup();
-    serde_value_stack_rc::end_dedup();
 }
 
 pub(crate) use impl_serde_deduplicating_rc;

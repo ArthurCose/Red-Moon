@@ -445,11 +445,14 @@ impl<'vm> VmContext<'vm> {
         let env_index = call.function.definition.env?;
 
         let heap = &mut self.vm.execution_data.heap;
-        let StackValue::Table(env_key) = call.function.up_values.get_deref(heap, env_index) else {
+        let env_stack_value_key = call.function.up_values.get(env_index)?;
+
+        let Some(StackValue::Table(env_table_key)) = heap.get_stack_value(*env_stack_value_key)
+        else {
             return None;
         };
 
-        Some(TableRef(heap.create_ref(env_key)))
+        Some(TableRef(heap.create_ref(*env_table_key)))
     }
 
     #[inline]
@@ -564,7 +567,7 @@ impl<'vm> VmContext<'vm> {
             .map(|table| table.0.key().into())
             .unwrap_or(self.vm.default_environment.0.key().into());
         // storing in up values as StackValue::Pointer
-        let environment = heap.store_stack_value(gc, environment).into();
+        let environment = heap.store_stack_value(gc, environment);
 
         let mut keys = Vec::with_capacity(module.chunks.len());
 
@@ -581,11 +584,15 @@ impl<'vm> VmContext<'vm> {
                 .map(|index| keys[index])
                 .collect();
 
-            let mut up_values = ValueStack::default();
+            let mut up_values = Vec::new();
 
             if i == module.main {
                 if let Some(index) = chunk.env {
-                    up_values.set(index, environment);
+                    if index != 0 {
+                        return Err(RuntimeErrorData::InvalidMainEnvIndex.into());
+                    }
+
+                    up_values.push(environment);
                 }
             }
 

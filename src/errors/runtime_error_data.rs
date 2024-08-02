@@ -13,6 +13,7 @@ pub enum RuntimeErrorData {
     InvalidRef,
     InvalidInternalState,
     MissingMain,
+    InvalidMainEnvIndex,
     StackOverflow,
     InvalidCall(TypeName),
     MetatableIndexChainTooLong,
@@ -109,6 +110,12 @@ impl std::fmt::Display for RuntimeErrorData {
             RuntimeErrorData::InvalidRef => write!(f, "invalid ref"),
             RuntimeErrorData::InvalidInternalState => write!(f, "invalid internal state"),
             RuntimeErrorData::MissingMain => write!(f, "module missing main chunk"),
+            RuntimeErrorData::InvalidMainEnvIndex => {
+                write!(
+                    f,
+                    "the only valid index for the environment in the main chunk is 0"
+                )
+            }
             RuntimeErrorData::StackOverflow => write!(f, "stack overflow"),
             RuntimeErrorData::InvalidCall(type_name) => {
                 write!(f, "attempt to call a {type_name} value")

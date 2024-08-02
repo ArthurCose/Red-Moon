@@ -10,7 +10,6 @@ use super::{TypeName, UpValueSource, Value};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::coerce_integer;
 use std::borrow::Cow;
-use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -922,41 +921,41 @@ impl CallContext {
                         let mut func = func.clone();
 
                         // resolve captures
-                        let mut up_values = exec_data.cache_pools.create_short_value_stack();
+                        let mut up_values = Vec::new();
+                        up_values.reserve_exact(func.definition.up_values.len());
 
                         for capture_source in &func.definition.up_values {
-                            let value = match capture_source {
+                            let key = match capture_source {
                                 UpValueSource::Stack(src) => {
                                     let src_index = self.register_base + *src as usize;
-                                    let mut value = value_stack.get(src_index);
+                                    let value = value_stack.get(src_index);
 
-                                    if !matches!(value, StackValue::Pointer(_)) {
+                                    if let StackValue::Pointer(key) = value {
+                                        key
+                                    } else {
                                         // move the stack value to the heap
                                         let key = heap.store_stack_value(gc, value);
-                                        value = StackValue::Pointer(key);
-                                        value_stack.set(src_index, value);
+                                        value_stack.set(src_index, StackValue::Pointer(key));
+                                        key
                                     }
-
-                                    value
                                 }
                                 UpValueSource::UpValue(src) => {
                                     let src_index = *src as usize;
-                                    let value = self.function.up_values.get(src_index);
 
-                                    if !matches!(value, StackValue::Pointer(_)) {
-                                        crate::debug_unreachable!(
-                                            "expecting only StackValue::Pointer in up values"
-                                        );
-                                    }
+                                    let Some(key) = self.function.up_values.get(src_index) else {
+                                        crate::debug_unreachable!();
+                                        #[cfg(not(debug_assertions))]
+                                        return Err(RuntimeErrorData::InvalidInternalState);
+                                    };
 
-                                    value
+                                    *key
                                 }
                             };
 
-                            up_values.push(value);
+                            up_values.push(key);
                         }
 
-                        func.up_values = Rc::new(up_values);
+                        func.up_values = up_values.into();
 
                         // store the new function
                         let function_key = heap.store_interpreted_fn(gc, func);
@@ -968,35 +967,30 @@ impl CallContext {
                     }
                 }
                 Instruction::CopyUpValue(dest, src) => {
-                    if let StackValue::Pointer(key) = self.function.up_values.get(src as usize) {
-                        let Some(value) = heap.get_stack_value(key) else {
-                            crate::debug_unreachable!();
-                            #[cfg(not(debug_assertions))]
-                            return Err(RuntimeErrorData::InvalidInternalState);
-                        };
-
-                        value_stack.set(self.register_base + dest as usize, *value);
-                    } else {
-                        crate::debug_unreachable!(
-                            "expecting only StackValue::Pointer in up values"
-                        );
+                    let Some(key) = self.function.up_values.get(src as usize) else {
+                        crate::debug_unreachable!();
                         #[cfg(not(debug_assertions))]
                         return Err(RuntimeErrorData::InvalidInternalState);
-                    }
+                    };
+
+                    let Some(value) = heap.get_stack_value(*key) else {
+                        crate::debug_unreachable!();
+                        #[cfg(not(debug_assertions))]
+                        return Err(RuntimeErrorData::InvalidInternalState);
+                    };
+
+                    value_stack.set(self.register_base + dest as usize, *value);
                 }
                 Instruction::CopyToUpValueDeref(dest, src) => {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
-                    if let StackValue::Pointer(key) = self.function.up_values.get(dest as usize) {
-                        // pointing to another stack value
-                        heap.set_stack_value(gc, key, value);
-                    } else {
-                        crate::debug_unreachable!(
-                            "expecting only StackValue::Pointer in up values"
-                        );
+                    let Some(key) = self.function.up_values.get(dest as usize) else {
+                        crate::debug_unreachable!();
                         #[cfg(not(debug_assertions))]
                         return Err(RuntimeErrorData::InvalidInternalState);
-                    }
+                    };
+
+                    heap.set_stack_value(gc, *key, value);
                 }
                 Instruction::Copy(dest, src) => {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
