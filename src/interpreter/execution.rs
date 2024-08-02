@@ -1068,8 +1068,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
-                        |heap, value| match value {
+                        &|type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        &|heap, value| match value {
                             StackValue::Integer(n) => Ok(StackValue::Integer(-n)),
                             StackValue::Float(n) => Ok(StackValue::Float(-n)),
                             _ => Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
@@ -1085,8 +1085,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
-                        |heap, value| {
+                        &|type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        &|heap, value| {
                             Ok(StackValue::Integer(-arithmetic_cast_integer(heap, value)?))
                         },
                     )? {
@@ -1100,8 +1100,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a.wrapping_add(b),
-                        |a, b| a + b,
+                        &|a, b| a.wrapping_add(b),
+                        &|a, b| a + b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1113,8 +1113,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a.wrapping_sub(b),
-                        |a, b| a - b,
+                        &|a, b| a.wrapping_sub(b),
+                        &|a, b| a - b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1126,8 +1126,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a.wrapping_mul(b),
-                        |a, b| a * b,
+                        &|a, b| a.wrapping_mul(b),
+                        &|a, b| a * b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1139,7 +1139,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a / b,
+                        &|a, b| a / b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1151,8 +1151,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a / b,
-                        |a, b| a / b,
+                        &|a, b| a / b,
+                        &|a, b| a / b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1164,8 +1164,8 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a % b,
-                        |a, b| a % b,
+                        &|a, b| a % b,
+                        &|a, b| a % b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1177,7 +1177,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a.powf(b),
+                        &|a, b| a.powf(b),
                     )? {
                         return Ok(call_result);
                     }
@@ -1189,7 +1189,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a & b,
+                        &|a, b| a & b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1201,7 +1201,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a | b,
+                        &|a, b| a | b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1213,7 +1213,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a ^ b,
+                        &|a, b| a ^ b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1225,7 +1225,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a << b,
+                        &|a, b| a << b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1237,7 +1237,7 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a >> b,
+                        &|a, b| a >> b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1277,9 +1277,9 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a < b,
-                        |a, b| a < b,
-                        |heap, a, b| {
+                        &|a, b| a < b,
+                        &|a, b| a < b,
+                        &|heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
                                 let Some(bytes_a) = heap.get_bytes(key_a) else {
                                     crate::debug_unreachable!();
@@ -1309,9 +1309,9 @@ impl CallContext {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        |a, b| a <= b,
-                        |a, b| a <= b,
-                        |heap, a, b| {
+                        &|a, b| a <= b,
+                        &|a, b| a <= b,
+                        &|heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
                                 let Some(bytes_a) = heap.get_bytes(key_a) else {
                                     crate::debug_unreachable!();
@@ -1484,8 +1484,8 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_operation: impl Fn(i64, i64) -> i64,
-        float_operation: impl Fn(f64, f64) -> f64,
+        integer_operation: &dyn Fn(i64, i64) -> i64,
+        float_operation: &dyn Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1548,7 +1548,7 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        operation: impl Fn(f64, f64) -> f64,
+        operation: &dyn Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1593,7 +1593,7 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        operation: impl Fn(i64, i64) -> i64,
+        operation: &dyn Fn(i64, i64) -> i64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1637,8 +1637,8 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_operation: impl Fn(i64, i64) -> i64,
-        float_operation: impl Fn(f64, f64) -> f64,
+        integer_operation: &dyn Fn(i64, i64) -> i64,
+        float_operation: &dyn Fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1688,9 +1688,9 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_comparison: impl Fn(i64, i64) -> bool,
-        float_comparison: impl Fn(f64, f64) -> bool,
-        heap_comparison: impl Fn(&Heap, StackValue, StackValue) -> Option<bool>,
+        integer_comparison: &dyn Fn(i64, i64) -> bool,
+        float_comparison: &dyn Fn(f64, f64) -> bool,
+        heap_comparison: &dyn Fn(&Heap, StackValue, StackValue) -> Option<bool>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1796,8 +1796,8 @@ impl CallContext {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a): (Register, Register),
         metamethod_key: BytesObjectKey,
-        generate_error: impl Fn(TypeName) -> RuntimeErrorData,
-        primitive_operation: impl Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
+        generate_error: &dyn Fn(TypeName) -> RuntimeErrorData,
+        primitive_operation: &dyn Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
 
