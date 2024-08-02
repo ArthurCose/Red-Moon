@@ -127,10 +127,7 @@ impl Serialize for Vm {
         S: serde::Serializer,
     {
         // enable deduplication
-        crate::serde_util::serde_str_rc::begin_dedup();
-        super::serde_byte_string_rc::begin_dedup();
-        super::serde_function_definition_rc::begin_dedup();
-        super::serde_value_stack_rc::begin_dedup();
+        crate::serde_util::begin_dedup();
 
         // serialize
         let result = (|| {
@@ -145,10 +142,7 @@ impl Serialize for Vm {
         })();
 
         // reset + disable deduplication
-        crate::serde_util::serde_str_rc::end_dedup();
-        super::serde_byte_string_rc::end_dedup();
-        super::serde_function_definition_rc::end_dedup();
-        super::serde_value_stack_rc::end_dedup();
+        crate::serde_util::end_dedup();
 
         result
     }
@@ -176,19 +170,13 @@ impl<'de> Deserialize<'de> for Vm {
         }
 
         // enable deduplication
-        crate::serde_util::serde_str_rc::begin_dedup();
-        super::serde_byte_string_rc::begin_dedup();
-        super::serde_function_definition_rc::begin_dedup();
-        super::serde_value_stack_rc::begin_dedup();
+        crate::serde_util::begin_dedup();
 
         // deserialize
         let result = Deserialize::deserialize(deserializer);
 
         // reset + disable deduplication
-        crate::serde_util::serde_str_rc::end_dedup();
-        super::serde_byte_string_rc::end_dedup();
-        super::serde_function_definition_rc::end_dedup();
-        super::serde_value_stack_rc::end_dedup();
+        crate::serde_util::end_dedup();
 
         let data: Data = result?;
 

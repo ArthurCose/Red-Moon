@@ -2,19 +2,15 @@ use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use {
-    crate::serde_util::impl_serde_deduplicating_rc,
+    crate::serde_util::serde_u8_slice_rc,
     serde::{Deserialize, Serialize},
 };
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ByteString(
-    #[cfg_attr(feature = "serde", serde(with = "serde_byte_string_rc"))] pub(crate) Rc<[u8]>,
+    #[cfg_attr(feature = "serde", serde(with = "serde_u8_slice_rc"))] pub(crate) Rc<[u8]>,
 );
-
-#[cfg(feature = "serde")]
-// todo: should we use &[u8] instead of Box<[u8]>? can we use some cow type?
-impl_serde_deduplicating_rc!(serde_byte_string_rc, [u8], Box<[u8]>);
 
 impl ByteString {
     pub(crate) fn heap_size(&self) -> usize {

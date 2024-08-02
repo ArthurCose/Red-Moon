@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use {
-    crate::serde_util::{impl_serde_deduplicating_rc, serde_str_rc},
+    crate::serde_util::{serde_function_definition_rc, serde_str_rc, serde_value_stack_rc},
     serde::{Deserialize, Serialize},
 };
 
@@ -23,13 +23,6 @@ pub(crate) struct FunctionDefinition {
     pub(crate) instructions: Vec<Instruction>,
     pub(crate) source_map: Vec<SourceMapping>,
 }
-
-#[cfg(feature = "serde")]
-impl_serde_deduplicating_rc!(
-    serde_function_definition_rc,
-    FunctionDefinition,
-    FunctionDefinition
-);
 
 impl FunctionDefinition {
     pub(crate) fn heap_size(&self) -> usize {
@@ -82,9 +75,9 @@ impl FunctionDefinition {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Function {
-    #[cfg_attr(feature = "serde", serde(with = "super::serde_value_stack_rc"))]
+    #[cfg_attr(feature = "serde", serde(with = "serde_value_stack_rc"))]
     pub(crate) up_values: Rc<ValueStack>,
-    #[cfg_attr(feature = "serde", serde(with = "super::serde_function_definition_rc"))]
+    #[cfg_attr(feature = "serde", serde(with = "serde_function_definition_rc"))]
     pub(crate) definition: Rc<FunctionDefinition>,
 }
 

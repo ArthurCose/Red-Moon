@@ -38,7 +38,4 @@ pub use vm::{Vm, VmContext, VmLimits};
 pub(crate) use coroutine::Continuation;
 
 #[cfg(feature = "serde")]
-pub(crate) use {
-    byte_string::serde_byte_string_rc, interpreted_function::serde_function_definition_rc,
-    value_stack::serde_value_stack_rc,
-};
+pub(crate) use {interpreted_function::FunctionDefinition, value_stack::ValueStack};
