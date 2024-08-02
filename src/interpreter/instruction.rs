@@ -175,21 +175,11 @@ pub enum Instruction {
     /// (dest, function_index)
     Closure(Register, ConstantIndex),
 
-    /// Sets an up value to Nil
-    ///
-    /// (dest)
-    ClearUpValue(Register),
-
     /// Copies an up value to the stack
     /// The first up value for a module's top level function will be initialized with the default environment
     ///
     /// (dest, src)
     CopyUpValue(Register, Register),
-
-    /// Copies a value to an up value
-    ///
-    /// (dest, src)
-    CopyToUpValue(Register, Register),
 
     /// Copies a value to a up value
     ///
@@ -334,9 +324,7 @@ impl Instruction {
             Instruction::CopyVariadic(_, _, _) => "CopyVariadic",
             Instruction::CopyUnsizedVariadic(_, _) => "CopyUnsizedVariadic",
             Instruction::Closure(_, _) => "Closure",
-            Instruction::ClearUpValue(_) => "ClearUpValue",
             Instruction::CopyUpValue(_, _) => "CopyUpValue",
-            Instruction::CopyToUpValue(_, _) => "CopyToUpValue",
             Instruction::CopyToUpValueDeref(_, _) => "CopyToUpValueDeref",
             Instruction::Copy(_, _) => "Copy",
             Instruction::CopyToDeref(_, _) => "CopyToDeref",

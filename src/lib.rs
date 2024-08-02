@@ -24,9 +24,9 @@ mod test_readme {
 }
 
 macro_rules! debug_unreachable {
-    () => {
+    ($($arg:tt)*) => {
         #[cfg(debug_assertions)]
-        unreachable!();
+        unreachable!($($arg)*)
     };
 }
 

@@ -264,7 +264,7 @@ impl GarbageCollector {
         self.mark_value_stack(&execution.value_stack);
 
         for call in &execution.call_stack {
-            self.mark_value_stack(&call.up_values)
+            self.mark_value_stack(&call.function.up_values)
         }
     }
 

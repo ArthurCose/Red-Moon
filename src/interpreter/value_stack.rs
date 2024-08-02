@@ -3,7 +3,6 @@ use super::heap::{
     StorageKey, TableObjectKey,
 };
 use super::{Number, TypeName};
-use crate::vec_cell::VecCell;
 use std::ops::Range;
 
 #[cfg(feature = "serde")]
@@ -166,12 +165,6 @@ impl Clone for ValueStack {
 impl ValueStack {
     pub(crate) fn heap_size(&self) -> usize {
         self.values.len() * std::mem::size_of::<StackValue>()
-    }
-
-    pub(crate) fn clone_using(&self, short_value_stacks: &VecCell<ValueStack>) -> ValueStack {
-        let mut up_values = short_value_stacks.pop().unwrap_or_default();
-        up_values.clone_from(self);
-        up_values
     }
 
     pub(crate) fn len(&self) -> usize {

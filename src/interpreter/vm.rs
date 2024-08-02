@@ -454,12 +454,12 @@ impl<'vm> VmContext<'vm> {
     pub fn environment_up_value(&mut self) -> Option<TableRef> {
         let context = self.vm.execution_stack.last()?;
         let call = context.call_stack.last()?;
-        let env_index = call.function_definition.env?;
-        let StackValue::Table(env_key) = call.up_values.get(env_index) else {
-            return None;
-        };
+        let env_index = call.function.definition.env?;
 
         let heap = &mut self.vm.execution_data.heap;
+        let StackValue::Table(env_key) = call.function.up_values.get_deref(heap, env_index) else {
+            return None;
+        };
 
         Some(TableRef(heap.create_ref(env_key)))
     }
@@ -570,9 +570,13 @@ impl<'vm> VmContext<'vm> {
 
         let gc = &mut self.vm.execution_data.gc;
         let heap = &mut self.vm.execution_data.heap;
+
+        // create environment stack value
         let environment = environment
             .map(|table| table.0.key().into())
             .unwrap_or(self.vm.default_environment.0.key().into());
+        // storing in up values as StackValue::Pointer
+        let environment = heap.store_stack_value(gc, environment).into();
 
         let mut keys = Vec::with_capacity(module.chunks.len());
 

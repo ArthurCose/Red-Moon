@@ -1,7 +1,7 @@
 use super::coroutine::Continuation;
 use super::heap::{BytesObjectKey, FnObjectKey, Heap};
 use super::instruction::{Instruction, Register, ReturnMode};
-use super::interpreted_function::FunctionDefinition;
+use super::interpreted_function::Function;
 use super::multi::MultiValue;
 use super::table::Table;
 use super::value_stack::{StackValue, ValueStack};
@@ -46,10 +46,7 @@ impl ExecutionContext {
         exec_data.cache_pools.store_multi(args);
 
         let call_stack = vec![CallContext {
-            up_values: function
-                .up_values
-                .clone_using(&exec_data.cache_pools.short_value_stacks),
-            function_definition: function.definition.clone(),
+            function: function.clone(),
             next_instruction_index: 0,
             stack_start: 0,
             register_base: value_stack.len(),
@@ -100,10 +97,7 @@ impl ExecutionContext {
                 args.push_stack_multi(&mut value_stack);
 
                 let call_context = CallContext {
-                    up_values: function
-                        .up_values
-                        .clone_using(&exec_data.cache_pools.short_value_stacks),
-                    function_definition: function.definition.clone(),
+                    function: function.clone(),
                     next_instruction_index: 0,
                     stack_start: 0,
                     register_base: value_stack.len(),
@@ -208,9 +202,6 @@ impl ExecutionContext {
 
                                 // remove caller and recycle value stacks
                                 let call = execution.call_stack.pop().unwrap();
-                                exec_data
-                                    .cache_pools
-                                    .store_short_value_stack(call.up_values);
 
                                 // adopt caller's return mode and stack placement
                                 return_mode = call.return_mode;
@@ -298,8 +289,7 @@ impl ExecutionContext {
 
                             if return_mode == ReturnMode::TailCall {
                                 // transform the caller
-                                call.up_values.clone_from(&func.up_values);
-                                call.function_definition = func.definition.clone();
+                                call.function = func.clone();
                                 call.next_instruction_index = 0;
                                 call.register_base = call.stack_start + 2 + arg_count as usize;
 
@@ -309,10 +299,7 @@ impl ExecutionContext {
                                 );
                             } else {
                                 let new_call = CallContext {
-                                    up_values: func
-                                        .up_values
-                                        .clone_using(&exec_data.cache_pools.short_value_stacks),
-                                    function_definition: func.definition.clone(),
+                                    function: func.clone(),
                                     next_instruction_index: 0,
                                     stack_start,
                                     register_base: stack_start + 2 + arg_count as usize,
@@ -351,11 +338,6 @@ impl ExecutionContext {
                             IllegalInstruction::MissingReturnCount.into(),
                         ));
                     };
-
-                    // recycle value stacks
-                    exec_data
-                        .cache_pools
-                        .store_short_value_stack(call.up_values);
 
                     let mut return_count = return_count as usize;
                     let value_stack = &mut execution.value_stack;
@@ -422,7 +404,7 @@ impl ExecutionContext {
                         ReturnMode::TailCall => unreachable!(),
                     }
 
-                    last_definition = Some(call.function_definition);
+                    last_definition = Some(call.function.definition);
                 }
                 CallResult::StepGc => {
                     exec_data.gc.step(
@@ -574,13 +556,9 @@ impl ExecutionContext {
         // recycle value stacks
         for call in execution.call_stack.into_iter().rev() {
             let instruction_index = call.next_instruction_index.saturating_sub(1);
-            let definition = call.function_definition;
+            let definition = call.function.definition;
             let frame = definition.create_stack_trace_frame(instruction_index);
             err.trace.push_frame(frame);
-
-            exec_data
-                .cache_pools
-                .store_short_value_stack(call.up_values);
         }
 
         exec_data
@@ -594,9 +572,7 @@ impl ExecutionContext {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct CallContext {
-    pub(crate) up_values: ValueStack,
-    #[cfg_attr(feature = "serde", serde(with = "super::serde_function_definition_rc"))]
-    pub(crate) function_definition: Rc<FunctionDefinition>,
+    pub(crate) function: Function,
     pub(crate) next_instruction_index: usize,
     pub(crate) stack_start: usize,
     pub(crate) register_base: usize,
@@ -609,7 +585,7 @@ impl CallContext {
         value_stack: &mut ValueStack,
         exec_data: &mut ExecutionAccessibleData,
     ) -> Result<CallResult, RuntimeErrorData> {
-        let definition = &self.function_definition;
+        let definition = &self.function.definition;
         let mut for_loop_jump = false;
 
         while let Some(&instruction) = definition.instructions.get(self.next_instruction_index) {
@@ -965,13 +941,12 @@ impl CallContext {
                                 }
                                 UpValueSource::UpValue(src) => {
                                     let src_index = *src as usize;
-                                    let mut value = self.up_values.get(src_index);
+                                    let value = self.function.up_values.get(src_index);
 
                                     if !matches!(value, StackValue::Pointer(_)) {
-                                        // move the stack value to the heap
-                                        let key = heap.store_stack_value(gc, value);
-                                        value = StackValue::Pointer(key);
-                                        self.up_values.set(src_index, value);
+                                        crate::debug_unreachable!(
+                                            "expecting only StackValue::Pointer in up values"
+                                        );
                                     }
 
                                     value
@@ -992,25 +967,35 @@ impl CallContext {
                         }
                     }
                 }
-                Instruction::ClearUpValue(dest) => {
-                    self.up_values.set(dest as usize, StackValue::Nil);
-                }
                 Instruction::CopyUpValue(dest, src) => {
-                    let value = self.up_values.get_deref(heap, src as usize);
-                    value_stack.set(self.register_base + dest as usize, value);
-                }
-                Instruction::CopyToUpValue(dest, src) => {
-                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
-                    self.up_values.set(dest as usize, value);
+                    if let StackValue::Pointer(key) = self.function.up_values.get(src as usize) {
+                        let Some(value) = heap.get_stack_value(key) else {
+                            crate::debug_unreachable!();
+                            #[cfg(not(debug_assertions))]
+                            return Err(RuntimeErrorData::InvalidInternalState);
+                        };
+
+                        value_stack.set(self.register_base + dest as usize, *value);
+                    } else {
+                        crate::debug_unreachable!(
+                            "expecting only StackValue::Pointer in up values"
+                        );
+                        #[cfg(not(debug_assertions))]
+                        return Err(RuntimeErrorData::InvalidInternalState);
+                    }
                 }
                 Instruction::CopyToUpValueDeref(dest, src) => {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
-                    if let StackValue::Pointer(key) = self.up_values.get(dest as usize) {
+                    if let StackValue::Pointer(key) = self.function.up_values.get(dest as usize) {
                         // pointing to another stack value
                         heap.set_stack_value(gc, key, value);
                     } else {
-                        self.up_values.set(dest as usize, value);
+                        crate::debug_unreachable!(
+                            "expecting only StackValue::Pointer in up values"
+                        );
+                        #[cfg(not(debug_assertions))]
+                        return Err(RuntimeErrorData::InvalidInternalState);
                     }
                 }
                 Instruction::Copy(dest, src) => {
