@@ -51,15 +51,15 @@ impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let frames = self.trace.frames();
 
-        write!(f, "error: {}", self.data)?;
-
-        for frame in frames {
+        if let Some(instruction_trace) = frames.iter().flat_map(|f| f.instruction_trace()).next() {
             write!(
                 f,
-                "\n\tat {}:{}:{}",
-                frame.source_name, frame.line, frame.col
+                "{}:{}:",
+                instruction_trace.source_name, instruction_trace.col
             )?;
         }
+
+        write!(f, "{}\n{}", self.data, self.trace)?;
 
         Ok(())
     }

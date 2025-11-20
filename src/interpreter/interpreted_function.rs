@@ -2,7 +2,7 @@ use super::heap::{BytesObjectKey, FnObjectKey};
 use super::instruction::Instruction;
 use super::up_values::UpValues;
 use super::{SourceMapping, UpValueSource};
-use crate::errors::StackTraceFrame;
+use crate::errors::{InstructionTrace, StackTraceFrame};
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
@@ -64,10 +64,13 @@ impl FunctionDefinition {
         let (line, col) = self.resolve_line_and_col(instruction_index);
 
         StackTraceFrame {
-            source_name: self.label.clone(),
-            line,
-            col,
-            instruction_index,
+            instruction_trace: Some(InstructionTrace {
+                source_name: self.label.clone(),
+                line,
+                col,
+                instruction_index,
+            }),
+            tail_called: false,
         }
     }
 }

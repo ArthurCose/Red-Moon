@@ -1,5 +1,6 @@
-use crate::errors::RuntimeError;
+use crate::errors::{RuntimeError, StackTrace};
 use crate::interpreter::{ByteString, FunctionRef, HookMask, TableRef, Value, VmContext};
+use std::fmt::Write;
 
 pub fn impl_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // getregistry
@@ -65,6 +66,29 @@ pub fn impl_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     gethook.rehydrate("debug.gethook", ctx)?;
 
+    // traceback
+    let traceback = ctx.create_function(|call_ctx, ctx| {
+        let (message, level): (Value, Option<i64>) = call_ctx.get_args(ctx)?;
+
+        let mut message = match message {
+            Value::Nil => String::new(),
+            Value::String(string_ref) => {
+                string_ref.fetch(ctx)?.to_string_lossy().to_string() + "\n"
+            }
+            // "If message is present but is neither a string nor nil, this function returns message without further processing"
+            _ => return call_ctx.return_values(message, ctx),
+        };
+
+        // write stack trace
+        let level = level.unwrap_or(1).max(0) as usize;
+        let trace = StackTrace::new_traceback(ctx, level);
+
+        let _ = write!(&mut message, "{trace}");
+
+        call_ctx.return_values(message, ctx)
+    });
+    traceback.rehydrate("debug.traceback", ctx)?;
+
     // sethook
     let sethook = ctx.create_function(|call_ctx, ctx| {
         let Some(callback) = call_ctx.get_arg::<Option<FunctionRef>>(0, ctx)? else {
@@ -106,6 +130,7 @@ pub fn impl_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         debug.raw_set("setmetatable", setmetatable, ctx)?;
         debug.raw_set("gethook", gethook, ctx)?;
         debug.raw_set("sethook", sethook, ctx)?;
+        debug.raw_set("traceback", traceback, ctx)?;
 
         let env = ctx.default_environment();
         env.set("debug", debug, ctx)?;

@@ -23,18 +23,19 @@ pub(crate) enum CallResult {
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-struct ReturnContext {
-    interpreted: bool,
-    stack_start: usize,
-    register_base: usize,
-    return_mode: ReturnMode,
+pub(crate) struct ReturnContext {
+    pub(crate) interpreted: bool,
+    pub(crate) tail_called: bool,
+    pub(crate) stack_start: usize,
+    pub(crate) register_base: usize,
+    pub(crate) return_mode: ReturnMode,
 }
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct ExecutionContext {
     pub(crate) interpreter_stack: Vec<Interpreter>,
-    return_contexts: Vec<ReturnContext>,
+    pub(crate) return_contexts: Vec<ReturnContext>,
     pub(crate) value_stack: ValueStack,
 }
 
@@ -66,6 +67,7 @@ impl ExecutionContext {
             interpreter_stack,
             return_contexts: vec![ReturnContext {
                 interpreted: true,
+                tail_called: false,
                 stack_start: 0,
                 register_base: value_stack.len(),
                 return_mode: ReturnMode::Multi,
@@ -233,6 +235,7 @@ impl ExecutionContext {
                             // handle tail call
                             let mut return_context = ReturnContext {
                                 interpreted: false,
+                                tail_called: false,
                                 stack_start,
                                 register_base: 0, // resolved later
                                 return_mode,
@@ -254,6 +257,7 @@ impl ExecutionContext {
                                     return_context.return_mode = parent_context.return_mode;
                                     return_context.stack_start = parent_context.stack_start;
                                 }
+                                return_context.tail_called = true;
                             }
 
                             // resolve call context and return register
@@ -271,6 +275,9 @@ impl ExecutionContext {
                             // update tracked stack size in case the native function calls an interpreted function
                             let old_stack_size = exec_data.tracked_stack_size;
                             exec_data.tracked_stack_size = old_stack_size + value_stack.len();
+
+                            // store return context for tracebacks and coroutine resuming
+                            execution.return_contexts.push(return_context);
 
                             // call the function
                             let result = callback.call(key, native_call_ctx, &mut vm.context());
@@ -291,11 +298,7 @@ impl ExecutionContext {
                                             return Err(Self::continue_unwind(vm, err));
                                         }
 
-                                        let mut execution = vm.execution_stack.pop().unwrap();
-
-                                        // store return context
-                                        // we'll handle the return_context when resumed
-                                        execution.return_contexts.push(return_context);
+                                        let execution = vm.execution_stack.pop().unwrap();
 
                                         coroutine_data
                                             .in_progress_yield
@@ -310,6 +313,7 @@ impl ExecutionContext {
 
                             // juggling lifetimes
                             execution = vm.execution_stack.last_mut().unwrap();
+                            let return_context = execution.return_contexts.pop().unwrap();
 
                             let result = execution.handle_return(
                                 &mut vm.execution_data,
@@ -345,6 +349,7 @@ impl ExecutionContext {
                                 // update return context
                                 let return_context = execution.return_contexts.last_mut().unwrap();
                                 return_context.register_base = interpreter.register_base;
+                                return_context.tail_called = true;
                             } else {
                                 let register_base = stack_start + 2 + arg_count as usize;
 
@@ -358,6 +363,7 @@ impl ExecutionContext {
 
                                 execution.return_contexts.push(ReturnContext {
                                     interpreted: true,
+                                    tail_called: false,
                                     stack_start,
                                     register_base,
                                     return_mode,

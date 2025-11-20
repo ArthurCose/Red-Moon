@@ -11,5 +11,5 @@ pub use lua_compilation_error::LuaCompilationError;
 pub use native_error::NativeError;
 pub use runtime_error::RuntimeError;
 pub use runtime_error_data::RuntimeErrorData;
-pub use stack_trace::{StackTrace, StackTraceFrame};
+pub use stack_trace::{InstructionTrace, StackTrace, StackTraceFrame};
 pub use syntax_error::SyntaxError;
