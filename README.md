@@ -17,9 +17,7 @@ Parts of the standard library that are unsafe for untrusted code are kept obviou
 
 For unsafe functions in non-obvious parts of Lua's standard library:
 
-`load()` + `loadfile()`, currently unimplemented. Loading arbitrary bytecode should be memory safe, but currently can cause panics from `unreachable!()` / `unwrap()` checks, this may change in the future to prevent deserialized VMs from causing crashes.
-
-`require()` is currently unimplemented. When it is implemented: there will be no support for loading C libraries (to prevent execution of untrusted files that could be on the system from other programs, and from inherent compatibility issues).
+`require()` is currently unimplemented. When it is implemented: there will be no support for loading C libraries (to prevent execution of untrusted files that could be on the system from other programs, as well as inherent compatibility issues).
 
 ## Rollback
 
