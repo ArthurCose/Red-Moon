@@ -640,7 +640,7 @@ impl VmContext<'_> {
                 source_map: chunk.source_map,
             });
 
-            memory_increase = definition.heap_size();
+            memory_increase += definition.heap_size();
 
             let key = heap.store_interpreted_fn(
                 gc,
