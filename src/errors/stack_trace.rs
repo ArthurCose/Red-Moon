@@ -110,21 +110,21 @@ impl StackTrace {
 
 impl std::fmt::Display for StackTrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "stack traceback:")?;
+        write!(f, "stack traceback:")?;
 
         for frame in self.frames() {
             if let Some(instruction_trace) = frame.instruction_trace() {
-                writeln!(
+                write!(
                     f,
-                    "\tat {}:{}:{}",
+                    "\n\tat {}:{}:{}",
                     instruction_trace.source_name, instruction_trace.line, instruction_trace.col
                 )?;
             } else {
-                writeln!(f, "\tin native function")?;
+                write!(f, "\n\tin native function")?;
             }
 
             if frame.tail_called() {
-                writeln!(f, "\t(...tail calls...)")?;
+                write!(f, "\n\t(...tail calls...)")?;
             }
         }
 
