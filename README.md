@@ -158,18 +158,18 @@ The garbage collector is incremental only.
 
 ### Standard Library
 
-| Library     | Supported                                                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `basic`     | ⚠️ Missing `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                             |
-| `coroutine` | ⚠️ Missing `coroutine.close`                                                                                                   |
-| `debug`     | ⚠️ Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.gethook` and count support for `debug.sethook` |
-| `math`      | ⚠️ Missing `math.random` and `math.randomseed`                                                                                 |
-| `os`        | ⚠️ Only `os.clock`                                                                                                             |
-| `package`   | ⛔ Not yet                                                                                                                     |
-| `string`    | ⚠️ Only `string.len` and metamethods                                                                                           |
-| `table`     | ⚠️ Missing `table.move` and `table.sort`                                                                                       |
-| `utf8`      | ⛔ Not yet                                                                                                                     |
-| `io`        | ⛔ Not yet                                                                                                                     |
+| Library     | Supported                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic`     | ⚠️ Missing `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                                                |
+| `coroutine` | ⚠️ Missing `coroutine.close`                                                                                                                      |
+| `debug`     | ⚠️ Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.traceback`, `debug.gethook` and count support for `debug.sethook` |
+| `math`      | ⚠️ Missing `math.random` and `math.randomseed`                                                                                                    |
+| `os`        | ⚠️ Only `os.clock`                                                                                                                                |
+| `package`   | ⛔ Not yet                                                                                                                                        |
+| `string`    | ⚠️ Only `string.len` and metamethods                                                                                                              |
+| `table`     | ⚠️ Missing `table.move` and `table.sort`                                                                                                          |
+| `utf8`      | ⛔ Not yet                                                                                                                                        |
+| `io`        | ⛔ Not yet                                                                                                                                        |
 
 ### Metamethods
 
