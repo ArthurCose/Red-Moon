@@ -184,7 +184,7 @@ pub(crate) fn end_dedup() {
     serde_function_definition_rc::end_dedup();
 }
 
-pub(crate) use impl_serde_deduplicating_rc;
+// pub(crate) use impl_serde_deduplicating_rc;
 pub(crate) use impl_serde_deserialize_stub_fn;
 pub(crate) use impl_serde_rc;
 pub(crate) use impl_serde_serialize_stub_fn;

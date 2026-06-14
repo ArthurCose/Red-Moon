@@ -1,4 +1,4 @@
-use clap::{command, Parser};
+use clap::Parser;
 use red_moon::errors::{LuaCompilationError, RuntimeError, RuntimeErrorData, SyntaxError};
 use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm, VmContext};
 use red_moon::languages::lua::{std as lua_std, LuaCompiler};
