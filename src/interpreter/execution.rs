@@ -1379,9 +1379,15 @@ impl Interpreter {
             let mut up_values = Vec::new();
             up_values.reserve_exact(func.definition.up_values.len());
 
+            let mut recursive = false;
+
             for capture_source in &func.definition.up_values {
                 let key = match capture_source {
                     UpValueSource::Stack(src) => {
+                        if *src == dest {
+                            recursive = true;
+                        }
+
                         let src_index = self.register_base + *src as usize;
                         let value = value_stack.get(src_index);
 
@@ -1414,7 +1420,20 @@ impl Interpreter {
 
             // store the new function
             let function_key = heap.store_interpreted_fn(&mut exec_data.gc, func);
-            value_stack.set(self.register_base + dest as usize, function_key.into());
+            let dest_index = self.register_base + dest as usize;
+
+            if recursive && let StackValue::Pointer(key) = value_stack.get(dest_index) {
+                let gc = &mut exec_data.gc;
+                let Some(stored) = heap.get_stack_value_mut(gc, key) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                *stored = function_key.into();
+            } else {
+                value_stack.set(dest_index, function_key.into());
+            }
 
             if exec_data.gc.should_step() {
                 return Ok(Some(CallResult::StepGc));
