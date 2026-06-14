@@ -40,6 +40,8 @@ workspace = true
 [workspace.lints.clippy]
 redundant_closure = "allow"
 type_complexity = "allow"
+while_let_loop = "allow"
+collapsible_match = "allow"
 
 [profile.release]
 panic = "abort"
