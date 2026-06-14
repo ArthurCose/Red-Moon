@@ -1,12 +1,12 @@
 use super::lua_lexer::LuaLexer;
 use super::lua_parsing::{parse_string, parse_unsigned_number};
 use super::{LuaToken, LuaTokenLabel};
+use crate::FastHashMap;
 use crate::errors::{LuaCompilationError, SyntaxError};
 use crate::interpreter::{
     Chunk, ConstantIndex, Instruction, Module, Number, Register, ReturnMode, SourceMapping,
     UpValueSource,
 };
-use crate::FastHashMap;
 use std::borrow::Cow;
 use std::iter::Peekable;
 use std::ops::Range;
@@ -439,7 +439,7 @@ where
                                     self.source,
                                     end_token,
                                 )
-                                .into())
+                                .into());
                             }
                         }
                     }
@@ -538,7 +538,7 @@ where
                         _ => {
                             return Err(
                                 SyntaxError::new_unexpected_token(self.source, next_token).into()
-                            )
+                            );
                         }
                     };
 
@@ -595,13 +595,11 @@ where
 
                     // tail call optimization
                     if let Some(Instruction::Call(register, return_mode)) = instructions.last_mut()
+                        && *return_mode == ReturnMode::Extend(top_register)
+                        && *register == top_register + 1
                     {
-                        if *return_mode == ReturnMode::Extend(top_register)
-                            && *register == top_register + 1
-                        {
-                            *return_mode = ReturnMode::TailCall;
-                            optimized = true;
-                        }
+                        *return_mode = ReturnMode::TailCall;
+                        optimized = true;
                     }
 
                     if !optimized {
@@ -932,14 +930,14 @@ where
                             VariablePath::Result(_) => unreachable!(),
                         }
 
-                        if let Some(token) = self.token_iter.peek().cloned().transpose()? {
-                            if token.label == LuaTokenLabel::Comma {
-                                // consume token
-                                self.token_iter.next();
+                        if let Some(token) = self.token_iter.peek().cloned().transpose()?
+                            && token.label == LuaTokenLabel::Comma
+                        {
+                            // consume token
+                            self.token_iter.next();
 
-                                let top_register = self.top_function.next_register;
-                                self.resolve_exp_list(top_register)?;
-                            }
+                            let top_register = self.top_function.next_register;
+                            self.resolve_exp_list(top_register)?;
                         }
                     }
                 }
@@ -1792,7 +1790,7 @@ where
                         return Err(LuaCompilationError::new_invalid_number(
                             self.source,
                             token.offset,
-                        ))
+                        ));
                     }
                 };
                 let instructions = &mut self.top_function.instructions;

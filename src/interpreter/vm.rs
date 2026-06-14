@@ -11,10 +11,10 @@ use super::{
     Continuation, CoroutineRef, ForEachValue, FromValues, FunctionRef, Module, MultiValue,
     StringRef, TableRef,
 };
+use crate::FastHashMap;
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::debug_hooks::{DebugHook, HookMask};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
-use crate::FastHashMap;
 use downcast::downcast;
 use std::any::TypeId;
 use std::rc::Rc;
@@ -158,9 +158,9 @@ impl<'de> Deserialize<'de> for Vm {
     where
         D: serde::Deserializer<'de>,
     {
-        use crate::interpreter::heap::{BytesObjectKey, NativeFnObjectKey, Storage};
-        use crate::interpreter::ByteString;
         use crate::BuildFastHasher;
+        use crate::interpreter::ByteString;
+        use crate::interpreter::heap::{BytesObjectKey, NativeFnObjectKey, Storage};
         use indexmap::IndexMap;
 
         #[derive(Deserialize)]
@@ -619,14 +619,14 @@ impl VmContext<'_> {
 
             let mut up_values = Vec::new();
 
-            if i == module.main {
-                if let Some(index) = chunk.env {
-                    if index != 0 {
-                        return Err(RuntimeErrorData::InvalidMainEnvIndex.into());
-                    }
-
-                    up_values.push(environment);
+            if i == module.main
+                && let Some(index) = chunk.env
+            {
+                if index != 0 {
+                    return Err(RuntimeErrorData::InvalidMainEnvIndex.into());
                 }
+
+                up_values.push(environment);
             }
 
             let definition = Rc::new(FunctionDefinition {
@@ -667,8 +667,8 @@ impl VmContext<'_> {
     pub fn create_function(
         &mut self,
         callback: impl Fn(&mut NativeCallContext, &mut VmContext<'_>) -> Result<(), RuntimeError>
-            + Clone
-            + 'static,
+        + Clone
+        + 'static,
     ) -> FunctionRef {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
@@ -767,11 +767,11 @@ impl VmContext<'_> {
     pub fn create_resumable_function(
         &mut self,
         callback: impl Fn(
-                (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
-                &mut VmContext<'_>,
-            ) -> Result<(), RuntimeError>
-            + Clone
-            + 'static,
+            (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
+            &mut VmContext<'_>,
+        ) -> Result<(), RuntimeError>
+        + Clone
+        + 'static,
     ) -> FunctionRef {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
@@ -812,10 +812,10 @@ impl VmContext<'_> {
                         return result.map(|_| call_ctx);
                     }
 
-                    if let Err(err) = &result {
-                        if matches!(err.data, RuntimeErrorData::Yield(_)) {
-                            break;
-                        }
+                    if let Err(err) = &result
+                        && matches!(err.data, RuntimeErrorData::Yield(_))
+                    {
+                        break;
                     }
 
                     coroutine_data.continuation_state_set = false;

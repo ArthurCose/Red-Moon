@@ -2,7 +2,7 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::{
     ByteString, FromValue, FunctionRef, MultiValue, StringRef, TableRef, Value, VmContext,
 };
-use crate::languages::lua::{parse_number, LuaCompiler};
+use crate::languages::lua::{LuaCompiler, parse_number};
 use std::rc::Rc;
 
 pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
@@ -58,22 +58,22 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
                     let config = ctx.gc_config_mut();
 
-                    if let Some(pause) = pause {
-                        if pause > 0 {
-                            config.pause = pause;
-                        }
+                    if let Some(pause) = pause
+                        && pause > 0
+                    {
+                        config.pause = pause;
                     }
 
-                    if let Some(step_mul) = step_mul {
-                        if step_mul > 0 {
-                            config.step_multiplier = step_mul;
-                        }
+                    if let Some(step_mul) = step_mul
+                        && step_mul > 0
+                    {
+                        config.step_multiplier = step_mul;
                     }
 
-                    if let Some(step_size) = step_size {
-                        if step_size > 0 {
-                            config.step_size = 2usize.pow(step_size);
-                        }
+                    if let Some(step_size) = step_size
+                        && step_size > 0
+                    {
+                        config.step_size = 2usize.pow(step_size);
                     }
                 }
                 _ => {

@@ -645,7 +645,7 @@ impl Interpreter {
 
             match instruction {
                 Instruction::Constant(_) => {
-                    return Err(IllegalInstruction::UnexpectedConstant.into())
+                    return Err(IllegalInstruction::UnexpectedConstant.into());
                 }
                 Instruction::SetNil(dest) => {
                     value_stack.set(self.register_base + dest as usize, StackValue::Nil);
@@ -1221,7 +1221,7 @@ impl Interpreter {
                     self.next_instruction_index = i.into();
                 }
                 Instruction::Call(stack_start, return_mode) => {
-                    return Ok(CallResult::Call(stack_start as usize, return_mode))
+                    return Ok(CallResult::Call(stack_start as usize, return_mode));
                 }
                 Instruction::Return(register) => return Ok(CallResult::Return(register as usize)),
             }
@@ -1456,12 +1456,11 @@ impl Interpreter {
         };
 
         // try metamethod before using the default value
-        if matches!(value_a, StackValue::Table(_)) {
-            if let Some(call_result) =
+        if matches!(value_a, StackValue::Table(_))
+            && let Some(call_result) =
                 self.unary_metamethod(heap, value_stack, metamethod_key, dest, value_a)
-            {
-                return Ok(Some(call_result));
-            }
+        {
+            return Ok(Some(call_result));
         }
 
         let value = StackValue::Integer(len as i64);
@@ -1611,17 +1610,17 @@ impl Interpreter {
             value_a
         };
 
-        if metamethod_value.lives_in_heap() {
-            if let Some(call_result) = self.binary_metamethod(
+        if metamethod_value.lives_in_heap()
+            && let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
                 (metamethod_value, metamethod_key),
                 dest,
                 value_a,
                 value_b,
-            ) {
-                return Ok(Some(call_result));
-            }
+            )
+        {
+            return Ok(Some(call_result));
         }
 
         Err(RuntimeErrorData::InvalidArithmetic(
@@ -1828,30 +1827,30 @@ impl Interpreter {
         value_a: StackValue,
         value_b: StackValue,
     ) -> Option<CallResult> {
-        if value_a.lives_in_heap() {
-            if let Some(call_result) = self.binary_metamethod(
+        if value_a.lives_in_heap()
+            && let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
                 (value_a, metamethod_key),
                 dest,
                 value_a,
                 value_b,
-            ) {
-                return Some(call_result);
-            }
+            )
+        {
+            return Some(call_result);
         }
 
-        if value_b.lives_in_heap() {
-            if let Some(call_result) = self.binary_metamethod(
+        if value_b.lives_in_heap()
+            && let Some(call_result) = self.binary_metamethod(
                 heap,
                 value_stack,
                 (value_b, metamethod_key),
                 dest,
                 value_a,
                 value_b,
-            ) {
-                return Some(call_result);
-            }
+            )
+        {
+            return Some(call_result);
         }
 
         None
@@ -1942,7 +1941,7 @@ impl Interpreter {
             _ => {
                 return Err(RuntimeErrorData::AttemptToIndex(
                     base.type_name(&exec_data.heap),
-                ))
+                ));
             }
         };
 
@@ -2350,7 +2349,7 @@ fn resolve_call(
             _ => {
                 return Err(RuntimeErrorData::InvalidCall(
                     value.type_name(&exec_data.heap),
-                ))
+                ));
             }
         };
 

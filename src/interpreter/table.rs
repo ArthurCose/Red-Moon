@@ -3,8 +3,8 @@ use super::heap::{
     TableObjectKey,
 };
 use super::value_stack::StackValue;
-use crate::languages::lua::coerce_integer;
 use crate::BuildFastHasher;
+use crate::languages::lua::coerce_integer;
 use indexmap::IndexMap;
 
 #[cfg(feature = "serde")]
@@ -145,18 +145,18 @@ impl Table {
     pub(crate) fn get(&self, key: StackValue) -> StackValue {
         match key {
             StackValue::Integer(index) => {
-                if index > 0 {
-                    if let Some(value) = self.list.get(index as usize - 1) {
-                        return *value;
-                    }
+                if index > 0
+                    && let Some(value) = self.list.get(index as usize - 1)
+                {
+                    return *value;
                 }
             }
             StackValue::Float(float) => {
                 if let Some(i) = coerce_integer(float) {
-                    if i > 0 {
-                        if let Some(value) = self.list.get(i as usize - 1) {
-                            return *value;
-                        }
+                    if i > 0
+                        && let Some(value) = self.list.get(i as usize - 1)
+                    {
+                        return *value;
                     }
 
                     return self.get_from_map(StackValue::Integer(i));
