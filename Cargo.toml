@@ -47,6 +47,7 @@ collapsible_match = "allow"
 panic = "abort"
 codegen-units = 1
 lto = true
+opt-level = 2
 
 [profile.performance]
 inherits = "release"
