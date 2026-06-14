@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct MapKey {
     variant: u8,
@@ -28,27 +28,21 @@ impl MapKey {
     const VARIANT_NATIVE_FN: u8 = 7;
     const VARIANT_FN: u8 = 8;
     const VARIANT_COROUTINE: u8 = 9;
-}
 
-impl PartialEq for MapKey {
-    fn eq(&self, other: &Self) -> bool {
-        if self.variant != other.variant {
-            return false;
+    fn as_float(&self) -> f64 {
+        f64::from_le_bytes(self.value.to_le_bytes())
+    }
+
+    fn from_float(f: f64) -> Self {
+        MapKey {
+            variant: Self::VARIANT_FLOAT,
+            value: u64::from_le_bytes(f.to_le_bytes()),
         }
-
-        if self.variant == Self::VARIANT_FLOAT {
-            return f64::from_bits(self.value) == f64::from_bits(other.value);
-        }
-
-        self.value == other.value
     }
 }
 
-impl Eq for MapKey {}
-
 impl std::hash::Hash for MapKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.variant.hash(state);
         self.value.hash(state);
     }
 }
@@ -63,9 +57,7 @@ impl From<StackValue> for MapKey {
             StackValue::Nil => from_pair(Self::VARIANT_NIL, 0),
             StackValue::Bool(b) => from_pair(Self::VARIANT_BOOL, b as _),
             StackValue::Integer(i) => from_pair(Self::VARIANT_INT, i as _),
-            StackValue::Float(f) => {
-                from_pair(Self::VARIANT_FLOAT, u64::from_ne_bytes(f.to_ne_bytes()))
-            }
+            StackValue::Float(f) => Self::from_float(f),
             StackValue::Pointer(key) => from_pair(Self::VARIANT_PTR, key.as_ffi()),
             StackValue::Bytes(key) => from_pair(Self::VARIANT_BYTES, key.as_ffi()),
             StackValue::Table(key) => from_pair(Self::VARIANT_TABLE, key.as_ffi()),
@@ -81,7 +73,7 @@ impl From<&MapKey> for StackValue {
         match key.variant {
             MapKey::VARIANT_BOOL => StackValue::Bool(key.value != 0),
             MapKey::VARIANT_INT => StackValue::Integer(key.value as _),
-            MapKey::VARIANT_FLOAT => StackValue::Float(f64::from_bits(key.value)),
+            MapKey::VARIANT_FLOAT => StackValue::Float(key.as_float()),
             MapKey::VARIANT_PTR => StackValue::Pointer(StackObjectKey::from_ffi(key.value)),
             MapKey::VARIANT_BYTES => StackValue::Bytes(BytesObjectKey::from_ffi(key.value)),
             MapKey::VARIANT_TABLE => StackValue::Table(TableObjectKey::from_ffi(key.value)),
@@ -169,6 +161,11 @@ impl Table {
 
                     return self.get_from_map(StackValue::Integer(i));
                 }
+
+                if !float.is_finite() {
+                    // infinity and NaN always return nil
+                    return StackValue::Nil;
+                }
             }
             _ => {}
         }
@@ -200,6 +197,12 @@ impl Table {
                     }
 
                     self.set_in_map(StackValue::Integer(i), value);
+                    return;
+                }
+
+                if !float.is_finite() {
+                    // infinity and NaN keys are never stored
+                    // todo: runtime error
                     return;
                 }
             }
