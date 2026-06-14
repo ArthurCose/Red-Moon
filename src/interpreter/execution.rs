@@ -709,7 +709,7 @@ impl Interpreter {
                         dest,
                         base,
                         bytes_key.into(),
-                        |table, key| table.get_from_map(key),
+                        Table::get_from_map,
                     )? {
                         return Ok(call_result);
                     }
@@ -774,7 +774,7 @@ impl Interpreter {
                         dest,
                         base,
                         bytes_key.into(),
-                        |table, key| table.get_from_map(key),
+                        Table::get_from_map,
                     )? {
                         return Ok(call_result);
                     }
@@ -807,7 +807,7 @@ impl Interpreter {
                         base,
                         bytes_key.into(),
                         src,
-                        |table, key, value| table.set_in_map(key, value),
+                        Table::set_in_map,
                     )? {
                         return Ok(call_result);
                     }
@@ -817,14 +817,9 @@ impl Interpreter {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
-                    if let Some(call_result) = self.copy_from_table(
-                        exec_data,
-                        value_stack,
-                        dest,
-                        base,
-                        key,
-                        |table, key| table.get(key),
-                    )? {
+                    if let Some(call_result) =
+                        self.copy_from_table(exec_data, value_stack, dest, base, key, Table::get)?
+                    {
                         return Ok(call_result);
                     }
                 }
@@ -833,14 +828,9 @@ impl Interpreter {
                         value_stack.get_deref(heap, self.register_base + table_index as usize);
                     let key = value_stack.get_deref(heap, self.register_base + key_index as usize);
 
-                    if let Some(call_result) = self.copy_to_table(
-                        exec_data,
-                        value_stack,
-                        base,
-                        key,
-                        src,
-                        |table, key, value| table.set(key, value),
-                    )? {
+                    if let Some(call_result) =
+                        self.copy_to_table(exec_data, value_stack, base, key, src, Table::set)?
+                    {
                         return Ok(call_result);
                     }
                 }
@@ -934,8 +924,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        &|type_name| RuntimeErrorData::InvalidArithmetic(type_name),
-                        &|heap, value| match value {
+                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        |heap, value| match value {
                             StackValue::Integer(n) => Ok(StackValue::Integer(-n)),
                             StackValue::Float(n) => Ok(StackValue::Float(-n)),
                             _ => Err(RuntimeErrorData::InvalidArithmetic(value.type_name(heap))),
@@ -951,8 +941,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, src),
                         metamethod_key,
-                        &|type_name| RuntimeErrorData::InvalidArithmetic(type_name),
-                        &|heap, value| {
+                        |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
+                        |heap, value| {
                             Ok(StackValue::Integer(-arithmetic_cast_integer(heap, value)?))
                         },
                     )? {
@@ -966,8 +956,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a.wrapping_add(b),
-                        &|a, b| a + b,
+                        |a, b| a.wrapping_add(b),
+                        |a, b| a + b,
                     )? {
                         return Ok(call_result);
                     }
@@ -979,8 +969,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a.wrapping_sub(b),
-                        &|a, b| a - b,
+                        |a, b| a.wrapping_sub(b),
+                        |a, b| a - b,
                     )? {
                         return Ok(call_result);
                     }
@@ -992,8 +982,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a.wrapping_mul(b),
-                        &|a, b| a * b,
+                        |a, b| a.wrapping_mul(b),
+                        |a, b| a * b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1005,7 +995,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a / b,
+                        |a, b| a / b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1017,8 +1007,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a / b,
-                        &|a, b| a / b,
+                        |a, b| a / b,
+                        |a, b| a / b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1030,8 +1020,8 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a % b,
-                        &|a, b| a % b,
+                        |a, b| a % b,
+                        |a, b| a % b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1043,7 +1033,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a.powf(b),
+                        |a, b| a.powf(b),
                     )? {
                         return Ok(call_result);
                     }
@@ -1055,7 +1045,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a & b,
+                        |a, b| a & b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1067,7 +1057,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a | b,
+                        |a, b| a | b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1079,7 +1069,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a ^ b,
+                        |a, b| a ^ b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1091,7 +1081,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a << b,
+                        |a, b| a << b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1103,7 +1093,7 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a >> b,
+                        |a, b| a >> b,
                     )? {
                         return Ok(call_result);
                     }
@@ -1143,9 +1133,9 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a < b,
-                        &|a, b| a < b,
-                        &|heap, a, b| {
+                        |a, b| a < b,
+                        |a, b| a < b,
+                        |heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
                                 let Some(bytes_a) = heap.get_bytes(key_a) else {
                                     crate::debug_unreachable!();
@@ -1175,9 +1165,9 @@ impl Interpreter {
                         (heap, value_stack),
                         (dest, a, b),
                         metamethod_key,
-                        &|a, b| a <= b,
-                        &|a, b| a <= b,
-                        &|heap, a, b| {
+                        |a, b| a <= b,
+                        |a, b| a <= b,
+                        |heap, a, b| {
                             if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
                                 let Some(bytes_a) = heap.get_bytes(key_a) else {
                                     crate::debug_unreachable!();
@@ -1542,7 +1532,7 @@ impl Interpreter {
         value_a: StackValue,
         value_b: StackValue,
         value: StackValue,
-        coerce_value: impl Fn(&Heap, StackValue) -> Result<T, RuntimeErrorData>,
+        coerce_value: fn(&Heap, StackValue) -> Result<T, RuntimeErrorData>,
     ) -> Result<ValueOrCallResult<T>, RuntimeErrorData> {
         if value.lives_in_heap() {
             match self.binary_metamethod(
@@ -1570,8 +1560,8 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_operation: &dyn Fn(i64, i64) -> i64,
-        float_operation: &dyn Fn(f64, f64) -> f64,
+        integer_operation: fn(i64, i64) -> i64,
+        float_operation: fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1645,7 +1635,7 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        operation: &dyn Fn(f64, f64) -> f64,
+        operation: fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1690,7 +1680,7 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        operation: &dyn Fn(i64, i64) -> i64,
+        operation: fn(i64, i64) -> i64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1734,8 +1724,8 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_operation: &dyn Fn(i64, i64) -> i64,
-        float_operation: &dyn Fn(f64, f64) -> f64,
+        integer_operation: fn(i64, i64) -> i64,
+        float_operation: fn(f64, f64) -> f64,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1785,9 +1775,9 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a, b): (Register, Register, Register),
         metamethod_key: BytesObjectKey,
-        integer_comparison: &dyn Fn(i64, i64) -> bool,
-        float_comparison: &dyn Fn(f64, f64) -> bool,
-        heap_comparison: &dyn Fn(&Heap, StackValue, StackValue) -> Option<bool>,
+        integer_comparison: fn(i64, i64) -> bool,
+        float_comparison: fn(f64, f64) -> bool,
+        heap_comparison: fn(&Heap, StackValue, StackValue) -> Option<bool>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1893,8 +1883,8 @@ impl Interpreter {
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         (dest, a): (Register, Register),
         metamethod_key: BytesObjectKey,
-        generate_error: &dyn Fn(TypeName) -> RuntimeErrorData,
-        primitive_operation: &dyn Fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
+        generate_error: fn(TypeName) -> RuntimeErrorData,
+        primitive_operation: fn(&Heap, StackValue) -> Result<StackValue, RuntimeErrorData>,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
 
@@ -1938,7 +1928,7 @@ impl Interpreter {
         dest: Register,
         base: StackValue,
         key: StackValue,
-        getter: impl Fn(&Table, StackValue) -> StackValue,
+        getter: fn(&Table, StackValue) -> StackValue,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let mut value = match base {
             StackValue::Table(table_key) => {
@@ -2023,7 +2013,7 @@ impl Interpreter {
         table_stack_value: StackValue,
         key: StackValue,
         src: u8,
-        setter: impl Fn(&mut Table, StackValue, StackValue),
+        setter: fn(&mut Table, StackValue, StackValue),
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let StackValue::Table(table_key) = table_stack_value else {
             return Err(RuntimeErrorData::AttemptToIndex(
@@ -2308,7 +2298,7 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<'_, [u8]>> {
 fn cast_integer(
     heap: &Heap,
     value: StackValue,
-    generate_err: impl FnOnce(TypeName) -> RuntimeErrorData,
+    generate_err: fn(TypeName) -> RuntimeErrorData,
 ) -> Result<i64, RuntimeErrorData> {
     match value {
         StackValue::Float(float) => {
@@ -2322,7 +2312,7 @@ fn cast_integer(
 fn cast_float(
     heap: &Heap,
     value: StackValue,
-    generate_err: impl FnOnce(TypeName) -> RuntimeErrorData,
+    generate_err: fn(TypeName) -> RuntimeErrorData,
 ) -> Result<f64, RuntimeErrorData> {
     match value {
         StackValue::Integer(int) => Ok(int as f64),
