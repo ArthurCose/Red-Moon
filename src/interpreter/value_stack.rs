@@ -199,17 +199,13 @@ impl ValueStack {
     }
 
     pub(crate) fn get_slice(&mut self, range: Range<usize>) -> &[StackValue] {
-        if range.end > self.values.len() {
-            self.values.resize_with(range.end, Default::default);
-        }
+        self.extend_to(range.end);
 
         &self.values[range]
     }
 
     pub(crate) fn get_slice_mut(&mut self, range: Range<usize>) -> &mut [StackValue] {
-        if range.end > self.values.len() {
-            self.values.resize_with(range.end, Default::default);
-        }
+        self.extend_to(range.end);
 
         &mut self.values[range]
     }
@@ -221,17 +217,13 @@ impl ValueStack {
     }
 
     pub(crate) fn set(&mut self, index: usize, value: StackValue) {
-        if self.values.len() <= index {
-            self.values.resize(index + 1, Default::default());
-        }
+        self.extend_to(index + 1);
 
         self.values[index] = value;
     }
 
     pub(crate) fn insert(&mut self, index: usize, value: StackValue) {
-        if self.values.len() < index {
-            self.values.resize(index, Default::default());
-        }
+        self.extend_to(index);
 
         self.values.insert(index, value);
     }
@@ -259,15 +251,19 @@ impl ValueStack {
             dest + src.len()
         };
 
-        if self.values.len() < min_len {
-            self.values.resize(min_len, Default::default());
-        }
+        self.extend_to(min_len);
 
         self.values.copy_within(src, dest);
     }
 
     pub(crate) fn resize(&mut self, len: usize) {
         self.values.resize(len, StackValue::Nil);
+    }
+
+    pub(crate) fn extend_to(&mut self, len: usize) {
+        if self.values.len() < len {
+            self.values.resize(len, StackValue::Nil);
+        }
     }
 
     pub(crate) fn clear(&mut self) {
