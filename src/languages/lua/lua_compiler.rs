@@ -247,6 +247,7 @@ struct CompilationJob<'source, I: Iterator> {
     token_iter: Peekable<I>,
     top_function: FunctionContext<'source>,
     unresolved_breaks: Vec<(LuaToken<'source>, usize)>,
+    stacked_loops: usize,
     function_stack: Vec<FunctionContext<'source>>,
     module: CompilationOutput<'source>,
 }
@@ -261,6 +262,7 @@ where
             token_iter: token_iter.peekable(),
             top_function: FunctionContext::default(),
             unresolved_breaks: Default::default(),
+            stacked_loops: 0,
             function_stack: Default::default(),
             module: Default::default(),
         }
@@ -281,14 +283,6 @@ where
         });
 
         self.resolve_block()?;
-
-        // catch unexpected breaks
-        if let Some((token, _)) = self.unresolved_breaks.first() {
-            return Err(LuaCompilationError::new_unexpected_break(
-                self.source,
-                token.offset,
-            ));
-        }
 
         // make sure we've exhausted all tokens
         if let Some(token) = self.token_iter.next().transpose()? {
@@ -468,10 +462,14 @@ where
                     let branch_index = instructions.len();
                     instructions.push(Instruction::Jump(0.into()));
 
+                    self.stacked_loops += 1;
+
                     self.top_function.push_scope();
                     self.resolve_block()?;
                     self.top_function.pop_scope();
                     self.expect(LuaTokenLabel::End)?;
+
+                    self.stacked_loops -= 1;
 
                     let instructions = &mut self.top_function.instructions;
                     instructions.push(Instruction::Jump(start_index.into()));
@@ -492,10 +490,14 @@ where
                     let instructions = &mut self.top_function.instructions;
                     let start_index = instructions.len();
 
+                    self.stacked_loops += 1;
+
                     self.top_function.push_scope();
                     self.resolve_block()?;
                     self.expect(LuaTokenLabel::Until)?;
                     // we'll pop scope later
+
+                    self.stacked_loops -= 1;
 
                     // test to see if we need to jump back to the start
                     let top_register = self.top_function.next_register;
@@ -544,10 +546,14 @@ where
 
                     self.test_register_limit(token, self.top_function.next_register)?;
 
+                    self.stacked_loops += 1;
+
                     self.expect(LuaTokenLabel::Do)?;
                     self.resolve_block()?;
                     self.top_function.pop_scope();
                     self.expect(LuaTokenLabel::End)?;
+
+                    self.stacked_loops -= 1;
 
                     let instructions = &mut self.top_function.instructions;
 
@@ -578,6 +584,13 @@ where
                 LuaTokenLabel::Break => {
                     // consume token
                     self.token_iter.next();
+
+                    if self.stacked_loops == 0 {
+                        return Err(LuaCompilationError::new_unexpected_break(
+                            self.source,
+                            token.offset,
+                        ));
+                    }
 
                     let instructions = &mut self.top_function.instructions;
                     self.unresolved_breaks.push((token, instructions.len()));
@@ -1278,14 +1291,6 @@ where
         // catch number limit
         if self.top_function.numbers.len() > ConstantIndex::MAX as usize {
             return Err(LuaCompilationError::new_reached_number_limit(
-                self.source,
-                token.offset,
-            ));
-        }
-
-        // catch unexpected breaks
-        if let Some((token, _)) = self.unresolved_breaks.first() {
-            return Err(LuaCompilationError::new_unexpected_break(
                 self.source,
                 token.offset,
             ));

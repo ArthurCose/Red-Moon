@@ -123,6 +123,14 @@ fn invalid() {
         // "assign_const.lua.txt",
         // "goto_jump_local_scope.lua.txt",
         (
+            "break_outside_loop.lua.txt",
+            LuaCompilationError::UnexpectedBreak {
+                offset: 0,
+                line: 1,
+                col: 1,
+            },
+        ),
+        (
             "too_many_locals.lua.txt",
             LuaCompilationError::ReachedLocalsLimit {
                 offset: 811,
