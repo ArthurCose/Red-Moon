@@ -15,6 +15,21 @@ pub enum LuaCompilationError {
         line: usize,
         col: usize,
     },
+    UnresolvedGoto {
+        offset: usize,
+        line: usize,
+        col: usize,
+    },
+    RedefinedLabel {
+        offset: usize,
+        line: usize,
+        col: usize,
+    },
+    GotoSkipsLocalDeclaration {
+        offset: usize,
+        line: usize,
+        col: usize,
+    },
     ReachedLocalsLimit {
         offset: usize,
         line: usize,
@@ -56,6 +71,24 @@ impl LuaCompilationError {
         Self::UnexpectedBreak { offset, line, col }
     }
 
+    pub fn new_unresolved_goto(source: &str, offset: usize) -> Self {
+        let (line, col) = line_and_col(source, offset);
+
+        Self::UnresolvedGoto { offset, line, col }
+    }
+
+    pub fn new_redefined_label(source: &str, offset: usize) -> Self {
+        let (line, col) = line_and_col(source, offset);
+
+        Self::RedefinedLabel { offset, line, col }
+    }
+
+    pub fn new_goto_skips_local_declaration(source: &str, offset: usize) -> Self {
+        let (line, col) = line_and_col(source, offset);
+
+        Self::GotoSkipsLocalDeclaration { offset, line, col }
+    }
+
     pub fn new_too_many_locals(source: &str, offset: usize) -> Self {
         let (line, col) = line_and_col(source, offset);
 
@@ -68,19 +101,19 @@ impl LuaCompilationError {
         Self::ReachedCaptureLimit { offset, line, col }
     }
 
-    pub(crate) fn new_reached_number_limit(source: &str, offset: usize) -> LuaCompilationError {
+    pub fn new_reached_number_limit(source: &str, offset: usize) -> Self {
         let (line, col) = line_and_col(source, offset);
 
         Self::ReachedNumberLimit { offset, line, col }
     }
 
-    pub(crate) fn new_reached_register_limit(source: &str, offset: usize) -> LuaCompilationError {
+    pub fn new_reached_register_limit(source: &str, offset: usize) -> Self {
         let (line, col) = line_and_col(source, offset);
 
         Self::ReachedRegisterLimit { offset, line, col }
     }
 
-    pub(crate) fn new_invalid_number(source: &str, offset: usize) -> LuaCompilationError {
+    pub fn new_invalid_number(source: &str, offset: usize) -> Self {
         let (line, col) = line_and_col(source, offset);
 
         Self::InvalidNumber { offset, line, col }
@@ -98,6 +131,15 @@ impl std::fmt::Display for LuaCompilationError {
             ),
             Self::UnexpectedBreak { line, col, .. } => {
                 write!(f, "{}:{}: break used outside of a loop", line, col)
+            }
+            Self::UnresolvedGoto { line, col, .. } => {
+                write!(f, "{}:{}: label isn't visible", line, col)
+            }
+            Self::RedefinedLabel { line, col, .. } => {
+                write!(f, "{}:{}: label is already defined", line, col)
+            }
+            Self::GotoSkipsLocalDeclaration { line, col, .. } => {
+                write!(f, "{}:{}: goto skips local declaration", line, col)
             }
             Self::ReachedLocalsLimit { line, col, .. } => {
                 write!(

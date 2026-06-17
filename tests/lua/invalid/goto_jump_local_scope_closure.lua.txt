@@ -4,4 +4,6 @@ local a = 1
 
 ::continue::
 
-print(a)
+local b = function()
+  print(a)
+end

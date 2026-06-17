@@ -16,6 +16,7 @@ fn valid() {
         "expressions.lua",
         "functions.lua",
         "garbage_collection.lua",
+        "goto.lua",
         "loops.lua",
         "metatables.lua",
         "munchausen_numbers.lua",
@@ -121,13 +122,44 @@ fn invalid() {
     let folder_path = env!("CARGO_MANIFEST_DIR").to_string() + "/tests/lua/invalid/";
     let test_files: Vec<(&'static str, LuaCompilationError)> = vec![
         // "assign_const.lua.txt",
-        // "goto_jump_local_scope.lua.txt",
         (
             "break_outside_loop.lua.txt",
             LuaCompilationError::UnexpectedBreak {
                 offset: 0,
                 line: 1,
                 col: 1,
+            },
+        ),
+        (
+            "goto_jump_inner_scope.lua.txt",
+            LuaCompilationError::UnresolvedGoto {
+                offset: 41,
+                line: 6,
+                col: 6,
+            },
+        ),
+        (
+            "goto_jump_local_scope.lua.txt",
+            LuaCompilationError::GotoSkipsLocalDeclaration {
+                offset: 48,
+                line: 7,
+                col: 7,
+            },
+        ),
+        (
+            "label_redefined_in_new_scope.lua.txt",
+            LuaCompilationError::RedefinedLabel {
+                offset: 17,
+                line: 4,
+                col: 5,
+            },
+        ),
+        (
+            "label_redefined.lua.txt",
+            LuaCompilationError::RedefinedLabel {
+                offset: 11,
+                line: 2,
+                col: 3,
             },
         ),
         (

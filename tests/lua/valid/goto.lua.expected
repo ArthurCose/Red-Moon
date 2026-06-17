@@ -2,5 +2,12 @@ shadowing and scope exit:
 1
 1
 
+skip local:
+b
+
 skip scope:
+b
+
+multiple scopes:
+a
 b

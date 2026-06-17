@@ -62,10 +62,17 @@ impl<'source> IntoIterator for LuaByteStrings<'source> {
 
 type CompilationOutput<'source> = Module<LuaByteStrings<'source>>;
 
+#[derive(Clone)]
+struct LocalVariable {
+    register: Register,
+    next_instruction_index: usize,
+    jumped_over: bool,
+}
+
 #[derive(Default)]
 struct Scope<'source> {
     first_register: Register,
-    locals: FastHashMap<&'source str, Register>,
+    locals: FastHashMap<&'source str, LocalVariable>,
 }
 
 enum UpValueOrStack {
@@ -84,6 +91,18 @@ struct UnresolvedBreak {
     instruction_index: usize,
 }
 
+struct UnresolvedGoto<'source> {
+    label: LuaToken<'source>,
+    scope: usize,
+    instruction_index: usize,
+}
+
+struct VisibleLabel<'source> {
+    token: LuaToken<'source>,
+    scope: usize,
+    dest_index: usize,
+}
+
 #[derive(Default)]
 struct FunctionContext<'source> {
     strings: LuaByteStrings<'source>,
@@ -100,6 +119,8 @@ struct FunctionContext<'source> {
     next_register: Register,
     stacked_loops: usize,
     unresolved_breaks: Vec<UnresolvedBreak>,
+    unresolved_gotos: Vec<UnresolvedGoto<'source>>,
+    visible_labels: Vec<VisibleLabel<'source>>,
 }
 
 impl<'source> FunctionContext<'source> {
@@ -113,6 +134,25 @@ impl<'source> FunctionContext<'source> {
         // recycle registers
         self.next_register = self.top_scope.first_register;
         self.top_scope = self.scopes.pop().unwrap();
+
+        // drop labels
+        let label_iter = self.visible_labels.iter().rev();
+        let total_removed_labels = label_iter
+            .take_while(|l| l.scope > self.scopes.len())
+            .count();
+
+        self.visible_labels
+            .truncate(self.visible_labels.len() - total_removed_labels);
+
+        // flatten the stored scope on unresolved gotos
+        // to prevent them from seeing labels in new scopes
+        for unresolved_goto in self.unresolved_gotos.iter_mut().rev() {
+            if unresolved_goto.scope <= self.scopes.len() {
+                break;
+            }
+
+            unresolved_goto.scope = self.scopes.len();
+        }
     }
 
     fn create_integer_instruction(
@@ -191,23 +231,27 @@ impl<'source> FunctionContext<'source> {
             ));
         }
 
-        let index = self.next_register;
-        self.top_scope.locals.insert(token.content, index);
+        let register = self.next_register;
         self.next_register += 1;
-        Ok(index)
+
+        let local_variable = LocalVariable {
+            register,
+            next_instruction_index: self.instructions.len(),
+            jumped_over: false,
+        };
+
+        self.top_scope.locals.insert(token.content, local_variable);
+
+        Ok(register)
     }
 
-    fn registered_local(&self, name: &'source str) -> Option<Register> {
-        if let Some(index) = self.top_scope.locals.get(name) {
-            return Some(*index as _);
+    fn registered_local(&self, name: &'source str) -> Option<&LocalVariable> {
+        if let Some(local) = self.top_scope.locals.get(name) {
+            return Some(local);
         }
 
-        self.scopes
-            .iter()
-            .rev()
-            .flat_map(|scope| scope.locals.get(name))
-            .next()
-            .cloned()
+        let scope_iter = self.scopes.iter().rev();
+        scope_iter.flat_map(|scope| scope.locals.get(name)).next()
     }
 
     fn intern_string(
@@ -316,6 +360,14 @@ where
         // catch number limit
         if self.module.chunks.len() > ConstantIndex::MAX as usize {
             return Err(LuaCompilationError::ReachedFunctionLimit);
+        }
+
+        // catch unresolved gotos
+        if let Some(unresolved_goto) = self.top_function.unresolved_gotos.pop() {
+            return Err(LuaCompilationError::new_unresolved_goto(
+                self.source,
+                unresolved_goto.label.offset,
+            ));
         }
 
         self.module.main = self.module.chunks.len();
@@ -608,6 +660,92 @@ where
                         instruction_index: instructions.len(),
                     });
                     instructions.push(Instruction::Jump(0.into()));
+                }
+                LuaTokenLabel::GoTo => {
+                    // consume token
+                    self.token_iter.next();
+
+                    let label_token = self.expect(LuaTokenLabel::Name)?;
+
+                    // resolve gotos
+                    let visible_labels = &self.top_function.visible_labels;
+                    let mut label_iter = visible_labels.iter().rev();
+
+                    let instructions = &mut self.top_function.instructions;
+
+                    if let Some(label) =
+                        label_iter.find(|label| label.token.content == label_token.content)
+                    {
+                        instructions.push(Instruction::Jump(label.dest_index.into()));
+                    } else {
+                        self.top_function.unresolved_gotos.push(UnresolvedGoto {
+                            label: label_token,
+                            scope: self.top_function.scopes.len(),
+                            instruction_index: instructions.len(),
+                        });
+                        instructions.push(Instruction::Jump(0.into()));
+                    }
+                }
+                LuaTokenLabel::DoubleColon => {
+                    // consume token
+                    self.token_iter.next();
+
+                    let label_token = self.expect(LuaTokenLabel::Name)?;
+                    self.expect(LuaTokenLabel::DoubleColon)?;
+
+                    let visible_labels = &mut self.top_function.visible_labels;
+                    let mut label_iter = visible_labels.iter();
+                    if label_iter.any(|l| l.token.content == label_token.content) {
+                        return Err(LuaCompilationError::new_redefined_label(
+                            self.source,
+                            label_token.offset,
+                        ));
+                    }
+
+                    let instructions = &mut self.top_function.instructions;
+                    visible_labels.push(VisibleLabel {
+                        token: label_token,
+                        scope: self.top_function.scopes.len(),
+                        dest_index: instructions.len(),
+                    });
+
+                    // resolve gotos
+                    let jump_instruction = Instruction::Jump(instructions.len().into());
+                    let unresolved_gotos = &mut self.top_function.unresolved_gotos;
+                    unresolved_gotos.retain_mut(|unresolved_goto| {
+                        if unresolved_goto.scope < self.top_function.scopes.len()
+                            || unresolved_goto.label.content != label_token.content
+                        {
+                            return true;
+                        }
+
+                        let instruction_index = unresolved_goto.instruction_index;
+                        instructions[instruction_index] = jump_instruction;
+
+                        // mark the local variables that were lept over
+                        // this makes sure we can't skip `local x = ..` if `x` is still in use after this jump
+                        let scope_iter = std::iter::once(&mut self.top_function.top_scope)
+                            .chain(&mut self.top_function.scopes);
+
+                        for scope in scope_iter {
+                            let mut failed_to_leap = false;
+
+                            for local in scope.locals.values_mut() {
+                                if instruction_index >= local.next_instruction_index {
+                                    failed_to_leap = true;
+                                    continue;
+                                }
+
+                                local.jumped_over = true;
+                            }
+
+                            if failed_to_leap {
+                                break;
+                            }
+                        }
+
+                        false
+                    });
                 }
                 LuaTokenLabel::Return => {
                     // consume token
@@ -1110,8 +1248,15 @@ where
         top_register: Register,
         token: LuaToken<'source>,
     ) -> Result<VariablePath<'source>, LuaCompilationError> {
-        let path = if let Some(index) = self.top_function.registered_local(token.content) {
-            VariablePath::Stack(index)
+        let path = if let Some(local) = self.top_function.registered_local(token.content) {
+            if local.jumped_over {
+                return Err(LuaCompilationError::new_goto_skips_local_declaration(
+                    self.source,
+                    token.offset,
+                ));
+            }
+
+            VariablePath::Stack(local.register)
         } else if let Some(index) = self.try_capture(token)? {
             // capture
             VariablePath::UpValue(index)
@@ -1120,7 +1265,7 @@ where
 
             if let Some(local) = self.top_function.registered_local(ENV_NAME) {
                 // treat as environment local
-                VariablePath::TableField(token, local, string_index)
+                VariablePath::TableField(token, local.register, string_index)
             } else {
                 // capture environment
                 let up_value_index = self
@@ -1145,6 +1290,7 @@ where
         &mut self,
         token: LuaToken<'source>,
     ) -> Result<Option<Register>, LuaCompilationError> {
+        // check existing captures
         // not expecting many captures, so just iterating
         for (i, capture) in self.top_function.captures.iter().enumerate() {
             if capture.token.content == token.content {
@@ -1152,23 +1298,22 @@ where
             }
         }
 
+        // try to capture a new variable
         for (i, function) in self.function_stack.iter().rev().enumerate() {
-            if let Some(&register) = function.top_scope.locals.get(token.content) {
-                return Ok(Some(self.top_function.register_up_value(
-                    self.source,
-                    token,
-                    i,
-                    UpValueOrStack::Stack(register),
-                )?));
-            }
+            for scope in std::iter::once(&function.top_scope).chain(&function.scopes) {
+                if let Some(local) = scope.locals.get(token.content) {
+                    if local.jumped_over {
+                        return Err(LuaCompilationError::new_goto_skips_local_declaration(
+                            self.source,
+                            token.offset,
+                        ));
+                    }
 
-            for scope in &function.scopes {
-                if let Some(&register) = scope.locals.get(token.content) {
                     return Ok(Some(self.top_function.register_up_value(
                         self.source,
                         token,
                         i,
-                        UpValueOrStack::Stack(register),
+                        UpValueOrStack::Stack(local.register),
                     )?));
                 }
             }
@@ -1306,6 +1451,14 @@ where
             return Err(LuaCompilationError::new_reached_number_limit(
                 self.source,
                 token.offset,
+            ));
+        }
+
+        // catch unresolved gotos
+        if let Some(unresolved_goto) = self.top_function.unresolved_gotos.pop() {
+            return Err(LuaCompilationError::new_unresolved_goto(
+                self.source,
+                unresolved_goto.label.offset,
             ));
         }
 

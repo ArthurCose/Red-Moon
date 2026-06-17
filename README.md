@@ -150,7 +150,7 @@ assert_eq!(result, "hello");
 
 ## Lua Support
 
-Aiming for Lua 5.4, currently missing support for `<const>`, `<close>`, and `goto`.
+Aiming for Lua 5.4, currently missing support for `<const>` and `<close>`.
 
 The garbage collector is incremental only.
 

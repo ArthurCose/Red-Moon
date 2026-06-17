@@ -47,3 +47,29 @@ do
 
   print("b")
 end
+
+print("\nmultiple scopes:")
+do
+  goto test
+
+  do
+    print("incorrect")
+    ::test::
+  end
+
+  print("skip me too!")
+
+  ::test::
+  print("a")
+end
+
+do
+  do
+    goto test
+    print("a")
+    ::test::
+  end
+
+  ::test::
+  print("b")
+end
