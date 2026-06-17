@@ -1,93 +1,61 @@
-use crate::languages::{line_and_col, Token};
+use crate::errors::SourcePosition;
+use crate::languages::Token;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SyntaxError<Label> {
+pub struct SyntaxError<Label> {
+    pub source_position: SourcePosition,
+    pub data: SyntaxErrorData<Label>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SyntaxErrorData<Label> {
     // lexer
-    UnexpectedCharacter {
-        offset: usize,
-        line: usize,
-        col: usize,
-    },
-    BadLexer {
-        label: Label,
-        offset: usize,
-        line: usize,
-        col: usize,
-        final_offset: usize,
-    },
-    BadIgnorer {
-        offset: usize,
-        line: usize,
-        col: usize,
-        final_offset: usize,
-    },
+    UnexpectedCharacter,
+    BadLexer { label: Label, len: usize },
+    BadIgnorer { len: usize },
     // parser
-    UnexpectedToken {
-        label: Label,
-        offset: usize,
-        line: usize,
-        col: usize,
-    },
+    UnexpectedToken { label: Label },
     UnexpectedEOF,
 }
 
 impl<Label> SyntaxError<Label> {
-    pub fn new_unexpected_character(source: &str, offset: usize) -> Self {
-        let (line, col) = line_and_col(source, offset);
-
-        Self::UnexpectedCharacter { offset, line, col }
-    }
-
-    pub fn new_bad_lexer(source: &str, label: Label, offset: usize, len: usize) -> Self {
-        let (line, col) = line_and_col(source, offset);
-
-        Self::BadLexer {
-            label,
-            offset,
-            line,
-            col,
-            final_offset: offset + len,
-        }
-    }
-
-    pub fn new_bad_ignorer(source: &str, offset: usize, len: usize) -> Self {
-        let (line, col) = line_and_col(source, offset);
-
-        Self::BadIgnorer {
-            offset,
-            line,
-            col,
-            final_offset: offset + len,
-        }
-    }
-
     pub fn new_unexpected_token(source: &str, token: Token<Label>) -> Self {
-        let (line, col) = line_and_col(source, token.offset);
-
-        Self::UnexpectedToken {
-            label: token.label,
-            offset: token.offset,
-            line,
-            col,
-        }
-    }
-}
-
-impl<Label: std::fmt::Debug> std::fmt::Display for SyntaxError<Label> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedCharacter { line, col, .. } => write!(f, "{}:{}: unexpected character", line, col),
-            Self::BadLexer { label, line, col, .. } => write!(f, "{}:{}: a lexer creating {:?} tokens returned a length that would include characters past end", line, col, label),
-            Self::BadIgnorer { line, col, .. } => write!(f, "{}:{}: an ignorer returned a length that would include characters past end", line, col),
-            Self::UnexpectedToken {
-                label,
-                line,
-                col,
-                ..
-            } => write!(f, "{}:{}: unexpected {:?}", line, col, label),
-            Self::UnexpectedEOF => write!(f, "unexpected eof"),
+        SyntaxError {
+            source_position: SourcePosition::new(source, token.offset),
+            data: SyntaxErrorData::UnexpectedToken { label: token.label },
         }
     }
 }
 
 impl<Label: std::fmt::Debug> std::error::Error for SyntaxError<Label> {}
+
+impl<Label: std::fmt::Debug> std::fmt::Display for SyntaxError<Label> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let line = self.source_position.line;
+        let col = self.source_position.col;
+
+        write!(f, "{line}:{col}: {}", self.data)
+    }
+}
+
+impl<Label: std::fmt::Debug> std::fmt::Display for SyntaxErrorData<Label> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedCharacter => {
+                write!(f, "unexpected character")
+            }
+            Self::BadLexer { label, .. } => write!(
+                f,
+                "a lexer creating {label:?} tokens returned a length that would include characters past end",
+            ),
+            Self::BadIgnorer { .. } => write!(
+                f,
+                "an ignorer returned a length that would include characters past end",
+            ),
+            Self::UnexpectedToken { label } => {
+                write!(f, "unexpected {label:?}")
+            }
+            Self::UnexpectedEOF => write!(f, "unexpected eof"),
+        }
+    }
+}

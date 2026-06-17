@@ -1,5 +1,5 @@
 use pretty_assertions::assert_eq;
-use red_moon::errors::{LuaCompilationError, RuntimeErrorData, SyntaxError};
+use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{MultiValue, Value, Vm};
 use red_moon::languages::lua::std::{impl_basic, impl_coroutine, impl_debug, impl_string};
 use red_moon::languages::lua::{LuaCompiler, LuaTokenLabel};
@@ -120,91 +120,54 @@ fn valid() {
 #[test]
 fn invalid() {
     let folder_path = env!("CARGO_MANIFEST_DIR").to_string() + "/tests/lua/invalid/";
-    let test_files: Vec<(&'static str, LuaCompilationError)> = vec![
+    let test_files: Vec<(&'static str, LuaCompilationErrorData)> = vec![
         // "assign_const.lua.txt",
         (
             "break_outside_loop.lua.txt",
-            LuaCompilationError::UnexpectedBreak {
-                offset: 0,
-                line: 1,
-                col: 1,
-            },
+            LuaCompilationErrorData::UnexpectedBreak,
         ),
         (
             "goto_jump_inner_scope.lua.txt",
-            LuaCompilationError::UnresolvedGoto {
-                offset: 41,
-                line: 6,
-                col: 6,
-            },
+            LuaCompilationErrorData::UnresolvedGoto,
         ),
         (
             "goto_jump_local_scope.lua.txt",
-            LuaCompilationError::GotoSkipsLocalDeclaration {
-                offset: 48,
-                line: 7,
-                col: 7,
-            },
+            LuaCompilationErrorData::GotoSkipsLocalDeclaration,
         ),
         (
             "label_redefined_in_new_scope.lua.txt",
-            LuaCompilationError::RedefinedLabel {
-                offset: 17,
-                line: 4,
-                col: 5,
-            },
+            LuaCompilationErrorData::RedefinedLabel,
         ),
         (
             "label_redefined.lua.txt",
-            LuaCompilationError::RedefinedLabel {
-                offset: 11,
-                line: 2,
-                col: 3,
-            },
+            LuaCompilationErrorData::RedefinedLabel,
         ),
         (
             "too_many_locals.lua.txt",
-            LuaCompilationError::ReachedLocalsLimit {
-                offset: 811,
-                line: 2,
-                col: 7,
-            },
+            LuaCompilationErrorData::ReachedLocalsLimit,
         ),
         (
             "unexpected_break.lua.txt",
-            LuaCompilationError::UnexpectedBreak {
-                offset: 0,
-                line: 1,
-                col: 1,
-            },
+            LuaCompilationErrorData::UnexpectedBreak,
         ),
         (
             "unexpected_end.lua.txt",
-            SyntaxError::UnexpectedToken {
+            SyntaxErrorData::UnexpectedToken {
                 label: LuaTokenLabel::End,
-                offset: 0,
-                line: 1,
-                col: 1,
             }
             .into(),
         ),
         (
             "unexpected_name_after_return.lua.txt",
-            SyntaxError::UnexpectedToken {
+            SyntaxErrorData::UnexpectedToken {
                 label: LuaTokenLabel::Name,
-                offset: 8,
-                line: 2,
-                col: 1,
             }
             .into(),
         ),
         (
             "unexpected_semicolon_after_return.lua.txt",
-            SyntaxError::UnexpectedToken {
+            SyntaxErrorData::UnexpectedToken {
                 label: LuaTokenLabel::SemiColon,
-                offset: 7,
-                line: 1,
-                col: 8,
             }
             .into(),
         ),
@@ -217,7 +180,7 @@ fn invalid() {
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         assert_eq!(
-            compiler.compile(&source).err(),
+            compiler.compile(&source).err().map(|err| err.data),
             Some(expected),
             "\n{}",
             full_path

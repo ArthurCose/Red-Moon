@@ -1,5 +1,5 @@
 use clap::Parser;
-use red_moon::errors::{LuaCompilationError, RuntimeError, RuntimeErrorData, SyntaxError};
+use red_moon::errors::{LuaCompilationErrorData, RuntimeError, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm, VmContext};
 use red_moon::languages::lua::{std as lua_std, LuaCompiler};
 use rustyline::error::ReadlineError;
@@ -202,8 +202,8 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
             Ok(module) => module,
             Err(err) => {
                 if matches!(
-                    err,
-                    LuaCompilationError::SyntaxError(SyntaxError::UnexpectedEOF)
+                    err.data,
+                    LuaCompilationErrorData::SyntaxError(SyntaxErrorData::UnexpectedEOF)
                 ) {
                     // just need more input, request more
                     request_more = true;

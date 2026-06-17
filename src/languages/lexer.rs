@@ -1,6 +1,6 @@
 use super::token::Token;
-use crate::errors::SyntaxError;
 use crate::FastHashMap;
+use crate::errors::{SourcePosition, SyntaxError, SyntaxErrorData};
 use std::borrow::Cow;
 
 type SubLexer<Label> = Box<dyn Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)>>;
@@ -52,11 +52,7 @@ impl<Label: Copy> Lexer<Label> {
             let char = source[start..].chars().next().unwrap();
             let (label, pass) = lexer(char);
 
-            if pass {
-                Some((label, 1))
-            } else {
-                None
-            }
+            if pass { Some((label, 1)) } else { None }
         });
     }
 
@@ -83,49 +79,60 @@ impl<Label: Copy> Lexer<Label> {
     ) -> impl Iterator<Item = Result<Token<'source, Label>, SyntaxError<Label>>> + 'iter {
         let mut skip = 0;
 
-        std::iter::from_fn(move || loop {
-            if skip >= source.len() {
-                return None;
-            }
-
-            let length = self
-                .ignorers
-                .iter()
-                .map(|ignorer| ignorer(source, skip))
-                .find(|length| *length > 0);
-
-            if let Some(length) = length {
-                if length + skip > source.len() {
-                    return Some(Err(SyntaxError::new_bad_ignorer(source, skip, length)));
+        std::iter::from_fn(move || {
+            loop {
+                if skip >= source.len() {
+                    return None;
                 }
 
-                skip += length;
-                continue;
-            }
+                let length = self
+                    .ignorers
+                    .iter()
+                    .map(|ignorer| ignorer(source, skip))
+                    .find(|length| *length > 0);
 
-            let lexer_result = self
-                .lexers
-                .iter()
-                .chain(std::iter::once(&self.token_lexer))
-                .flat_map(|sub_lexer| sub_lexer(self, source, skip))
-                .next();
+                if let Some(length) = length {
+                    if length + skip > source.len() {
+                        return Some(Err(SyntaxError {
+                            source_position: SourcePosition::new(source, skip),
+                            data: SyntaxErrorData::BadIgnorer { len: length },
+                        }));
+                    }
 
-            if let Some((label, length)) = lexer_result {
-                if length + skip > source.len() {
-                    return Some(Err(SyntaxError::new_bad_lexer(source, label, skip, length)));
+                    skip += length;
+                    continue;
                 }
 
-                let offset = skip;
-                skip += length;
+                let lexer_result = self
+                    .lexers
+                    .iter()
+                    .chain(std::iter::once(&self.token_lexer))
+                    .flat_map(|sub_lexer| sub_lexer(self, source, skip))
+                    .next();
 
-                return Some(Ok(Token {
-                    label,
-                    content: &source[offset..offset + length],
-                    offset,
+                if let Some((label, length)) = lexer_result {
+                    if length + skip > source.len() {
+                        return Some(Err(SyntaxError {
+                            source_position: SourcePosition::new(source, skip),
+                            data: SyntaxErrorData::BadLexer { label, len: length },
+                        }));
+                    }
+
+                    let offset = skip;
+                    skip += length;
+
+                    return Some(Ok(Token {
+                        label,
+                        content: &source[offset..offset + length],
+                        offset,
+                    }));
+                }
+
+                return Some(Err(SyntaxError {
+                    source_position: SourcePosition::new(source, skip),
+                    data: SyntaxErrorData::UnexpectedCharacter,
                 }));
             }
-
-            return Some(Err(SyntaxError::new_unexpected_character(source, skip)));
         })
     }
 }
@@ -205,12 +212,16 @@ mod tests {
                 .lex("12 >= 3")
                 .collect::<Result<Vec<_>, SyntaxError<_>>>()
                 .unwrap_err(),
-            super::SyntaxError::BadLexer {
-                label: "faulty",
-                offset: 0,
-                line: 1,
-                col: 1,
-                final_offset: 1000
+            SyntaxError {
+                source_position: SourcePosition {
+                    offset: 0,
+                    line: 1,
+                    col: 1,
+                },
+                data: SyntaxErrorData::BadLexer {
+                    label: "faulty",
+                    len: 1000
+                },
             }
         );
     }

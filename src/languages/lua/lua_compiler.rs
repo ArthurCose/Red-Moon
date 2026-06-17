@@ -2,7 +2,9 @@ use super::lua_lexer::LuaLexer;
 use super::lua_parsing::{parse_string, parse_unsigned_number};
 use super::{LuaToken, LuaTokenLabel};
 use crate::FastHashMap;
-use crate::errors::{LuaCompilationError, SyntaxError};
+use crate::errors::{
+    LuaCompilationError, LuaCompilationErrorData, SourcePosition, SyntaxError, SyntaxErrorData,
+};
 use crate::interpreter::{
     Chunk, ConstantIndex, Instruction, Module, Number, Register, ReturnMode, SourceMapping,
     UpValueSource,
@@ -185,10 +187,10 @@ impl<'source> FunctionContext<'source> {
         });
 
         if index > ConstantIndex::MAX as usize {
-            return Err(LuaCompilationError::new_reached_number_limit(
-                source,
-                token.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(source, token.offset),
+                data: LuaCompilationErrorData::ReachedNumberLimit,
+            });
         }
 
         Ok(index as _)
@@ -202,10 +204,10 @@ impl<'source> FunctionContext<'source> {
         parent_variable: UpValueOrStack,
     ) -> Result<Register, LuaCompilationError> {
         if self.captures.len() > Register::MAX as usize {
-            return Err(LuaCompilationError::new_reached_capture_limit(
-                source,
-                token.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(source, token.offset),
+                data: LuaCompilationErrorData::ReachedCaptureLimit,
+            });
         }
 
         let register = self.captures.len() as _;
@@ -225,10 +227,10 @@ impl<'source> FunctionContext<'source> {
         token: LuaToken<'source>,
     ) -> Result<Register, LuaCompilationError> {
         if self.next_register >= MAX_LOCALS {
-            return Err(LuaCompilationError::new_too_many_locals(
-                source,
-                token.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(source, token.offset),
+                data: LuaCompilationErrorData::ReachedLocalsLimit,
+            });
         }
 
         let register = self.next_register;
@@ -351,23 +353,26 @@ where
 
         // catch number limit
         if self.top_function.numbers.len() > ConstantIndex::MAX as usize {
-            return Err(LuaCompilationError::new_reached_number_limit(
-                self.source,
-                self.source.len(),
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, self.source.len()),
+                data: LuaCompilationErrorData::ReachedNumberLimit,
+            });
         }
 
-        // catch number limit
-        if self.module.chunks.len() > ConstantIndex::MAX as usize {
-            return Err(LuaCompilationError::ReachedFunctionLimit);
+        // catch function limit
+        if self.module.chunks.len() >= ConstantIndex::MAX as usize {
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, self.source.len()),
+                data: LuaCompilationErrorData::ReachedFunctionLimit,
+            });
         }
 
         // catch unresolved gotos
         if let Some(unresolved_goto) = self.top_function.unresolved_gotos.pop() {
-            return Err(LuaCompilationError::new_unresolved_goto(
-                self.source,
-                unresolved_goto.label.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, unresolved_goto.label.offset),
+                data: LuaCompilationErrorData::UnresolvedGoto,
+            });
         }
 
         self.module.main = self.module.chunks.len();
@@ -648,10 +653,10 @@ where
                     self.token_iter.next();
 
                     if self.top_function.stacked_loops == 0 {
-                        return Err(LuaCompilationError::new_unexpected_break(
-                            self.source,
-                            token.offset,
-                        ));
+                        return Err(LuaCompilationError {
+                            source_position: SourcePosition::new(self.source, token.offset),
+                            data: LuaCompilationErrorData::UnexpectedBreak,
+                        });
                     }
 
                     let instructions = &mut self.top_function.instructions;
@@ -696,10 +701,10 @@ where
                     let visible_labels = &mut self.top_function.visible_labels;
                     let mut label_iter = visible_labels.iter();
                     if label_iter.any(|l| l.token.content == label_token.content) {
-                        return Err(LuaCompilationError::new_redefined_label(
-                            self.source,
-                            label_token.offset,
-                        ));
+                        return Err(LuaCompilationError {
+                            source_position: SourcePosition::new(self.source, label_token.offset),
+                            data: LuaCompilationErrorData::RedefinedLabel,
+                        });
                     }
 
                     let instructions = &mut self.top_function.instructions;
@@ -790,7 +795,10 @@ where
 
                     // see if this is a method call by checking for a colon
                     let Some(next_token) = self.token_iter.peek().cloned().transpose()? else {
-                        return Err(SyntaxError::UnexpectedEOF.into());
+                        return Err(LuaCompilationError {
+                            source_position: SourcePosition::new(self.source, self.source.len()),
+                            data: SyntaxErrorData::UnexpectedEOF.into(),
+                        });
                     };
 
                     let is_method = next_token.label == LuaTokenLabel::Colon;
@@ -1124,7 +1132,10 @@ where
         self.token_iter
             .next()
             .transpose()?
-            .ok_or(SyntaxError::UnexpectedEOF.into())
+            .ok_or_else(|| LuaCompilationError {
+                source_position: SourcePosition::new(self.source, self.source.len()),
+                data: SyntaxErrorData::UnexpectedEOF.into(),
+            })
     }
 
     fn test_register_limit(
@@ -1133,10 +1144,10 @@ where
         top_register: Register,
     ) -> Result<(), LuaCompilationError> {
         if top_register > REGISTER_LIMIT {
-            return Err(LuaCompilationError::new_reached_register_limit(
-                self.source,
-                token.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, token.offset),
+                data: LuaCompilationErrorData::ReachedRegisterLimit,
+            });
         }
         Ok(())
     }
@@ -1250,10 +1261,10 @@ where
     ) -> Result<VariablePath<'source>, LuaCompilationError> {
         let path = if let Some(local) = self.top_function.registered_local(token.content) {
             if local.jumped_over {
-                return Err(LuaCompilationError::new_goto_skips_local_declaration(
-                    self.source,
-                    token.offset,
-                ));
+                return Err(LuaCompilationError {
+                    source_position: SourcePosition::new(self.source, token.offset),
+                    data: LuaCompilationErrorData::GotoSkipsLocalDeclaration,
+                });
             }
 
             VariablePath::Stack(local.register)
@@ -1303,10 +1314,10 @@ where
             for scope in std::iter::once(&function.top_scope).chain(&function.scopes) {
                 if let Some(local) = scope.locals.get(token.content) {
                     if local.jumped_over {
-                        return Err(LuaCompilationError::new_goto_skips_local_declaration(
-                            self.source,
-                            token.offset,
-                        ));
+                        return Err(LuaCompilationError {
+                            source_position: SourcePosition::new(self.source, token.offset),
+                            data: LuaCompilationErrorData::GotoSkipsLocalDeclaration,
+                        });
                     }
 
                     return Ok(Some(self.top_function.register_up_value(
@@ -1448,18 +1459,18 @@ where
 
         // catch number limit
         if self.top_function.numbers.len() > ConstantIndex::MAX as usize {
-            return Err(LuaCompilationError::new_reached_number_limit(
-                self.source,
-                token.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, token.offset),
+                data: LuaCompilationErrorData::ReachedNumberLimit,
+            });
         }
 
         // catch unresolved gotos
         if let Some(unresolved_goto) = self.top_function.unresolved_gotos.pop() {
-            return Err(LuaCompilationError::new_unresolved_goto(
-                self.source,
-                unresolved_goto.label.offset,
-            ));
+            return Err(LuaCompilationError {
+                source_position: SourcePosition::new(self.source, unresolved_goto.label.offset),
+                data: LuaCompilationErrorData::UnresolvedGoto,
+            });
         }
 
         // swap back top function
@@ -1948,10 +1959,10 @@ where
                         Instruction::LoadFloat(top_register, constant)
                     }
                     None => {
-                        return Err(LuaCompilationError::new_invalid_number(
-                            self.source,
-                            token.offset,
-                        ));
+                        return Err(LuaCompilationError {
+                            source_position: SourcePosition::new(self.source, token.offset),
+                            data: LuaCompilationErrorData::InvalidNumber,
+                        });
                     }
                 };
                 let instructions = &mut self.top_function.instructions;
@@ -2041,10 +2052,10 @@ where
                 // variadic
 
                 if !self.top_function.accept_variadic {
-                    return Err(LuaCompilationError::new_unexpected_variadic(
-                        self.source,
-                        token.offset,
-                    ));
+                    return Err(LuaCompilationError {
+                        source_position: SourcePosition::new(self.source, token.offset),
+                        data: LuaCompilationErrorData::UnexpectedVariadic,
+                    });
                 }
 
                 let skip = self.top_function.named_param_count;

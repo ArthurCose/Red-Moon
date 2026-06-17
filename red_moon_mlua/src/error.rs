@@ -479,14 +479,14 @@ impl From<red_moon::errors::RuntimeError> for Error {
 
 impl From<red_moon::errors::LuaCompilationError> for Error {
     fn from(value: red_moon::errors::LuaCompilationError) -> Self {
-        use red_moon::errors::LuaCompilationError;
-        use red_moon::errors::SyntaxError;
+        use red_moon::errors::LuaCompilationErrorData;
+        use red_moon::errors::SyntaxErrorData;
 
         Self::SyntaxError {
             message: value.to_string(),
             incomplete_input: matches!(
-                value,
-                LuaCompilationError::SyntaxError(SyntaxError::UnexpectedEOF)
+                value.data,
+                LuaCompilationErrorData::SyntaxError(SyntaxErrorData::UnexpectedEOF)
             ),
         }
     }

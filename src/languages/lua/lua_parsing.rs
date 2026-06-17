@@ -1,5 +1,8 @@
 use super::{LuaToken, LuaTokenLabel};
-use crate::{errors::SyntaxError, interpreter::Number};
+use crate::{
+    errors::{SourcePosition, SyntaxError, SyntaxErrorData},
+    interpreter::Number,
+};
 use std::borrow::Cow;
 
 // private as we have assumptions that can cause panics
@@ -108,10 +111,10 @@ pub(crate) fn parse_string<'source>(
                         .unwrap_or(bytes_slice.len() - i);
                 }
                 _ => {
-                    return Err(SyntaxError::new_unexpected_character(
-                        source,
-                        token.offset + i,
-                    ));
+                    return Err(SyntaxError {
+                        source_position: SourcePosition::new(source, token.offset + i),
+                        data: SyntaxErrorData::UnexpectedCharacter,
+                    });
                 }
             }
         }
