@@ -120,3 +120,38 @@ for a in foo, 5, 0 do
     break
   end
 end
+
+print("\nnested break:")
+for i = 1, 10 do
+  print(i)
+  -- making sure we skip the outer loop and not the inner loop
+  break
+
+  for i = 1, 10 do
+  end
+end
+
+
+for i = 1, 3 do
+  print(i)
+
+  for i = 1, 10 do
+    -- making sure we skip the inner loop and not the outer loop
+    break
+    print("running inner loop?")
+  end
+end
+
+print("\nnested function break:")
+for i = 1, 10, 1 do
+  print(i)
+  break
+
+  local _ = function()
+    for i = 1, 10, 1 do
+
+    end
+
+    print("???")
+  end
+end
