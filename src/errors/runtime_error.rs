@@ -1,5 +1,5 @@
-use super::stack_trace::StackTrace;
 use super::RuntimeErrorData;
+use super::stack_trace::StackTrace;
 use crate::interpreter::ByteString;
 
 #[cfg(feature = "serde")]
@@ -54,7 +54,7 @@ impl std::fmt::Display for RuntimeError {
         if let Some(instruction_trace) = frames.iter().flat_map(|f| f.instruction_trace()).next() {
             write!(
                 f,
-                "{}:{}:",
+                "{}:{}: ",
                 instruction_trace.source_name, instruction_trace.col
             )?;
         }
