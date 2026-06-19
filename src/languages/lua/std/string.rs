@@ -1,19 +1,142 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{Number, StringRef, TableRef, Value, VmContext};
+use crate::interpreter::{ByteString, Number, StringRef, TableRef, Value, VmContext};
 use crate::languages::lua::parse_number;
 
 pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    // byte
+    let byte = ctx.create_function(|call_ctx, ctx| {
+        let (string, start, end): (StringRef, Option<isize>, Option<isize>) =
+            call_ctx.get_args(ctx)?;
+
+        let mut multi = ctx.create_multi();
+
+        let byte_string = string.fetch(ctx)?;
+        let bytes = byte_string.as_bytes();
+
+        let range = remap_range(bytes, start, end, |_, start| start);
+
+        for byte in bytes[range].iter().rev() {
+            multi.push_front(Value::Integer(*byte as _));
+        }
+
+        call_ctx.return_values(multi, ctx)
+    });
+    let rehydrating = byte.rehydrate("str.byte", ctx)?;
+
+    // char
+    let char = ctx.create_function(|call_ctx, ctx| {
+        let mut bytes = Vec::with_capacity(call_ctx.arg_count);
+
+        for i in 0..call_ctx.arg_count() {
+            let b: u8 = call_ctx.get_arg(i, ctx)?;
+            bytes.push(b);
+        }
+
+        let string = ctx.intern_string(&bytes);
+        call_ctx.return_values(string, ctx)
+    });
+    char.rehydrate("str.char", ctx)?;
+
+    // char
+    let char = ctx.create_function(|call_ctx, ctx| {
+        let mut bytes = Vec::with_capacity(call_ctx.arg_count);
+
+        for i in 0..call_ctx.arg_count() {
+            let b: u8 = call_ctx.get_arg(i, ctx)?;
+            bytes.push(b);
+        }
+
+        let string = ctx.intern_string(&bytes);
+        call_ctx.return_values(string, ctx)
+    });
+    char.rehydrate("str.char", ctx)?;
+
+    // len
     let len = ctx.create_function(|call_ctx, ctx| {
         let string: StringRef = call_ctx.get_args(ctx)?;
         call_ctx.return_values(string.fetch(ctx)?.len(), ctx)
     });
-    let rehydrating = len.rehydrate("str.len", ctx)?;
+    len.rehydrate("str.len", ctx)?;
+
+    // lower
+    let lower = ctx.create_function(|call_ctx, ctx| {
+        let string: StringRef = call_ctx.get_args(ctx)?;
+        let bytes = string.fetch(ctx)?.as_bytes().to_ascii_lowercase();
+        let final_string = ctx.intern_string(&bytes);
+        call_ctx.return_values(final_string, ctx)
+    });
+    lower.rehydrate("str.lower", ctx)?;
+
+    // repeat / rep
+    let rep = ctx.create_function(|call_ctx, ctx| {
+        let (string, n, separator): (ByteString, i64, Option<ByteString>) =
+            call_ctx.get_args(ctx)?;
+
+        let n = n.max(0) as usize;
+
+        if n == 0 {
+            return call_ctx.return_values("", ctx);
+        }
+
+        let separator = separator.as_ref().map(|b| b.as_bytes()).unwrap_or(&[]);
+        let mut buffer = Vec::with_capacity(string.len() * n + separator.len() * (n - 1));
+
+        buffer.extend_from_slice(string.as_bytes());
+
+        for _ in 0..(n - 1) {
+            buffer.extend_from_slice(separator);
+            buffer.extend_from_slice(string.as_bytes());
+        }
+
+        let final_string = ctx.intern_string(&buffer);
+        call_ctx.return_values(final_string, ctx)
+    });
+    rep.rehydrate("str.rep", ctx)?;
+
+    // reverse
+    let reverse = ctx.create_function(|call_ctx, ctx| {
+        let string: ByteString = call_ctx.get_args(ctx)?;
+
+        let mut buffer = string.as_bytes().to_vec();
+        buffer.reverse();
+
+        let final_string = ctx.intern_string(&buffer);
+        call_ctx.return_values(final_string, ctx)
+    });
+    reverse.rehydrate("str.reverse", ctx)?;
+
+    // sub
+    let sub = ctx.create_function(|call_ctx, ctx| {
+        let (string, start, end): (ByteString, isize, Option<isize>) = call_ctx.get_args(ctx)?;
+        let bytes = string.as_bytes();
+
+        let range = remap_range(bytes, Some(start), end, |bytes, _| bytes.len() as _);
+        let final_string = ctx.intern_string(&bytes[range]);
+        call_ctx.return_values(final_string, ctx)
+    });
+    sub.rehydrate("str.sub", ctx)?;
+
+    // upper
+    let upper = ctx.create_function(|call_ctx, ctx| {
+        let string: StringRef = call_ctx.get_args(ctx)?;
+        let bytes = string.fetch(ctx)?.as_bytes().to_ascii_uppercase();
+        let final_string = ctx.intern_string(&bytes);
+        call_ctx.return_values(final_string, ctx)
+    });
+    upper.rehydrate("str.upper", ctx)?;
 
     let string_metatable = ctx.string_metatable();
 
     if !rehydrating {
         let string = ctx.create_table();
+        string.set("byte", byte, ctx)?;
+        string.set("char", char, ctx)?;
         string.set("len", len, ctx)?;
+        string.set("lower", lower, ctx)?;
+        string.set("rep", rep, ctx)?;
+        string.set("reverse", reverse, ctx)?;
+        string.set("sub", sub, ctx)?;
+        string.set("upper", upper, ctx)?;
 
         // set __index
         let index_metakey = ctx.metatable_keys().index.clone();
@@ -165,4 +288,44 @@ fn coerce_float(value: &Value, ctx: &mut VmContext) -> Option<f64> {
         },
         _ => None,
     }
+}
+
+fn remap_range(
+    bytes: &[u8],
+    start: Option<isize>,
+    end: Option<isize>,
+    default_end: fn(&[u8], isize) -> isize,
+) -> std::ops::Range<usize> {
+    let mut start = start.unwrap_or(1);
+
+    if start == 0 {
+        start = 1;
+    }
+
+    let mut end = end.unwrap_or(if start == -1 {
+        bytes.len() as _
+    } else {
+        default_end(bytes, start)
+    });
+
+    if start < 0 {
+        start = (bytes.len() as isize).saturating_add(start) + 1;
+    } else if start == 0 {
+        start = 1;
+    }
+
+    if end < 0 {
+        end = (bytes.len() as isize).saturating_add(end) + 1;
+    } else if end == 0 {
+        end = 1;
+    }
+
+    // lua uses inclusive bounds and starts at 1
+    start -= 1;
+
+    // keep within bounds
+    let start = start.clamp(0, bytes.len() as isize) as usize;
+    let end = end.clamp(0, bytes.len() as isize) as usize;
+
+    if start < end { start..end } else { 0..0 }
 }
