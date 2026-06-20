@@ -232,178 +232,6 @@ impl Vm {
     }
 
     #[inline]
-    pub fn create_multi(&mut self) -> MultiValue {
-        self.execution_data.cache_pools.create_multi()
-    }
-
-    #[inline]
-    pub fn store_multi(&mut self, multivalue: MultiValue) {
-        self.execution_data.cache_pools.store_multi(multivalue)
-    }
-
-    #[cfg(feature = "instruction_metrics")]
-    pub fn instruction_metrics(&mut self) -> Vec<super::InstructionMetrics> {
-        self.execution_data.instruction_tracking.data()
-    }
-
-    #[cfg(feature = "instruction_metrics")]
-    pub fn clear_instruction_metrics(&mut self) {
-        self.execution_data.instruction_tracking.clear();
-    }
-
-    #[inline]
-    pub fn limits(&self) -> &VmLimits {
-        &self.execution_data.limits
-    }
-
-    #[inline]
-    pub fn set_limits(&mut self, limits: VmLimits) {
-        self.execution_data.limits = limits;
-    }
-
-    #[inline]
-    pub fn registry(&self) -> TableRef {
-        self.registry.clone()
-    }
-
-    #[inline]
-    pub fn default_environment(&self) -> TableRef {
-        self.default_environment.clone()
-    }
-
-    #[inline]
-    pub fn string_metatable(&self) -> TableRef {
-        let heap = &self.execution_data.heap;
-        TableRef(heap.string_metatable_ref().clone())
-    }
-
-    #[inline]
-    pub fn metatable_keys(&self) -> &MetatableKeys {
-        &self.execution_data.metatable_keys
-    }
-
-    pub fn set_singleton<T: TypeErasedSnapshot + Clone + 'static>(
-        &mut self,
-        value: T,
-    ) -> Option<T> {
-        self.singletons.insert(value)
-    }
-
-    pub fn singleton<T: 'static>(&self) -> Option<&T> {
-        self.singletons.get()
-    }
-
-    pub fn singleton_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.singletons.get_mut()
-    }
-
-    pub fn remove_singleton<T: 'static>(&mut self) -> Option<T> {
-        self.singletons.remove()
-    }
-
-    #[inline]
-    pub fn gc_used_memory(&self) -> usize {
-        self.execution_data.gc.used_memory()
-    }
-
-    #[inline]
-    pub fn gc_is_running(&self) -> bool {
-        self.execution_data.gc.is_running()
-    }
-
-    #[inline]
-    pub fn gc_stop(&mut self) {
-        self.execution_data.gc.stop()
-    }
-
-    #[inline]
-    pub fn gc_restart(&mut self) {
-        self.execution_data.gc.restart()
-    }
-
-    pub fn gc_step(&mut self, bytes: usize) {
-        let gc = &mut self.execution_data.gc;
-        gc.modify_used_memory(bytes as _);
-
-        self.try_gc_step();
-
-        let gc = &mut self.execution_data.gc;
-        gc.modify_used_memory(-(bytes as isize));
-    }
-
-    fn try_gc_step(&mut self) {
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-
-        if gc.should_step() {
-            gc.step(
-                &self.execution_data.metatable_keys,
-                &self.execution_data.cache_pools,
-                heap,
-                &self.execution_stack,
-                &self.execution_data.coroutine_data,
-                &self.execution_data.debug_hook,
-            );
-        }
-    }
-
-    pub fn gc_collect(&mut self) {
-        let gc = &mut self.execution_data.gc;
-        let heap = &mut self.execution_data.heap;
-
-        gc.full_cycle(
-            &self.execution_data.metatable_keys,
-            &self.execution_data.cache_pools,
-            heap,
-            &self.execution_stack,
-            &self.execution_data.coroutine_data,
-            &self.execution_data.debug_hook,
-        );
-    }
-
-    #[inline]
-    pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
-        &mut self.execution_data.gc.config
-    }
-
-    pub fn set_hook(
-        &mut self,
-        mask: HookMask,
-        instruction_count: usize,
-        callback: FunctionRef,
-    ) -> Result<(), RuntimeErrorData> {
-        callback.test_validity(&self.execution_data.heap)?;
-
-        self.execution_data.debug_hook.reset();
-        self.execution_data.debug_hook.mask = mask;
-        self.execution_data.debug_hook.after_instructions = instruction_count;
-        self.execution_data.debug_hook.callback = Some(callback.0.key());
-
-        Ok(())
-    }
-
-    #[inline]
-    pub fn remove_hook(&mut self) {
-        self.execution_data.debug_hook.reset();
-    }
-
-    pub fn hook(&mut self) -> Option<FunctionRef> {
-        let storage_key = self.execution_data.debug_hook.callback?;
-        let heap_key = self.execution_data.heap.create_ref(storage_key);
-        Some(FunctionRef(heap_key))
-    }
-
-    #[inline]
-    pub fn hook_mask(&self) -> HookMask {
-        self.execution_data.debug_hook.mask
-    }
-
-    #[inline]
-    pub fn hook_count(&self) -> usize {
-        self.execution_data.debug_hook.after_instructions
-    }
-
-    #[inline]
     pub fn context(&mut self) -> VmContext<'_> {
         VmContext { vm: self }
     }
@@ -420,44 +248,44 @@ impl VmContext<'_> {
 
     #[inline]
     pub fn create_multi(&mut self) -> MultiValue {
-        self.vm.create_multi()
+        self.vm.execution_data.cache_pools.create_multi()
     }
 
     #[inline]
     pub fn store_multi(&mut self, multivalue: MultiValue) {
-        self.vm.store_multi(multivalue)
+        self.vm.execution_data.cache_pools.store_multi(multivalue)
     }
 
     #[inline]
     #[cfg(feature = "instruction_metrics")]
     pub fn instruction_metrics(&mut self) -> Vec<super::InstructionMetrics> {
-        self.vm.instruction_metrics()
+        self.vm.execution_data.instruction_tracking.data()
     }
 
     #[inline]
     #[cfg(feature = "instruction_metrics")]
     pub fn clear_instruction_metrics(&mut self) {
-        self.vm.clear_instruction_metrics();
+        self.vm.execution_data.instruction_tracking.clear();
     }
 
     #[inline]
     pub fn limits(&self) -> &VmLimits {
-        self.vm.limits()
+        &self.vm.execution_data.limits
     }
 
     #[inline]
     pub fn set_limits(&mut self, limits: VmLimits) {
-        self.vm.set_limits(limits);
+        self.vm.execution_data.limits = limits;
     }
 
     #[inline]
     pub fn registry(&self) -> TableRef {
-        self.vm.registry()
+        self.vm.registry.clone()
     }
 
     #[inline]
     pub fn default_environment(&self) -> TableRef {
-        self.vm.default_environment()
+        self.vm.default_environment.clone()
     }
 
     #[inline]
@@ -479,12 +307,13 @@ impl VmContext<'_> {
 
     #[inline]
     pub fn string_metatable(&self) -> TableRef {
-        self.vm.string_metatable()
+        let heap = &self.vm.execution_data.heap;
+        TableRef(heap.string_metatable_ref().clone())
     }
 
     #[inline]
     pub fn metatable_keys(&self) -> &MetatableKeys {
-        self.vm.metatable_keys()
+        &self.vm.execution_data.metatable_keys
     }
 
     #[inline]
@@ -492,22 +321,22 @@ impl VmContext<'_> {
         &mut self,
         value: T,
     ) -> Option<T> {
-        self.vm.set_singleton(value)
+        self.vm.singletons.insert(value)
     }
 
     #[inline]
     pub fn singleton<T: 'static>(&self) -> Option<&T> {
-        self.vm.singleton()
+        self.vm.singletons.get()
     }
 
     #[inline]
     pub fn singleton_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.vm.singleton_mut()
+        self.vm.singletons.get_mut()
     }
 
     #[inline]
     pub fn remove_singleton<T: 'static>(&mut self) -> Option<T> {
-        self.vm.remove_singleton()
+        self.vm.singletons.remove()
     }
 
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
@@ -517,7 +346,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(heap_key);
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         StringRef(heap_ref)
     }
@@ -529,7 +358,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(heap_key);
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         TableRef(heap_ref)
     }
@@ -541,7 +370,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(heap_key);
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         TableRef(heap_ref)
     }
@@ -642,7 +471,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         Ok(FunctionRef(heap_ref))
     }
@@ -666,7 +495,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         FunctionRef(heap_ref)
     }
@@ -839,7 +668,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         FunctionRef(heap_ref)
     }
@@ -871,7 +700,7 @@ impl VmContext<'_> {
         let heap_ref = heap.create_ref(heap_key);
 
         // test after creating ref to avoid immediately collecting the generated value
-        self.vm.try_gc_step();
+        self.try_gc_step();
 
         Ok(CoroutineRef(heap_ref))
     }
@@ -933,67 +762,108 @@ impl VmContext<'_> {
 
     #[inline]
     pub fn gc_used_memory(&self) -> usize {
-        self.vm.gc_used_memory()
+        self.vm.execution_data.gc.used_memory()
     }
 
     #[inline]
     pub fn gc_is_running(&self) -> bool {
-        self.vm.gc_is_running()
+        self.vm.execution_data.gc.is_running()
     }
 
     #[inline]
     pub fn gc_stop(&mut self) {
-        self.vm.gc_stop()
+        self.vm.execution_data.gc.stop()
     }
 
     #[inline]
     pub fn gc_restart(&mut self) {
-        self.vm.gc_restart()
+        self.vm.execution_data.gc.restart()
     }
 
-    #[inline]
     pub fn gc_step(&mut self, bytes: usize) {
-        self.vm.gc_step(bytes)
+        let gc = &mut self.vm.execution_data.gc;
+        gc.modify_used_memory(bytes as _);
+
+        self.try_gc_step();
+
+        let gc = &mut self.vm.execution_data.gc;
+        gc.modify_used_memory(-(bytes as isize));
     }
 
-    #[inline]
+    fn try_gc_step(&mut self) {
+        let exec_data = &mut self.vm.execution_data;
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
+        if gc.should_step() {
+            gc.step(
+                &exec_data.metatable_keys,
+                &exec_data.cache_pools,
+                heap,
+                &self.vm.execution_stack,
+                &exec_data.coroutine_data,
+                &exec_data.debug_hook,
+            );
+        }
+    }
+
     pub fn gc_collect(&mut self) {
-        self.vm.gc_collect()
+        let exec_data = &mut self.vm.execution_data;
+        let gc = &mut exec_data.gc;
+        let heap = &mut exec_data.heap;
+
+        gc.full_cycle(
+            &exec_data.metatable_keys,
+            &exec_data.cache_pools,
+            heap,
+            &self.vm.execution_stack,
+            &exec_data.coroutine_data,
+            &exec_data.debug_hook,
+        );
     }
 
     #[inline]
     pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
-        self.vm.gc_config_mut()
+        &mut self.vm.execution_data.gc.config
     }
 
-    #[inline]
     pub fn set_hook(
         &mut self,
         mask: HookMask,
         instruction_count: usize,
         callback: FunctionRef,
     ) -> Result<(), RuntimeErrorData> {
-        self.vm.set_hook(mask, instruction_count, callback)
+        let exec_data = &mut self.vm.execution_data;
+        callback.test_validity(&exec_data.heap)?;
+
+        let debug_hook = &mut exec_data.debug_hook;
+        debug_hook.reset();
+        debug_hook.mask = mask;
+        debug_hook.after_instructions = instruction_count;
+        debug_hook.callback = Some(callback.0.key());
+
+        Ok(())
     }
 
     #[inline]
     pub fn remove_hook(&mut self) {
-        self.vm.remove_hook();
+        self.vm.execution_data.debug_hook.reset();
     }
 
-    #[inline]
     pub fn hook(&mut self) -> Option<FunctionRef> {
-        self.vm.hook()
+        let storage_key = self.vm.execution_data.debug_hook.callback?;
+        let heap_key = self.vm.execution_data.heap.create_ref(storage_key);
+        Some(FunctionRef(heap_key))
     }
 
     #[inline]
     pub fn hook_mask(&self) -> HookMask {
-        self.vm.hook_mask()
+        self.vm.execution_data.debug_hook.mask
     }
 
     #[inline]
     pub fn hook_count(&self) -> usize {
-        self.vm.hook_count()
+        self.vm.execution_data.debug_hook.after_instructions
     }
 
     pub(crate) fn call_function_key<A: ForEachValue, R: FromValues>(

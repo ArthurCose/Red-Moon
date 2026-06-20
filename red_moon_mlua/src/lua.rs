@@ -95,10 +95,6 @@ impl Lua {
         Self::default()
     }
 
-    pub(crate) unsafe fn vm(&self) -> &Vm {
-        &*self.vm.get()
-    }
-
     #[allow(clippy::mut_from_ref)]
     pub(crate) unsafe fn vm_mut(&self) -> &mut Vm {
         &mut *self.vm.get()
@@ -201,7 +197,7 @@ impl Lua {
     /// objects. Once to finish the current gc cycle, and once to start and finish the next cycle.
     pub fn gc_collect(&self) -> Result<()> {
         let vm = unsafe { self.vm_mut() };
-        vm.gc_collect();
+        vm.context().gc_collect();
         Ok(())
     }
 
@@ -411,8 +407,8 @@ impl Lua {
 
     #[inline]
     pub fn globals(&self) -> Table<'_> {
-        let vm = unsafe { self.vm() };
-        let table_ref = vm.default_environment();
+        let vm = unsafe { self.vm_mut() };
+        let table_ref = vm.context().default_environment();
 
         self.modified.set(true);
         self.self_ptr.set(self);

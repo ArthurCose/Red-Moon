@@ -129,7 +129,7 @@ impl Coroutine {
                 Continuation::Execution(mut execution) => {
                     let exec_data = &mut vm.execution_data;
                     let result = execution.handle_external_return(exec_data, &mut args);
-                    vm.store_multi(args);
+                    vm.context().store_multi(args);
 
                     vm.execution_stack.push(execution);
                     result
@@ -280,9 +280,11 @@ impl Coroutine {
 
                     let callback = callback.shallow_clone();
 
-                    match ExecutionContext::call_closure(vm.create_multi(), vm, |call_ctx, ctx| {
-                        callback.call(key, (call_ctx, Err(err), state_multi), ctx)
-                    }) {
+                    match ExecutionContext::call_closure(
+                        vm.context().create_multi(),
+                        vm,
+                        |call_ctx, ctx| callback.call(key, (call_ctx, Err(err), state_multi), ctx),
+                    ) {
                         Ok(values) => {
                             // converted to Ok ("pcall"-like function)
                             return Ok(values.unpack(ctx).unwrap());

@@ -728,7 +728,7 @@ impl<'lua> MultiValue<'lua> {
         }
 
         let vm = unsafe { lua.vm_mut() };
-        vm.store_multi(red_moon_multi);
+        vm.context().store_multi(red_moon_multi);
 
         mlua_multi
     }

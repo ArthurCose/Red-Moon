@@ -58,7 +58,7 @@ impl<T> From<MultiValue<T>> for ThinVec<T> {
 
 impl MultiValue<Value> {
     pub fn pack<T: ForEachValue>(values: T, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
-        let mut multi = ctx.vm.create_multi();
+        let mut multi = ctx.create_multi();
 
         values.for_each_value(ctx, |result, _| {
             let value = result?;
