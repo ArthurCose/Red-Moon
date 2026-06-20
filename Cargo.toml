@@ -17,6 +17,8 @@ downcast = "0.11"
 cpu-time = "1"
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"], optional = true }
+erased-serde = { version = "0.4", optional = true }
+typetag = { version = "0.2", optional = true }
 thin-vec = { version = "0.2", features = ["serde"] }
 erasable = "1"
 slice-dst = "1"
@@ -31,8 +33,14 @@ ron = "0.8"
 [features]
 # separate feature as it affects performance
 instruction_metrics = []
-serde = ["dep:serde", "slotmap/serde", "indexmap/serde"]
-default = ["serde"]
+serde = [
+  "dep:serde",
+  "dep:erased-serde",
+  "dep:typetag",
+  "slotmap/serde",
+  "indexmap/serde"
+]
+default = []
 
 [lints]
 workspace = true

@@ -1,3 +1,4 @@
+use crate::app_data::AppData;
 use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
 use red_moon::interpreter::{ByteString, TableRef, Vm};
@@ -27,6 +28,7 @@ struct MutableResources {
 struct Snapshot {
     vm: Vm,
     resources: MutableResources,
+    app_data: AppData,
     count: usize,
 }
 
@@ -45,8 +47,8 @@ pub struct Lua {
     modified: Cell<bool>,
     compiler: LuaCompiler,
     resources: RefCell<MutableResources>,
+    app_data: AppData,
     nil_registry_id: slotmap::DefaultKey,
-    app_data_borrows: Cell<usize>,
     identifier: Arc<()>,
     #[cfg(feature = "serialize")]
     array_metatable: TableRef,
@@ -73,9 +75,9 @@ impl Default for Lua {
                 registry,
                 named_registry: Default::default(),
             }),
+            app_data: Default::default(),
             nil_registry_id: nil_id,
             identifier: Arc::default(),
-            app_data_borrows: Default::default(),
             #[cfg(feature = "serialize")]
             array_metatable,
         }
@@ -140,6 +142,7 @@ impl Lua {
         self.snapshots.push(Snapshot {
             vm: self.vm.get_mut().clone(),
             resources: self.resources.borrow_mut().clone(),
+            app_data: self.app_data.clone(),
             count: 1,
         });
     }
@@ -160,6 +163,7 @@ impl Lua {
 
             self.vm.get_mut().clone_from(&snapshot.vm);
             self.resources.borrow_mut().clone_from(&snapshot.resources);
+            self.app_data.clone_from(&snapshot.app_data);
 
             return;
         }
@@ -755,15 +759,12 @@ impl Lua {
     /// ```
     #[track_caller]
     pub fn set_app_data<T: Clone + 'static>(&self, data: T) -> Option<T> {
-        if self.app_data_borrows.get() > 0 {
-            panic!("cannot mutably borrow app data container");
-        }
-
         self.modified.set(true);
 
-        let vm = unsafe { self.vm_mut() };
-        vm.set_app_data(RefCell::new(data))
-            .map(|cell| cell.into_inner())
+        match self.app_data.try_insert(data) {
+            Ok(v) => v,
+            Err(_) => panic!("cannot mutably borrow app data container"),
+        }
     }
 
     /// Tries to set or replace an application data object of type `T`.
@@ -776,33 +777,9 @@ impl Lua {
     /// See [`Lua::set_app_data()`] for examples.
     pub fn try_set_app_data<T: Clone + 'static>(
         &self,
-        mut data: T,
+        data: T,
     ) -> std::result::Result<Option<T>, T> {
-        if self.app_data_borrows.get() > 0 {
-            return Err(data);
-        }
-
-        let vm = unsafe { self.vm_mut() };
-        let existing_cell: Option<&RefCell<T>> = vm.app_data();
-
-        if let Some(existing_cell) = existing_cell {
-            // data exists
-            if let Ok(mut existing) = existing_cell.try_borrow_mut() {
-                // try to swap
-                std::mem::swap(&mut *existing, &mut data);
-
-                self.modified.set(true);
-
-                Ok(Some(data))
-            } else {
-                // failed
-                Err(data)
-            }
-        } else {
-            // no existing data
-            vm.set_app_data(RefCell::new(data));
-            Ok(None)
-        }
+        self.app_data.try_insert(data)
     }
 
     /// Gets a reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
@@ -813,19 +790,10 @@ impl Lua {
     /// can be taken out at the same time.
     #[track_caller]
     pub fn app_data_ref<T: 'static>(&self) -> Option<AppDataRef<'_, T>> {
-        let vm = unsafe { self.vm_mut() };
-
-        vm.app_data::<RefCell<T>>().map(|cell| {
-            let data_ref = AppDataRef {
-                data: cell.borrow(),
-                borrow: &self.app_data_borrows,
-            };
-
-            // only increment on success
-            self.app_data_borrows.set(self.app_data_borrows.get() + 1);
-
-            data_ref
-        })
+        match self.app_data.try_get() {
+            Ok(v) => v,
+            Err(_) => panic!("cannot borrow app data container"),
+        }
     }
 
     /// Gets a mutable reference to an application data object stored by [`Lua::set_app_data()`] of type `T`.
@@ -835,21 +803,12 @@ impl Lua {
     /// Panics if the data object of type `T` is currently borrowed.
     #[track_caller]
     pub fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<'_, T>> {
-        let vm = unsafe { self.vm_mut() };
-
         self.modified.set(true);
 
-        vm.app_data::<RefCell<T>>().map(|cell| {
-            let data_ref = AppDataRefMut {
-                data: cell.borrow_mut(),
-                borrow: &self.app_data_borrows,
-            };
-
-            // only increment on success
-            self.app_data_borrows.set(self.app_data_borrows.get() + 1);
-
-            data_ref
-        })
+        match self.app_data.try_get_mut() {
+            Ok(v) => v,
+            Err(_) => panic!("cannot mutably borrow app data container"),
+        }
     }
 
     /// Removes an application data of type `T`.
@@ -858,15 +817,9 @@ impl Lua {
     ///
     /// Panics if the app data container is currently borrowed.
     #[track_caller]
-    pub fn remove_app_data<T: 'static>(&self) -> Option<T> {
-        if self.app_data_borrows.get() > 0 {
-            panic!("cannot mutably borrow app data container");
-        }
-
+    pub fn remove_app_data<T: Clone + 'static>(&self) -> Option<T> {
         self.modified.set(true);
 
-        let vm = unsafe { self.vm_mut() };
-        vm.remove_app_data::<RefCell<T>>()
-            .map(|cell| cell.into_inner())
+        self.app_data.remove()
     }
 }

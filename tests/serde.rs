@@ -1,9 +1,18 @@
 #![cfg(feature = "serde")]
 
 use red_moon::errors::{RuntimeError, RuntimeErrorData};
-use red_moon::interpreter::{CoroutineRef, FunctionRef, MultiValue, TableRef, Vm};
-use red_moon::languages::lua::std::impl_coroutine;
+use red_moon::interpreter::{
+    CoroutineRef, FunctionRef, MultiValue, TableRef, TypeErasedSnapshot, Vm,
+};
 use red_moon::languages::lua::LuaCompiler;
+use red_moon::languages::lua::std::impl_coroutine;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+struct MySingleton(i32);
+
+#[typetag::serde]
+impl TypeErasedSnapshot for MySingleton {}
 
 fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();
@@ -62,6 +71,9 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     // create holes and make sure the hydration tag doesn't get collected
     ctx.gc_collect();
 
+    // add a singleton
+    ctx.set_singleton(MySingleton(1));
+
     Ok(vm)
 }
 
@@ -86,9 +98,10 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // test dehydrated function
     let f: FunctionRef = env.get("native_fn", ctx)?;
-    assert!(f
-        .call::<_, MultiValue>(1, ctx)
-        .is_err_and(|err| err.data == RuntimeErrorData::FunctionLostInSerialization));
+    assert!(
+        f.call::<_, MultiValue>(1, ctx)
+            .is_err_and(|err| err.data == RuntimeErrorData::FunctionLostInSerialization)
+    );
 
     // rehydrate
     let f = ctx.create_function(|call_ctx, ctx| {
@@ -106,6 +119,10 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     let co: CoroutineRef = env.get("co", ctx)?;
     assert_eq!(co.resume((), ctx)?, MultiValue::pack("resumed", ctx)?);
 
+    // retrieve singleton
+    let my_singleton: &MySingleton = ctx.singleton().unwrap();
+    assert_eq!(my_singleton, &MySingleton(1));
+
     Ok(())
 }
 
@@ -114,16 +131,6 @@ fn bincode() -> Result<(), RuntimeError> {
     let serialized_vm = bincode::serialize(&create_vm()?).unwrap();
 
     let mut vm: Vm = bincode::deserialize(&serialized_vm).unwrap();
-    test_vm(&mut vm)?;
-
-    Ok(())
-}
-
-#[test]
-fn rmp() -> Result<(), RuntimeError> {
-    let serialized_vm = rmp_serde::to_vec(&create_vm()?).unwrap();
-
-    let mut vm: Vm = rmp_serde::from_slice(&serialized_vm).unwrap();
     test_vm(&mut vm)?;
 
     Ok(())

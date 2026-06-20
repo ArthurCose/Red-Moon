@@ -11,12 +11,11 @@ use super::{
     Continuation, CoroutineRef, ForEachValue, FromValues, FunctionRef, Module, MultiValue,
     StringRef, TableRef,
 };
-use crate::FastHashMap;
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::TypeErasedSnapshot;
 use crate::interpreter::debug_hooks::{DebugHook, HookMask};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
-use downcast::downcast;
-use std::any::TypeId;
+use crate::interpreter::struct_set::StructSet;
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_metrics")]
@@ -40,24 +39,6 @@ impl Default for VmLimits {
         }
     }
 }
-
-trait AppData: downcast::Any {
-    fn clone_box(&self) -> Box<dyn AppData>;
-}
-
-impl<T: Clone + 'static> AppData for T {
-    fn clone_box(&self) -> Box<dyn AppData> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn AppData> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
-
-downcast!(dyn AppData);
 
 #[derive(Default)]
 pub(crate) struct CoroutineData {
@@ -121,7 +102,7 @@ pub struct Vm {
     pub(crate) execution_stack: Vec<ExecutionContext>,
     registry: TableRef,
     default_environment: TableRef,
-    app_data: FastHashMap<TypeId, Box<dyn AppData>>,
+    singletons: StructSet,
 }
 
 #[cfg(feature = "serde")]
@@ -142,6 +123,7 @@ impl Serialize for Vm {
             state.serialize_field("heap_storage", &self.execution_data.heap.storage)?;
             state.serialize_field("tags", &self.execution_data.heap.tags)?;
             state.serialize_field("byte_strings", &self.execution_data.heap.byte_strings)?;
+            state.serialize_field("singletons", &self.singletons)?;
             state.end()
         })();
 
@@ -159,6 +141,7 @@ impl<'de> Deserialize<'de> for Vm {
         D: serde::Deserializer<'de>,
     {
         use crate::BuildFastHasher;
+        use crate::FastHashMap;
         use crate::interpreter::ByteString;
         use crate::interpreter::heap::{BytesObjectKey, NativeFnObjectKey, Storage};
         use indexmap::IndexMap;
@@ -171,6 +154,7 @@ impl<'de> Deserialize<'de> for Vm {
             heap_storage: Storage,
             tags: IndexMap<StackValue, NativeFnObjectKey, BuildFastHasher>,
             byte_strings: FastHashMap<ByteString, BytesObjectKey>,
+            singletons: StructSet,
         }
 
         // enable deduplication
@@ -191,6 +175,7 @@ impl<'de> Deserialize<'de> for Vm {
         vm.execution_data.heap.storage = data.heap_storage;
         vm.execution_data.heap.tags = data.tags;
         vm.execution_data.heap.byte_strings = data.byte_strings;
+        vm.singletons = data.singletons;
 
         Ok(vm)
     }
@@ -204,7 +189,7 @@ impl Clone for Vm {
             execution_stack: Default::default(),
             registry: self.registry.clone(),
             default_environment: self.default_environment.clone(),
-            app_data: self.app_data.clone(),
+            singletons: self.singletons.clone(),
         }
     }
 }
@@ -242,7 +227,7 @@ impl Vm {
             execution_stack: Default::default(),
             registry: TableRef(registry),
             default_environment: TableRef(default_environment),
-            app_data: Default::default(),
+            singletons: Default::default(),
         }
     }
 
@@ -297,28 +282,23 @@ impl Vm {
         &self.execution_data.metatable_keys
     }
 
-    pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {
-        self.app_data
-            .insert(TypeId::of::<T>(), Box::new(value))
-            .map(|b| *b.downcast::<T>().unwrap())
+    pub fn set_singleton<T: TypeErasedSnapshot + Clone + 'static>(
+        &mut self,
+        value: T,
+    ) -> Option<T> {
+        self.singletons.insert(value)
     }
 
-    pub fn app_data<T: 'static>(&self) -> Option<&T> {
-        self.app_data
-            .get(&TypeId::of::<T>())
-            .map(|b| b.downcast_ref::<T>().unwrap())
+    pub fn singleton<T: 'static>(&self) -> Option<&T> {
+        self.singletons.get()
     }
 
-    pub fn app_data_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.app_data
-            .get_mut(&TypeId::of::<T>())
-            .map(|b| b.downcast_mut::<T>().unwrap())
+    pub fn singleton_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.singletons.get_mut()
     }
 
-    pub fn remove_app_data<T: 'static>(&mut self) -> Option<T> {
-        self.app_data
-            .remove(&TypeId::of::<T>())
-            .map(|b| *b.downcast::<T>().unwrap())
+    pub fn remove_singleton<T: 'static>(&mut self) -> Option<T> {
+        self.singletons.remove()
     }
 
     #[inline]
@@ -508,23 +488,26 @@ impl VmContext<'_> {
     }
 
     #[inline]
-    pub fn set_app_data<T: Clone + 'static>(&mut self, value: T) -> Option<T> {
-        self.vm.set_app_data(value)
+    pub fn set_singleton<T: TypeErasedSnapshot + Clone + 'static>(
+        &mut self,
+        value: T,
+    ) -> Option<T> {
+        self.vm.set_singleton(value)
     }
 
     #[inline]
-    pub fn app_data<T: 'static>(&self) -> Option<&T> {
-        self.vm.app_data()
+    pub fn singleton<T: 'static>(&self) -> Option<&T> {
+        self.vm.singleton()
     }
 
     #[inline]
-    pub fn app_data_mut<T: 'static>(&mut self) -> Option<&mut T> {
-        self.vm.app_data_mut()
+    pub fn singleton_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.vm.singleton_mut()
     }
 
     #[inline]
-    pub fn remove_app_data<T: 'static>(&mut self) -> Option<T> {
-        self.vm.remove_app_data()
+    pub fn remove_singleton<T: 'static>(&mut self) -> Option<T> {
+        self.vm.remove_singleton()
     }
 
     pub fn intern_string(&mut self, bytes: &[u8]) -> StringRef {
