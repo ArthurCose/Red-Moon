@@ -156,18 +156,18 @@ The garbage collector is incremental only.
 
 ### Standard Library
 
-| Library     | Supported                                                                                                                                                      |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `basic`     | ⚠️ Missing `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                                                             |
-| `coroutine` | ⚠️ Missing `coroutine.close`                                                                                                                                   |
-| `debug`     | ⚠️ Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.traceback`, `debug.gethook` and count support for `debug.sethook`              |
-| `math`      | ⚠️ Missing `math.random` and `math.randomseed`                                                                                                                 |
-| `os`        | ⚠️ Only `os.clock`                                                                                                                                             |
-| `package`   | ⛔ Not yet                                                                                                                                                     |
-| `string`    | ⚠️ Missing `string.find`, `string.match`, `string.gmatch`, `string.gsub`, `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize` |
-| `table`     | ⚠️ Missing `table.move` and `table.sort`                                                                                                                       |
-| `utf8`      | ⛔ Not yet                                                                                                                                                     |
-| `io`        | ⛔ Not yet                                                                                                                                                     |
+| Library     | Supported                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic`     | ⚠️ Missing `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                                                |
+| `coroutine` | ⚠️ Missing `coroutine.close`                                                                                                                      |
+| `debug`     | ⚠️ Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.traceback`, `debug.gethook` and count support for `debug.sethook` |
+| `math`      | ⚠️ Missing `math.random` and `math.randomseed`                                                                                                    |
+| `os`        | ⚠️ Only `os.clock`                                                                                                                                |
+| `package`   | ⛔ Not yet                                                                                                                                        |
+| `string`    | ⚠️ Missing `string.gmatch`, `string.gsub`, `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                   |
+| `table`     | ⚠️ Missing `table.move` and `table.sort`                                                                                                          |
+| `utf8`      | ⛔ Not yet                                                                                                                                        |
+| `io`        | ⛔ Not yet                                                                                                                                        |
 
 ### Metamethods
 

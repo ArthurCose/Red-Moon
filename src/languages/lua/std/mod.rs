@@ -3,6 +3,7 @@ mod coroutine;
 mod debug;
 mod math;
 mod os;
+mod pattern_matching;
 mod string;
 mod table;
 
@@ -13,3 +14,5 @@ pub use math::impl_math;
 pub use os::impl_os;
 pub use string::impl_string;
 pub use table::impl_table;
+
+pub use pattern_matching::{BytePattern, PatternMatcher};

@@ -1,6 +1,7 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::{ByteString, Number, StringRef, TableRef, Value, VmContext};
 use crate::languages::lua::parse_number;
+use crate::languages::lua::std::{BytePattern, PatternMatcher};
 
 pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // byte
@@ -36,19 +37,53 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     char.rehydrate("str.char", ctx)?;
 
-    // char
-    let char = ctx.create_function(|call_ctx, ctx| {
-        let mut bytes = Vec::with_capacity(call_ctx.arg_count);
+    // find
+    let find = ctx.create_function(|call_ctx, ctx| {
+        let (string, pattern_string, init, plain): (
+            ByteString,
+            ByteString,
+            Option<i64>,
+            Option<bool>,
+        ) = call_ctx.get_args(ctx)?;
 
-        for i in 0..call_ctx.arg_count() {
-            let b: u8 = call_ctx.get_arg(i, ctx)?;
-            bytes.push(b);
+        let plain = plain.unwrap_or(false);
+        let bytes = string.as_bytes();
+        let start = init.map(|i| remap_index(bytes, i)).unwrap_or(0);
+
+        if start >= bytes.len() {
+            return Ok(());
         }
 
-        let string = ctx.intern_string(&bytes);
-        call_ctx.return_values(string, ctx)
+        if plain {
+            let pattern_bytes = pattern_string.as_bytes();
+
+            for window in bytes[start..].windows(pattern_bytes.len()) {
+                if window == pattern_bytes {
+                    return call_ctx.return_values((start + 1, start + pattern_bytes.len()), ctx);
+                }
+            }
+
+            return Ok(());
+        }
+
+        let pattern = BytePattern::from_byte_string(pattern_string)
+            .map_err(|err| RuntimeError::new_string(err.to_string()))?;
+        let mut pattern_matcher = PatternMatcher::default();
+
+        let Some(len) = pattern_matcher.try_match(&pattern, bytes, start) else {
+            return Ok(());
+        };
+
+        call_ctx.return_values((start + 1, start + len), ctx)?;
+
+        for range in pattern_matcher.captures() {
+            let string_ref = ctx.intern_string(&bytes[range.clone()]);
+            call_ctx.return_values(string_ref, ctx)?;
+        }
+
+        Ok(())
     });
-    char.rehydrate("str.char", ctx)?;
+    find.rehydrate("str.find", ctx)?;
 
     // len
     let len = ctx.create_function(|call_ctx, ctx| {
@@ -65,6 +100,36 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         call_ctx.return_values(final_string, ctx)
     });
     lower.rehydrate("str.lower", ctx)?;
+
+    // match
+    let match_func = ctx.create_function(|call_ctx, ctx| {
+        let (string, pattern_string, init): (ByteString, ByteString, Option<i64>) =
+            call_ctx.get_args(ctx)?;
+
+        let bytes = string.as_bytes();
+        let start = init.map(|i| remap_index(bytes, i)).unwrap_or(0);
+
+        let pattern = BytePattern::from_byte_string(pattern_string)
+            .map_err(|err| RuntimeError::new_string(err.to_string()))?;
+        let mut pattern_matcher = PatternMatcher::default();
+
+        let Some(len) = pattern_matcher.try_match(&pattern, bytes, start) else {
+            return Ok(());
+        };
+
+        if pattern_matcher.captures().is_empty() {
+            let string_ref = ctx.intern_string(&bytes[start..start + len]);
+            call_ctx.return_values(string_ref, ctx)?;
+        } else {
+            for range in pattern_matcher.captures() {
+                let string_ref = ctx.intern_string(&bytes[range.clone()]);
+                call_ctx.return_values(string_ref, ctx)?;
+            }
+        }
+
+        Ok(())
+    });
+    match_func.rehydrate("str.match", ctx)?;
 
     // repeat / rep
     let rep = ctx.create_function(|call_ctx, ctx| {
@@ -130,8 +195,10 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let string = ctx.create_table();
         string.set("byte", byte, ctx)?;
         string.set("char", char, ctx)?;
+        string.set("find", find, ctx)?;
         string.set("len", len, ctx)?;
         string.set("lower", lower, ctx)?;
+        string.set("match", match_func, ctx)?;
         string.set("rep", rep, ctx)?;
         string.set("reverse", reverse, ctx)?;
         string.set("sub", sub, ctx)?;
@@ -286,6 +353,14 @@ fn coerce_float(value: &Value, ctx: &mut VmContext) -> Option<f64> {
             Number::Float(f) => Some(f),
         },
         _ => None,
+    }
+}
+
+fn remap_index(bytes: &[u8], i: i64) -> usize {
+    match i.cmp(&0) {
+        std::cmp::Ordering::Less => bytes.len().saturating_sub(-i as usize),
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => (i - 1) as usize,
     }
 }
 
