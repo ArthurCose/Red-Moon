@@ -509,7 +509,7 @@ impl VmContext<'_> {
     /// # use red_moon::interpreter::{FunctionRef, MultiValue, Vm};
     /// # use red_moon::errors::RuntimeError;
     /// # use red_moon::languages::lua::std::{impl_basic, impl_coroutine};
-    /// # use red_moon::languages::lua::LuaCompiler;
+    /// # use red_moon::languages::lua::compile;
     ///
     /// let mut vm = Vm::default();
     /// let ctx = &mut vm.context();
@@ -567,8 +567,7 @@ impl VmContext<'_> {
     ///   assert(select(2, coroutine.resume(co)) == 4)
     /// "#;
     ///
-    /// let compiler = LuaCompiler::default();
-    /// let module = compiler.compile(SOURCE).unwrap();
+    /// let module = compile(SOURCE).unwrap();
     /// ctx.load_function(file!(), None, module)?.call::<_, ()>((), ctx)?;
     ///
     /// # Ok::<_, RuntimeError>(())

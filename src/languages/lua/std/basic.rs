@@ -2,8 +2,7 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::{
     ByteString, FromValue, FunctionRef, MultiValue, StringRef, TableRef, Value, VmContext,
 };
-use crate::languages::lua::{LuaCompiler, parse_number};
-use std::rc::Rc;
+use crate::languages::lua::{compile, parse_number};
 
 pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // assert
@@ -418,7 +417,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     tonumber.rehydrate("lua.tonumber", ctx)?;
 
     // pcall
-    let pcall = ctx.create_resumable_function(move |(call_ctx, result, state), ctx| {
+    let pcall = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
         let first_call = state.is_empty();
         ctx.store_multi(state);
 
@@ -486,8 +485,6 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     xpcall.rehydrate("lua.xpcall", ctx)?;
 
     // load
-    let load_compiler = Rc::new(LuaCompiler::default());
-    let load_file_compiler = load_compiler.clone();
     let load = ctx.create_function(move |call_ctx, ctx| {
         let (chunkname, mode, env): (Option<String>, Option<ByteString>, Option<TableRef>) =
             call_ctx.get_args_at(1, ctx)?;
@@ -530,7 +527,6 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         }
 
         // compilation errors are returned instead of thrown
-        let compiler = &load_compiler;
         let try_block_ctx = &mut *ctx;
         let try_block = move || {
             let allows_text = mode
@@ -548,7 +544,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             }
 
             let source = String::from_utf8(source_bytes).map_err(|err| err.to_string())?;
-            let module = compiler.compile(&source).map_err(|err| err.to_string())?;
+            let module = compile(&source).map_err(|err| err.to_string())?;
 
             try_block_ctx
                 .load_function(label, env, module)
@@ -563,12 +559,11 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     load.rehydrate("lua.load", ctx)?;
 
     // loadfile
-    let loadfile = ctx.create_function(move |call_ctx, ctx| {
+    let loadfile = ctx.create_function(|call_ctx, ctx| {
         let (path, mode, env): (String, Option<ByteString>, Option<TableRef>) =
             call_ctx.get_args(ctx)?;
 
         // compilation errors are returned instead of thrown
-        let compiler = &load_file_compiler;
         let try_block_ctx = &mut *ctx;
         let try_block = move || {
             let source = std::fs::read_to_string(&path).map_err(|err| err.to_string())?;
@@ -587,7 +582,7 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                 ));
             }
 
-            let module = compiler.compile(&source).map_err(|err| err.to_string())?;
+            let module = compile(&source).map_err(|err| err.to_string())?;
 
             try_block_ctx
                 .load_function(path, env, module)

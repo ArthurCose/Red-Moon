@@ -3,7 +3,7 @@ use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
 use red_moon::interpreter::{ByteString, TableRef, Vm};
 use red_moon::languages::lua::std::{impl_basic, impl_math, impl_table};
-use red_moon::languages::lua::{coerce_integer, parse_number, LuaCompiler};
+use red_moon::languages::lua::{coerce_integer, parse_number};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::panic::Location;
@@ -45,7 +45,6 @@ pub struct Lua {
     self_ptr: Rc<Cell<*const Lua>>,
     snapshots: Vec<Snapshot>,
     modified: Cell<bool>,
-    compiler: LuaCompiler,
     resources: RefCell<MutableResources>,
     app_data: AppData,
     nil_registry_id: slotmap::DefaultKey,
@@ -69,7 +68,6 @@ impl Default for Lua {
             self_ptr: Rc::new(Cell::new(std::ptr::null())),
             snapshots: Default::default(),
             modified: Cell::new(false),
-            compiler: Default::default(),
             resources: RefCell::new(MutableResources {
                 multivalue_pool: Default::default(),
                 registry,
@@ -98,10 +96,6 @@ impl Lua {
     #[allow(clippy::mut_from_ref)]
     pub(crate) unsafe fn vm_mut(&self) -> &mut Vm {
         &mut *self.vm.get()
-    }
-
-    pub(crate) fn compiler(&self) -> &LuaCompiler {
-        &self.compiler
     }
 
     #[cfg(feature = "serialize")]

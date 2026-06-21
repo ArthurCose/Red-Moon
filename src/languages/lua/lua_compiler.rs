@@ -294,20 +294,6 @@ impl<'source> FunctionContext<'source> {
     }
 }
 
-#[derive(Default)]
-pub struct LuaCompiler {
-    lexer: LuaLexer,
-}
-
-impl LuaCompiler {
-    pub fn compile<'source>(
-        &self,
-        source: &'source str,
-    ) -> Result<CompilationOutput<'source>, LuaCompilationError> {
-        CompilationJob::new(source, self.lexer.lex(source)).compile()
-    }
-}
-
 struct CompilationJob<'source, I: Iterator> {
     source: &'source str,
     token_iter: Peekable<I>,
@@ -2706,4 +2692,13 @@ fn binary_operator_priority(label: LuaTokenLabel) -> (u8, u8) {
         LuaTokenLabel::Or => (1, 1),
         _ => (0, 0),
     }
+}
+
+pub fn compile(source: &str) -> Result<CompilationOutput<'_>, LuaCompilationError> {
+    use std::cell::LazyCell;
+    thread_local! {
+        static LEXER: LazyCell<LuaLexer> = LazyCell::new(LuaLexer::default);
+    }
+
+    LEXER.with(|lexer| CompilationJob::new(source, lexer.lex(source)).compile())
 }

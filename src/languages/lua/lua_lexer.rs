@@ -3,7 +3,7 @@ use crate::errors::SyntaxError;
 use crate::languages::lexer::Lexer;
 use std::collections::HashMap;
 
-pub struct LuaLexer {
+pub(crate) struct LuaLexer {
     lexer: Lexer<LuaTokenLabel>,
 }
 

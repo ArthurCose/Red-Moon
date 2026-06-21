@@ -3,6 +3,8 @@ use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 use std::string::String as StdString;
 
+use red_moon::languages::lua::compile;
+
 use crate::error::{Error, ErrorContext, Result};
 use crate::function::Function;
 use crate::lua::Lua;
@@ -173,9 +175,8 @@ impl<'lua> Chunk<'lua, '_> {
     ///
     /// This simply compiles the chunk without actually executing it.
     pub fn into_function(self) -> Result<Function<'lua>> {
-        let compiler = self.lua.compiler();
         let source = self.source?;
-        let module = compiler.compile(std::str::from_utf8(&source)?)?;
+        let module = compile(std::str::from_utf8(&source)?)?;
         let environment = self.env?.map(|table| table.table_ref);
 
         let vm = unsafe { self.lua.vm_mut() };
@@ -193,8 +194,7 @@ impl<'lua> Chunk<'lua, '_> {
         let source = source.map_err(Error::runtime)?;
         let source = Self::expression_source(source);
 
-        let compiler = self.lua.compiler();
-        let module = compiler.compile(std::str::from_utf8(&source)?)?;
+        let module = compile(std::str::from_utf8(&source)?)?;
         let environment = self.env.clone()?.map(|table| table.table_ref.clone());
 
         let vm = unsafe { self.lua.vm_mut() };

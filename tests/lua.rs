@@ -2,7 +2,7 @@ use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{MultiValue, Value, Vm};
 use red_moon::languages::lua::std::{impl_basic, impl_coroutine, impl_debug, impl_string};
-use red_moon::languages::lua::{LuaCompiler, LuaTokenLabel};
+use red_moon::languages::lua::{LuaTokenLabel, compile};
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
@@ -74,13 +74,11 @@ fn valid() {
     env.raw_set("print", print_ref, ctx).unwrap();
 
     // the actual tests
-    let compiler = LuaCompiler::default();
-
     for path in test_files {
         let full_path = folder_path.clone() + path;
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
-        let module = compiler.compile(&source).expect(path);
+        let module = compile(&source).expect(path);
         let function_ref = ctx.load_function(path, None, module).unwrap();
 
         if let Err(err) = function_ref.call::<_, ()>((), ctx) {
@@ -173,14 +171,12 @@ fn invalid() {
         ),
     ];
 
-    let compiler = LuaCompiler::default();
-
     for (path, expected) in test_files {
         let full_path = folder_path.clone() + path;
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
         assert_eq!(
-            compiler.compile(&source).err().map(|err| err.data),
+            compile(&source).err().map(|err| err.data),
             Some(expected),
             "\n{}",
             full_path
@@ -196,13 +192,12 @@ fn runtime_error() {
 
     let mut vm = Vm::new();
     let ctx = &mut vm.context();
-    let compiler = LuaCompiler::default();
 
     for (path, expected) in test_files {
         let full_path = folder_path.clone() + path;
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);
-        let module = compiler.compile(&source).unwrap();
+        let module = compile(&source).unwrap();
         let function_ref = ctx.load_function(path, None, module).unwrap();
 
         assert_eq!(

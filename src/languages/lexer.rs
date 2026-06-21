@@ -3,8 +3,17 @@ use crate::FastHashMap;
 use crate::errors::{SourcePosition, SyntaxError, SyntaxErrorData};
 use std::borrow::Cow;
 
-type SubLexer<Label> = Box<dyn Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)>>;
-type Ignorer = Box<dyn Fn(&str, usize) -> usize>;
+trait SubLexerFn<Label>: Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)> + Sync {}
+impl<T, Label> SubLexerFn<Label> for T where
+    T: Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)> + Sync
+{
+}
+
+trait IgnorerFn: Fn(&str, usize) -> usize + Sync {}
+impl<T> IgnorerFn for T where T: Fn(&str, usize) -> usize + Sync {}
+
+type SubLexer<Label> = Box<dyn SubLexerFn<Label>>;
+type Ignorer = Box<dyn IgnorerFn>;
 
 pub struct Lexer<Label> {
     lexers: Vec<SubLexer<Label>>,
@@ -30,7 +39,7 @@ impl<Label: Copy> Lexer<Label> {
     /// ignorer takes source str, and start index, returns the length to skip
     pub fn add_ignorer<F>(&mut self, lexer: F)
     where
-        F: 'static + Fn(&str, usize) -> usize,
+        F: 'static + Fn(&str, usize) -> usize + Sync,
     {
         self.ignorers.push(Box::new(lexer))
     }
@@ -38,7 +47,7 @@ impl<Label: Copy> Lexer<Label> {
     /// takes source str, and start index, returns the length of the token
     pub fn add_lexer<F>(&mut self, lexer: F)
     where
-        F: 'static + Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)>,
+        F: 'static + Fn(&Lexer<Label>, &str, usize) -> Option<(Label, usize)> + Sync,
     {
         self.lexers.push(Box::new(lexer));
     }
@@ -46,7 +55,7 @@ impl<Label: Copy> Lexer<Label> {
     #[allow(unused)]
     pub fn add_char_lexer<F>(&mut self, lexer: F)
     where
-        F: 'static + Fn(char) -> (Label, bool),
+        F: 'static + Fn(char) -> (Label, bool) + Sync,
     {
         self.add_lexer(move |_, source, start| {
             let char = source[start..].chars().next().unwrap();

@@ -4,7 +4,7 @@ use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{
     CoroutineRef, FunctionRef, MultiValue, TableRef, Vm, tag_native_value,
 };
-use red_moon::languages::lua::LuaCompiler;
+use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::impl_coroutine;
 use serde::{Deserialize, Serialize};
 
@@ -53,8 +53,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
         coroutine.resume(co)
     "#;
 
-    let compiler = LuaCompiler::default();
-    let module = compiler.compile(SOURCE).unwrap();
+    let module = compile(SOURCE).unwrap();
     ctx.load_function(file!(), None, module)?
         .call::<_, ()>((), ctx)?;
 

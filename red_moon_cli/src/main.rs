@@ -1,7 +1,7 @@
 use clap::Parser;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeError, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm, VmContext};
-use red_moon::languages::lua::{std as lua_std, LuaCompiler};
+use red_moon::languages::lua::{compile, std as lua_std};
 use rustyline::error::ReadlineError;
 use std::cell::{Cell, RefCell};
 use std::process::ExitCode;
@@ -36,7 +36,6 @@ fn main() -> ExitCode {
 fn main2() -> Result<(), ()> {
     let options = Options::parse();
 
-    let compiler = LuaCompiler::default();
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
 
@@ -57,7 +56,6 @@ fn main2() -> Result<(), ()> {
         for source in options.execute {
             execute_source(
                 ctx,
-                &compiler,
                 "(command line)",
                 &source,
                 options.enum_code,
@@ -70,14 +68,14 @@ fn main2() -> Result<(), ()> {
     }
 
     if let Some(path) = options.script {
-        execute_file(ctx, &compiler, &path, options.enum_code, options.args)?;
+        execute_file(ctx, &path, options.enum_code, options.args)?;
 
         // only interactive if it's explicitly stated when a script is set
         interactive = options.interactive;
     }
 
     if interactive {
-        repl(&mut vm, &compiler)?
+        repl(&mut vm)?
     }
 
     Ok(())
@@ -95,7 +93,6 @@ fn load_args(ctx: &mut VmContext, args: &[String]) {
 
 fn execute_file(
     ctx: &mut VmContext,
-    compiler: &LuaCompiler,
     path: &str,
     print_enum_code: bool,
     args: Vec<String>,
@@ -108,19 +105,18 @@ fn execute_file(
         }
     };
 
-    execute_source(ctx, compiler, path, &source, print_enum_code, args)
+    execute_source(ctx, path, &source, print_enum_code, args)
 }
 
 fn execute_source(
     ctx: &mut VmContext,
-    compiler: &LuaCompiler,
     label: &str,
     source: &str,
     print_enum_code: bool,
     args: Vec<String>,
 ) -> Result<(), ()> {
     // compile
-    let module = match compiler.compile(source) {
+    let module = match compile(source) {
         Ok(module) => module,
         Err(err) => {
             println!("{label}:{err}");
@@ -160,7 +156,7 @@ fn execute_source(
     Ok(())
 }
 
-fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
+fn repl(vm: &mut Vm) -> Result<(), ()> {
     let mut rl = rustyline::DefaultEditor::new().unwrap();
     let mut input_buffer = String::new();
     let mut request_more = false;
@@ -198,7 +194,7 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
         // try compiling the input as an expression first
         let as_expression = format!("return {input_buffer}");
 
-        let module = match compiler.compile(&as_expression) {
+        let module = match compile(&as_expression) {
             Ok(module) => module,
             Err(err) => {
                 if matches!(
@@ -212,7 +208,7 @@ fn repl(vm: &mut Vm, compiler: &LuaCompiler) -> Result<(), ()> {
                 }
 
                 // compile the input directly
-                match compiler.compile(&input_buffer) {
+                match compile(&input_buffer) {
                     Ok(module) => module,
                     Err(err) => {
                         // give up and report error
