@@ -1,7 +1,7 @@
 use crate::errors::RuntimeError;
 use crate::interpreter::{ByteString, FromValue, TableRef, Value, VmContext};
 
-pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // concat
     let concat = ctx.create_function(|call_ctx, ctx| {
         let (table, separator, start, end): (TableRef, Option<ByteString>, i64, i64) =
@@ -30,7 +30,7 @@ pub fn impl_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                         return Err(RuntimeError::new_string(format!(
                             "invalid value ({:?}) at index 2 in table for `concat`",
                             value
-                        )))
+                        )));
                     }
                 }
 

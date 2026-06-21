@@ -4,7 +4,7 @@ use crate::interpreter::{
 };
 use crate::languages::lua::{compile, parse_number};
 
-pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // assert
     let assert = ctx.create_function(|call_ctx, vm_ctx| {
         let passed: bool = call_ctx.get_arg(0, vm_ctx)?;

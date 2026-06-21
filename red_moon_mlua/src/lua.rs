@@ -2,7 +2,7 @@ use crate::app_data::AppData;
 use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
 use red_moon::interpreter::{ByteString, TableRef, Vm};
-use red_moon::languages::lua::std::{impl_basic, impl_math, impl_table};
+use red_moon::languages::lua::std::{load_basic, load_math, load_table};
 use red_moon::languages::lua::{coerce_integer, parse_number};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell, UnsafeCell};
@@ -61,7 +61,7 @@ impl Default for Lua {
         let mut registry = slotmap::SlotMap::default();
         let nil_id = registry.insert(Default::default());
 
-        impl_basic(ctx).unwrap();
+        load_basic(ctx).unwrap();
 
         Self {
             vm: UnsafeCell::new(vm),
@@ -175,11 +175,11 @@ impl Lua {
         let ctx = &mut vm.context();
 
         if libs.contains(StdLib::TABLE) {
-            impl_table(ctx)?;
+            load_table(ctx)?;
         }
 
         if libs.contains(StdLib::MATH) {
-            impl_math(ctx)?;
+            load_math(ctx)?;
         }
 
         Ok(())

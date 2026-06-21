@@ -7,12 +7,12 @@ mod pattern_matching;
 mod string;
 mod table;
 
-pub use basic::impl_basic;
-pub use coroutine::impl_coroutine;
-pub use debug::impl_debug;
-pub use math::impl_math;
-pub use os::impl_os;
-pub use string::impl_string;
-pub use table::impl_table;
+pub use basic::load_basic;
+pub use coroutine::load_coroutine;
+pub use debug::load_debug;
+pub use math::load_math;
+pub use os::load_os;
+pub use string::load_string;
+pub use table::load_table;
 
 pub use pattern_matching::{BytePattern, PatternMatcher};

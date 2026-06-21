@@ -1,15 +1,15 @@
 use red_moon::errors::RuntimeError;
 use red_moon::interpreter::{FunctionRef, Vm};
 use red_moon::languages::lua::compile;
-use red_moon::languages::lua::std::{impl_basic, impl_coroutine};
+use red_moon::languages::lua::std::{load_basic, load_coroutine};
 
 #[test]
 fn resumable() -> Result<(), RuntimeError> {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
 
-    impl_basic(ctx)?;
-    impl_coroutine(ctx)?;
+    load_basic(ctx)?;
+    load_coroutine(ctx)?;
 
     let for_range = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
         let (i, end, f): (i64, i64, FunctionRef) = if state.is_empty() {

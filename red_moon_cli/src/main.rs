@@ -39,13 +39,13 @@ fn main2() -> Result<(), ()> {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
 
-    lua_std::impl_basic(ctx).unwrap();
-    lua_std::impl_coroutine(ctx).unwrap();
-    lua_std::impl_math(ctx).unwrap();
-    lua_std::impl_os(ctx).unwrap();
-    lua_std::impl_debug(ctx).unwrap();
-    lua_std::impl_string(ctx).unwrap();
-    lua_std::impl_table(ctx).unwrap();
+    lua_std::load_basic(ctx).unwrap();
+    lua_std::load_coroutine(ctx).unwrap();
+    lua_std::load_math(ctx).unwrap();
+    lua_std::load_os(ctx).unwrap();
+    lua_std::load_debug(ctx).unwrap();
+    lua_std::load_string(ctx).unwrap();
+    lua_std::load_table(ctx).unwrap();
 
     load_args(ctx, &options.args);
 

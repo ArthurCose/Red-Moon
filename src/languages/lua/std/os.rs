@@ -2,7 +2,7 @@ use crate::errors::RuntimeError;
 use crate::interpreter::VmContext;
 use cpu_time::ProcessTime;
 
-pub fn impl_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_os(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // clock
     let clock = ctx.create_function(|call_ctx, ctx| {
         let duration = ProcessTime::try_now()

@@ -3,7 +3,7 @@ use crate::interpreter::{
     CoroutineRef, CoroutineStatus, FunctionRef, MultiValue, Value, VmContext,
 };
 
-pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // todo: close
 
     // create

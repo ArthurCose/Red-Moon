@@ -3,7 +3,7 @@ use crate::interpreter::{ByteString, Number, StringRef, TableRef, Value, VmConte
 use crate::languages::lua::parse_number;
 use crate::languages::lua::std::{BytePattern, PatternMatcher};
 
-pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // byte
     let byte = ctx.create_function(|call_ctx, ctx| {
         let (string, start, end): (StringRef, Option<i64>, Option<i64>) = call_ctx.get_args(ctx)?;
@@ -212,7 +212,7 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         env.set("string", string, ctx)?;
     }
 
-    impl_string_metamethods(string_metatable, ctx)?;
+    load_string_metamethods(string_metatable, ctx)?;
 
     Ok(())
 }
@@ -238,7 +238,7 @@ macro_rules! impl_binary_number_op {
     };
 }
 
-fn impl_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(), RuntimeError> {
+fn load_string_metamethods(metatable: TableRef, ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // basic arithmetic
     impl_binary_number_op!(ctx, metatable, add, add_fn, +);
     impl_binary_number_op!(ctx, metatable, sub, sub_fn, -);

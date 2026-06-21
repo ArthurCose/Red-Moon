@@ -3,7 +3,7 @@
 use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{CoroutineRef, FunctionRef, MultiValue, TableRef, Vm, tag_native_type};
 use red_moon::languages::lua::compile;
-use red_moon::languages::lua::std::impl_coroutine;
+use red_moon::languages::lua::std::load_coroutine;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -15,7 +15,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
 
-    impl_coroutine(ctx)?;
+    load_coroutine(ctx)?;
 
     let env = ctx.default_environment();
 

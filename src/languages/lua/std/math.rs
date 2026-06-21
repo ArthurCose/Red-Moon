@@ -14,7 +14,7 @@ struct RedMoonRng {
 
 tag_native_type!(RedMoonRng);
 
-pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     ctx.set_singleton(RedMoonRng {
         rng: Xoshiro256StarStar::from_seed(Default::default()),
     });

@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{MultiValue, Value, Vm};
-use red_moon::languages::lua::std::{impl_basic, impl_coroutine, impl_debug, impl_string};
+use red_moon::languages::lua::std::{load_basic, load_coroutine, load_debug, load_string};
 use red_moon::languages::lua::{LuaTokenLabel, compile};
 use red_moon::tag_native_type;
 use std::cell::RefCell;
@@ -37,10 +37,10 @@ fn valid() {
 
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
-    impl_basic(ctx).unwrap();
-    impl_string(ctx).unwrap();
-    impl_coroutine(ctx).unwrap();
-    impl_debug(ctx).unwrap();
+    load_basic(ctx).unwrap();
+    load_string(ctx).unwrap();
+    load_coroutine(ctx).unwrap();
+    load_debug(ctx).unwrap();
 
     let env = ctx.default_environment();
 

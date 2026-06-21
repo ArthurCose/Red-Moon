@@ -518,14 +518,14 @@ impl VmContext<'_> {
     /// ```
     /// # use red_moon::interpreter::{FunctionRef, MultiValue, Vm};
     /// # use red_moon::errors::RuntimeError;
-    /// # use red_moon::languages::lua::std::{impl_basic, impl_coroutine};
+    /// # use red_moon::languages::lua::std::{load_basic, load_coroutine};
     /// # use red_moon::languages::lua::compile;
     ///
     /// let mut vm = Vm::default();
     /// let ctx = &mut vm.context();
     ///
-    /// impl_basic(ctx)?;
-    /// impl_coroutine(ctx)?;
+    /// load_basic(ctx)?;
+    /// load_coroutine(ctx)?;
     ///
     /// let for_range = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
     ///     // forward error

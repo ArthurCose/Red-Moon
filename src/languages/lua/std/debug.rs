@@ -2,7 +2,7 @@ use crate::errors::{RuntimeError, StackTrace};
 use crate::interpreter::{ByteString, FunctionRef, HookMask, TableRef, Value, VmContext};
 use std::fmt::Write;
 
-pub fn impl_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // getregistry
     let getregistry =
         ctx.create_function(|call_ctx, ctx| call_ctx.return_values(ctx.registry(), ctx));
