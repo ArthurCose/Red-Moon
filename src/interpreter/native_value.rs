@@ -2,19 +2,19 @@
 ///
 /// Requires Clone for snapshotting and must be serializable + deserializable + marked with `typetag` when the "serde" feature flag is enabled.
 ///
-/// Automatically derived if the "serde" flag is not enabled, [tag_native_value] can be used otherwise.
+/// Automatically derived if the "serde" flag is not enabled, [tag_native_type] can be used otherwise.
 ///
 /// ### impl Example
 /// ```
 /// # #![cfg(feature = "serde")]
-/// use red_moon::interpreter::tag_native_value;
+/// use red_moon::interpreter::tag_native_type;
 /// use serde::{Serialize, Deserialize};
 ///
 /// #[derive(Clone, Serialize, Deserialize)]
 /// struct MySingleton {}
 ///
 /// // required only when the "serde" feature is enabled, has no effect otherwise
-/// tag_native_value!(MySingleton);
+/// tag_native_type!(MySingleton);
 /// ```
 #[cfg_attr(feature = "serde", typetag::serde)]
 pub trait NativeValue: downcast::Any + CloneBoxedNativeValue {}
@@ -43,7 +43,7 @@ downcast::downcast!(dyn NativeValue);
 
 #[cfg(feature = "serde")]
 #[macro_export]
-macro_rules! tag_native_value {
+macro_rules! tag_native_type {
     ($struct: ty) => {
         #[$crate::typetag::serde]
         impl $crate::interpreter::NativeValue for $struct {}
@@ -52,8 +52,8 @@ macro_rules! tag_native_value {
 
 #[cfg(not(feature = "serde"))]
 #[macro_export]
-macro_rules! tag_native_value {
+macro_rules! tag_native_type {
     ($struct: ty) => {};
 }
 
-pub use tag_native_value;
+pub use tag_native_type;

@@ -1,7 +1,7 @@
 use crate::errors::RuntimeError;
 use crate::interpreter::{IntoValue, NativeCallContext, Number, Value, VmContext};
 use crate::languages::lua::{coerce_integer, parse_number};
-use crate::tag_native_value;
+use crate::tag_native_type;
 use rand::RngExt;
 use rand_xoshiro::Xoshiro256StarStar;
 use rand_xoshiro::rand_core::SeedableRng;
@@ -12,7 +12,7 @@ struct RedMoonRng {
     rng: rand_xoshiro::Xoshiro256StarStar,
 }
 
-tag_native_value!(RedMoonRng);
+tag_native_type!(RedMoonRng);
 
 pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     ctx.set_singleton(RedMoonRng {

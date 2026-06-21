@@ -37,7 +37,7 @@ pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use module::{Chunk, Module, SourceMapping, UpValueSource};
 pub use multivalue::MultiValue;
 pub use native_function::NativeCallContext;
-pub use native_value::{NativeValue, tag_native_value};
+pub use native_value::{NativeValue, tag_native_type};
 pub use number::Number;
 pub use string_ref::StringRef;
 pub use table_ref::TableRef;
