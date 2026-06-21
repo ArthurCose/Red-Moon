@@ -39,6 +39,7 @@ serde = [
   "dep:serde",
   "dep:erased-serde",
   "dep:typetag",
+  "bitflags/serde",
   "slotmap/serde",
   "indexmap/serde",
   "rand_xoshiro/serde",
