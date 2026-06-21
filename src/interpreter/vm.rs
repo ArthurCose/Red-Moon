@@ -480,7 +480,14 @@ impl VmContext<'_> {
 
     pub fn create_function(
         &mut self,
-        callback: impl Fn(&mut NativeCallContext, &mut VmContext<'_>) -> Result<(), RuntimeError>
+        #[cfg(not(feature = "native_closures"))] callback: fn(
+            &mut NativeCallContext,
+            &mut VmContext<'_>,
+        ) -> Result<(), RuntimeError>,
+        #[cfg(feature = "native_closures")] callback: impl Fn(
+            &mut NativeCallContext,
+            &mut VmContext<'_>,
+        ) -> Result<(), RuntimeError>
         + Clone
         + 'static,
     ) -> FunctionRef {
@@ -577,7 +584,11 @@ impl VmContext<'_> {
     /// ```
     pub fn create_resumable_function(
         &mut self,
-        callback: impl Fn(
+        #[cfg(not(feature = "native_closures"))] callback: fn(
+            (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
+            &mut VmContext<'_>,
+        ) -> Result<(), RuntimeError>,
+        #[cfg(feature = "native_closures")] callback: impl Fn(
             (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
             &mut VmContext<'_>,
         ) -> Result<(), RuntimeError>

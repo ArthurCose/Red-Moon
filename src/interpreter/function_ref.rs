@@ -1,6 +1,7 @@
 use super::heap::{Heap, HeapRef, Storage, StorageKey};
 use super::{ForEachValue, FromValues, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::NativeValue;
 use crate::tag_native_type;
 use slotmap::Key;
 
@@ -105,5 +106,34 @@ impl FunctionRef {
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
         ctx.call_function_key(self.0.key().into(), args)
+    }
+
+    /// Creates a rollback safe closure.
+    /// The capture can be read by a native function, it is immediately dropped by interpreted functions.
+    pub fn create_closure(
+        self,
+        capture: impl NativeValue,
+        ctx: &mut VmContext,
+    ) -> Result<Self, RuntimeError> {
+        let StorageKey::NativeFunction(key) = self.0.key() else {
+            return Ok(self);
+        };
+
+        let gc = &mut ctx.vm.execution_data.gc;
+        let heap = &mut ctx.vm.execution_data.heap;
+        let Some(native_fn) = heap.get_native_fn(key) else {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        };
+
+        let cloned_fn = native_fn.clone();
+        let key = heap.store_native_fn(gc, cloned_fn);
+        heap.store_capture(key, capture);
+
+        let heap_ref = heap.create_ref(key.into());
+
+        // test after creating ref to avoid immediately collecting the generated value
+        ctx.gc_step(0);
+
+        Ok(Self(heap_ref))
     }
 }

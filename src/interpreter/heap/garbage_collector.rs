@@ -378,6 +378,8 @@ impl GarbageCollector {
                         continue;
                     };
 
+                    heap.storage.captures.remove(&key);
+
                     self.used_memory -= std::mem::size_of_val(&native_fn);
 
                     if let Some(callback) = heap.resume_callbacks.remove(&key) {

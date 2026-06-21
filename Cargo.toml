@@ -35,6 +35,7 @@ ron = "0.8"
 [features]
 # separate feature as it affects performance
 instruction_metrics = []
+native_closures = []
 serde = [
   "dep:serde",
   "dep:erased-serde",
@@ -44,7 +45,7 @@ serde = [
   "indexmap/serde",
   "rand_xoshiro/serde",
 ]
-default = []
+default = ["serde"]
 
 [lints]
 workspace = true
@@ -69,3 +70,4 @@ strip = true
 [profile.profiling]
 inherits = "release"
 debug = "limited"
+opt-level = 0

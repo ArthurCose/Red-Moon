@@ -120,7 +120,7 @@ impl Coroutine {
 
                     let callback = callback.shallow_clone();
 
-                    ExecutionContext::call_closure(args, vm, |call_ctx, ctx| {
+                    ExecutionContext::call_closure(key, args, vm, |call_ctx, ctx| {
                         callback.call(key, (call_ctx, Ok(()), state_multi), ctx)
                     })
                 }
@@ -279,6 +279,7 @@ impl Coroutine {
                     let callback = callback.shallow_clone();
 
                     match ExecutionContext::call_closure(
+                        key,
                         vm.context().create_multi(),
                         vm,
                         |call_ctx, ctx| callback.call(key, (call_ctx, Err(err), state_multi), ctx),

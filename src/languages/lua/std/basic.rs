@@ -239,21 +239,29 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             call_ctx.return_values((index, value), ctx)
         }
     });
+    ipairs_iterator.rehydrate("lua.ipairs.iterator", ctx)?;
 
-    let ipairs = ctx.create_function(move |call_ctx, ctx| {
+    let ipairs = ctx.create_function(|call_ctx, ctx| {
         let table: TableRef = call_ctx.get_args(ctx)?;
+
+        let Some(ipairs_iterator) = call_ctx.read_capture::<FunctionRef>(ctx) else {
+            return Ok(());
+        };
+
+        let ipairs_iterator = ipairs_iterator.clone();
 
         let iterator = if let Some(metatable) = table.metatable(ctx)? {
             // try metatable
             metatable
                 .raw_get(ctx.metatable_keys().ipairs.clone(), ctx)
-                .unwrap_or_else(|_| ipairs_iterator.clone())
+                .unwrap_or(ipairs_iterator)
         } else {
-            ipairs_iterator.clone()
+            ipairs_iterator
         };
 
         call_ctx.return_values((iterator, table, 0), ctx)
     });
+    let ipairs = ipairs.create_closure(ipairs_iterator, ctx)?;
     ipairs.rehydrate("lua.ipairs", ctx)?;
 
     // pairs
@@ -267,21 +275,29 @@ pub fn impl_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         call_ctx.return_values((key, value), ctx)
     });
+    pairs_iterator.rehydrate("lua.pairs.iterator", ctx)?;
 
-    let pairs = ctx.create_function(move |call_ctx, ctx| {
+    let pairs = ctx.create_function(|call_ctx, ctx| {
         let table: TableRef = call_ctx.get_args(ctx)?;
+
+        let Some(pairs_iterator) = call_ctx.read_capture::<FunctionRef>(ctx) else {
+            return Ok(());
+        };
+
+        let pairs_iterator = pairs_iterator.clone();
 
         let iterator = if let Some(metatable) = table.metatable(ctx)? {
             // try metatable
             metatable
                 .raw_get(ctx.metatable_keys().pairs.clone(), ctx)
-                .unwrap_or_else(|_| pairs_iterator.clone())
+                .unwrap_or(pairs_iterator)
         } else {
-            pairs_iterator.clone()
+            pairs_iterator
         };
 
         call_ctx.return_values((iterator, table, Value::default()), ctx)
     });
+    let pairs = pairs.create_closure(pairs_iterator, ctx)?;
     pairs.rehydrate("lua.pairs", ctx)?;
 
     // select

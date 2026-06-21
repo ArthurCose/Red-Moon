@@ -3,9 +3,19 @@ use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorDat
 use red_moon::interpreter::{MultiValue, Value, Vm};
 use red_moon::languages::lua::std::{impl_basic, impl_coroutine, impl_debug, impl_string};
 use red_moon::languages::lua::{LuaTokenLabel, compile};
+use red_moon::tag_native_type;
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
+
+#[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct PrintCapture {
+    #[cfg_attr(feature = "serde", serde(skip))]
+    out: Rc<RefCell<Vec<u8>>>,
+}
+
+tag_native_type!(PrintCapture);
 
 #[test]
 fn valid() {
@@ -25,8 +35,6 @@ fn valid() {
         "variables.lua.txt",
     ];
 
-    let out = Rc::new(RefCell::new(Vec::new()));
-
     let mut vm = Vm::default();
     let ctx = &mut vm.context();
     impl_basic(ctx).unwrap();
@@ -37,39 +45,44 @@ fn valid() {
     let env = ctx.default_environment();
 
     // override print
-    let out_capture = out.clone();
+    let out_capture = PrintCapture::default();
 
-    let print_ref = ctx.create_function(move |call_ctx, ctx| {
-        let len = call_ctx.arg_count();
+    let print_ref = ctx
+        .create_function(|call_ctx, ctx| {
+            let len = call_ctx.arg_count();
 
-        let mut out = out_capture.borrow_mut();
+            let out_capture: &PrintCapture = call_ctx.read_capture(ctx).unwrap();
+            let out_capture = out_capture.out.clone();
+            let mut out = out_capture.borrow_mut();
 
-        for i in 0..len {
-            match call_ctx.get_arg(i, ctx)? {
-                Value::Nil => write!(&mut *out, "nil").unwrap(),
-                Value::Bool(b) => write!(&mut *out, "{b}").unwrap(),
-                Value::Integer(n) => write!(&mut *out, "{n}").unwrap(),
-                Value::Float(n) => write!(&mut *out, "{n:?}").unwrap(),
-                Value::Table(_) => write!(&mut *out, "table").unwrap(),
-                Value::Function(_) => write!(&mut *out, "function").unwrap(),
-                Value::Coroutine(_) => write!(&mut *out, "thread").unwrap(),
-                Value::String(string_ref) => write!(
-                    &mut *out,
-                    "{}",
-                    string_ref.fetch(ctx).unwrap().to_string_lossy()
-                )
-                .unwrap(),
+            for i in 0..len {
+                match call_ctx.get_arg(i, ctx)? {
+                    Value::Nil => write!(&mut *out, "nil").unwrap(),
+                    Value::Bool(b) => write!(&mut *out, "{b}").unwrap(),
+                    Value::Integer(n) => write!(&mut *out, "{n}").unwrap(),
+                    Value::Float(n) => write!(&mut *out, "{n:?}").unwrap(),
+                    Value::Table(_) => write!(&mut *out, "table").unwrap(),
+                    Value::Function(_) => write!(&mut *out, "function").unwrap(),
+                    Value::Coroutine(_) => write!(&mut *out, "thread").unwrap(),
+                    Value::String(string_ref) => write!(
+                        &mut *out,
+                        "{}",
+                        string_ref.fetch(ctx).unwrap().to_string_lossy()
+                    )
+                    .unwrap(),
+                }
+
+                if i < len - 1 {
+                    write!(&mut *out, "\t").unwrap();
+                }
             }
 
-            if i < len - 1 {
-                write!(&mut *out, "\t").unwrap();
-            }
-        }
+            writeln!(&mut *out).unwrap();
 
-        writeln!(&mut *out).unwrap();
-
-        Ok(())
-    });
+            Ok(())
+        })
+        .create_closure(out_capture.clone(), ctx)
+        .unwrap();
 
     env.raw_set("print", print_ref, ctx).unwrap();
 
@@ -84,11 +97,11 @@ fn valid() {
         if let Err(err) = function_ref.call::<_, ()>((), ctx) {
             panic!(
                 "{path}: {err}\n\n{}",
-                String::from_utf8_lossy(&out.borrow())
+                String::from_utf8_lossy(&out_capture.out.borrow())
             );
         }
 
-        let mut out = out.borrow_mut();
+        let mut out = out_capture.out.borrow_mut();
         let output_path = folder_path.clone() + path + ".expected";
         let failed_path = folder_path.clone() + path + ".failed";
 

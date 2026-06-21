@@ -92,12 +92,13 @@ impl ExecutionContext {
 
         let function = function.shallow_clone();
 
-        Self::call_closure(args, vm, |call_ctx, ctx| {
+        Self::call_closure(function_key, args, vm, |call_ctx, ctx| {
             function.call(function_key, call_ctx, ctx)
         })
     }
 
     pub(crate) fn call_closure(
+        function_key: NativeFnObjectKey,
         args: MultiValue,
         vm: &mut Vm,
         callback: impl FnOnce(
@@ -120,6 +121,7 @@ impl ExecutionContext {
         value_stack.push(Default::default());
 
         let native_call_ctx = NativeCallContext {
+            key: function_key,
             stack_start: 0,
             arg_count,
             return_count: 0,
@@ -262,6 +264,7 @@ impl ExecutionContext {
 
                             // resolve call context and return register
                             let native_call_ctx = NativeCallContext {
+                                key,
                                 stack_start: return_context.stack_start,
                                 arg_count: arg_count as _,
                                 return_count: 0,

@@ -13,10 +13,12 @@ use super::native_function::{NativeCallContext, NativeFunction};
 use super::table::Table;
 use super::value_stack::StackValue;
 use crate::errors::RuntimeError;
+use crate::interpreter::NativeValue;
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap};
 use indexmap::IndexMap;
 use ref_counter::*;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
@@ -33,6 +35,7 @@ pub(crate) struct Storage {
         slotmap::SlotMap<NativeFnObjectKey, NativeFunction<NativeCallContext>>,
     pub(super) functions: slotmap::SlotMap<FnObjectKey, Function>,
     pub(super) coroutines: slotmap::SlotMap<CoroutineObjectKey, Coroutine>,
+    pub(super) captures: HashMap<NativeFnObjectKey, Box<dyn NativeValue>>,
 }
 
 impl Storage {
@@ -301,6 +304,11 @@ impl Heap {
     ) -> CoroutineObjectKey {
         gc.modify_used_memory((std::mem::size_of_val(&coroutine) + coroutine.heap_size()) as _);
         self.storage.coroutines.insert(coroutine)
+    }
+
+    pub(crate) fn store_capture(&mut self, key: NativeFnObjectKey, value: impl NativeValue) {
+        debug_assert!(self.storage.native_functions.contains_key(key));
+        self.storage.captures.insert(key, Box::new(value));
     }
 
     pub(crate) fn create_ref<K: Copy + Into<StorageKey>>(&mut self, key: K) -> HeapRef<K> {

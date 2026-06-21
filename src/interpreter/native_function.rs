@@ -4,10 +4,12 @@ use super::value_stack::StackValue;
 use super::{Continuation, ForEachValue, FromValue, Value, Vm};
 use super::{FromValues, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::NativeValue;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 
 pub struct NativeCallContext {
+    pub(crate) key: NativeFnObjectKey,
     pub(crate) stack_start: usize,
     pub(crate) arg_count: usize,
     pub(crate) return_count: usize,
@@ -67,6 +69,37 @@ impl NativeCallContext {
             value
         })
         .map_err(|err| RuntimeError::new_bad_argument(index, err))
+    }
+
+    pub fn set_capture<V: NativeValue>(
+        &self,
+        value: impl NativeValue,
+        ctx: &mut VmContext,
+    ) -> Option<V> {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let prev_capture = heap.storage.captures.insert(self.key, Box::new(value))?;
+        Some(*prev_capture.downcast().ok()?)
+    }
+
+    pub fn read_capture<'vm, V: NativeValue>(&self, ctx: &'vm VmContext) -> Option<&'vm V> {
+        let heap = &ctx.vm.execution_data.heap;
+        let capture = heap.storage.captures.get(&self.key)?;
+        capture.downcast_ref().ok()
+    }
+
+    pub fn read_capture_mut<'vm, V: NativeValue>(
+        &self,
+        ctx: &'vm mut VmContext,
+    ) -> Option<&'vm mut V> {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let capture = heap.storage.captures.get_mut(&self.key)?;
+        capture.downcast_mut().ok()
+    }
+
+    pub fn remove_capture<V: NativeValue>(&self, ctx: &mut VmContext) -> Option<V> {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let capture = heap.storage.captures.remove(&self.key)?;
+        Some(*capture.downcast().ok()?)
     }
 
     /// Appends values to the return multivalue

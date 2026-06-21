@@ -1,5 +1,7 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{CoroutineRef, CoroutineStatus, MultiValue, Value, VmContext};
+use crate::interpreter::{
+    CoroutineRef, CoroutineStatus, FunctionRef, MultiValue, Value, VmContext,
+};
 
 pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // todo: close
@@ -57,41 +59,48 @@ pub fn impl_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     running.rehydrate("coroutine.running", ctx)?;
 
     // status
-    let suspended_string = ctx.intern_string(b"suspended");
-    let running_string = ctx.intern_string(b"running");
-    let normal_string = ctx.intern_string(b"normal");
-    let dead_string = ctx.intern_string(b"dead");
-
-    let status = ctx.create_function(move |call_ctx, ctx| {
+    let status = ctx.create_function(|call_ctx, ctx| {
         let co: CoroutineRef = call_ctx.get_args(ctx)?;
         let status = match co.status(ctx)? {
-            CoroutineStatus::Suspended => suspended_string.clone(),
+            CoroutineStatus::Suspended => "suspended",
             CoroutineStatus::Running => {
                 if ctx.top_coroutine() != Some(co) {
-                    normal_string.clone()
+                    "normal"
                 } else {
-                    running_string.clone()
+                    "running"
                 }
             }
-            CoroutineStatus::Dead => dead_string.clone(),
+            CoroutineStatus::Dead => "dead",
         };
         call_ctx.return_values(status, ctx)
     });
     status.rehydrate("coroutine.status", ctx)?;
 
     // wrap
+    let wrapped = ctx.create_function(|call_ctx, ctx| {
+        let args: MultiValue = call_ctx.get_args(ctx)?;
+
+        if let Some(co) = call_ctx.read_capture::<CoroutineRef>(ctx) {
+            let values = co.clone().resume(args, ctx)?;
+            call_ctx.return_values(values, ctx)?;
+        }
+
+        Ok(())
+    });
+    wrapped.rehydrate("coroutine.wrap.wrapped", ctx)?;
+
     let wrap = ctx.create_function(|call_ctx, ctx| {
         let function = call_ctx.get_args(ctx)?;
         let co = ctx.create_coroutine(function)?;
 
-        let f = ctx.create_function(move |call_ctx, ctx| {
-            let args: MultiValue = call_ctx.get_args(ctx)?;
-            let values = co.resume(args, ctx)?;
-            call_ctx.return_values(values, ctx)
-        });
+        if let Some(f) = call_ctx.read_capture::<FunctionRef>(ctx) {
+            let f = f.clone().create_closure(co, ctx)?;
+            call_ctx.return_values(f, ctx)?;
+        }
 
-        call_ctx.return_values(f, ctx)
+        Ok(())
     });
+    let wrap = wrap.create_closure(wrapped, ctx)?;
     wrap.rehydrate("coroutine.wrap", ctx)?;
 
     // yield

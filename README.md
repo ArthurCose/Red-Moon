@@ -60,13 +60,13 @@ Values entering the VM must support Clone, and should avoid interior mutability,
 Note: this is only an issue for Rc, interior mutability with direct ownership is acceptable.
 
 ```rust
-use red_moon::interpreter::{Vm, MultiValue};
+use red_moon::interpreter::Vm;
 use std::cell::Cell;
 use std::rc::Rc;
 
 // interior mutability is fine as long as serialization isn't necessary and Rc is not involved:
 let counter = Cell::new(1);
-// Rc is fine as long as the data is immutable:
+// Rc is fine as long as the data is immutable and serialization isn't needed:
 let data = Rc::new(1);
 // Rc with interior mutability will cause issues during rollback:
 let rc_counter = Rc::new(Cell::new(1));
@@ -75,12 +75,32 @@ let mut vm = Vm::default();
 let ctx = &mut vm.context();
 
 // these can be captured, but not all are bug free:
+#[cfg(feature = "native_closures")]
 let f = ctx.create_function(move |call_ctx, ctx| {
   let count = counter.get();
   counter.set(count + 1);
 
   call_ctx.return_values(rc_counter.get() + *data + count, ctx)
 });
+
+// the "native_closures" feature isn't enabled by default as data captured by a Rust closure can't be serialized
+use red_moon::interpreter::tag_native_type;
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct Counter(i64);
+
+// if serde isn't enabled it's not necessary to include this,
+// but it doesn't hurt to leave in
+tag_native_type!(Counter);
+
+let f = ctx.create_function(|call_ctx, ctx| {
+  // data is stored in the Vm, we're free to modify it without serialization issues
+  let capture = call_ctx.read_capture_mut::<Counter>(ctx).unwrap();
+  capture.0 += 1;
+
+  call_ctx.return_values(capture.0, ctx)
+}).create_closure(Counter(1), ctx);
 ```
 
 ## Serialization
@@ -94,7 +114,7 @@ Rust functions can be tagged and reimplemented through the "rehydrate" function:
 ```rust
 #![cfg(feature = "serde")]
 
-use red_moon::interpreter::{Vm, VmContext, FunctionRef, MultiValue, Value};
+use red_moon::interpreter::{Vm, VmContext, FunctionRef, Value};
 use red_moon::errors::RuntimeError;
 
 fn implement_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
