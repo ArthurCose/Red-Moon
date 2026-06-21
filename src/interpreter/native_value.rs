@@ -1,4 +1,4 @@
-/// Allows values to be passed into the VM with snapshotting and serialization support.
+/// Allows Rust values to be passed into the VM with snapshotting and serialization support.
 ///
 /// Requires Clone for snapshotting and must be serializable + deserializable + marked with `typetag` when the "serde" feature flag is enabled.
 ///
@@ -22,20 +22,20 @@ pub trait NativeValue: downcast::Any + CloneBoxedNativeValue {}
 #[cfg(not(feature = "serde"))]
 impl<T: Clone + 'static> NativeValue for T {}
 
-/// Automatically implemented for all types supporting Clone.
+/// Automatically implemented for all types supporting [NativeValue].
 pub trait CloneBoxedNativeValue {
-    fn clone_to_boxed_vm_value(&self) -> Box<dyn NativeValue>;
+    fn clone_to_boxed_native_value(&self) -> Box<dyn NativeValue>;
 }
 
 impl<T: NativeValue + Clone + 'static> CloneBoxedNativeValue for T {
-    fn clone_to_boxed_vm_value(&self) -> Box<dyn NativeValue> {
+    fn clone_to_boxed_native_value(&self) -> Box<dyn NativeValue> {
         Box::new(self.clone())
     }
 }
 
 impl Clone for Box<dyn NativeValue> {
     fn clone(&self) -> Self {
-        self.clone_to_boxed_vm_value()
+        self.clone_to_boxed_native_value()
     }
 }
 
