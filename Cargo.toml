@@ -50,6 +50,7 @@ redundant_closure = "allow"
 type_complexity = "allow"
 while_let_loop = "allow"
 collapsible_match = "allow"
+single_range_in_vec_init = "allow"
 
 [profile.release]
 panic = "abort"

@@ -4,6 +4,7 @@
 ///
 /// ### impl Example
 /// ```
+/// # #![cfg(feature = "serde")]
 /// use red_moon::interpreter::TypeErasedSnapshot;
 /// use serde::{Serialize, Deserialize};
 ///
