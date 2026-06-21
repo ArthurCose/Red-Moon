@@ -1,6 +1,12 @@
 use std::rc::{Rc, Weak};
 
-pub(super) struct CounterRef(Weak<()>);
+#[cfg(feature = "serde")]
+use crate::serde_util::serde_unit_rc;
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub(super) struct CounterRef(
+    #[cfg_attr(feature = "serde", serde(with = "serde_unit_rc::weak"))] Weak<()>,
+);
 
 impl Clone for CounterRef {
     fn clone(&self) -> Self {
@@ -9,7 +15,9 @@ impl Clone for CounterRef {
 }
 
 #[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RefCounter {
+    #[cfg_attr(feature = "serde", serde(with = "serde_unit_rc"))]
     rc: Rc<()>,
 }
 

@@ -7,6 +7,7 @@ use crate::errors::RuntimeError;
 use thin_vec::ThinVec;
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultiValue<T = Value> {
     pub(crate) values: ThinVec<T>,
 }

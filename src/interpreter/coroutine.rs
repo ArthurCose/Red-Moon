@@ -3,7 +3,6 @@ use super::heap::{CoroutineObjectKey, NativeFnObjectKey, StorageKey};
 use super::value_stack::ValueStack;
 use super::{MultiValue, Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -36,8 +35,7 @@ pub(crate) struct Coroutine {
     pub(crate) status: CoroutineStatus,
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) continuation_stack: Vec<(Continuation, bool)>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub(crate) err: Option<Rc<RuntimeError>>,
+    pub(crate) err: Option<RuntimeError>,
 }
 
 impl Coroutine {
@@ -171,7 +169,7 @@ impl Coroutine {
 
                                 coroutine.status = CoroutineStatus::Dead;
                                 coroutine.continuation_stack.clear();
-                                coroutine.err = Some(err.clone().into());
+                                coroutine.err = Some(err.clone());
                                 break Err(err);
                             }
                         }

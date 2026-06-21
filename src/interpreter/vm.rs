@@ -119,11 +119,13 @@ impl Serialize for Vm {
             use serde::ser::SerializeStruct;
             let mut state = serializer.serialize_struct("Vm", 5)?;
             state.serialize_field("limits", &self.execution_data.limits)?;
+            state.serialize_field("heap", &self.execution_data.heap)?;
             state.serialize_field("gc", &self.execution_data.gc)?;
-            state.serialize_field("heap_storage", &self.execution_data.heap.storage)?;
-            state.serialize_field("tags", &self.execution_data.heap.tags)?;
-            state.serialize_field("byte_strings", &self.execution_data.heap.byte_strings)?;
+            state.serialize_field("metatable_keys", &*self.execution_data.metatable_keys)?;
+            state.serialize_field("debug_hook", &self.execution_data.debug_hook)?;
             state.serialize_field("singletons", &self.singletons)?;
+            state.serialize_field("registry", &self.registry)?;
+            state.serialize_field("default_environment", &self.default_environment)?;
             state.end()
         })();
 
@@ -140,21 +142,17 @@ impl<'de> Deserialize<'de> for Vm {
     where
         D: serde::Deserializer<'de>,
     {
-        use crate::BuildFastHasher;
-        use crate::FastHashMap;
-        use crate::interpreter::ByteString;
-        use crate::interpreter::heap::{BytesObjectKey, NativeFnObjectKey, Storage};
-        use indexmap::IndexMap;
-
         #[derive(Deserialize)]
         #[serde(rename = "Vm")]
         struct Data {
             limits: VmLimits,
+            heap: Heap,
             gc: GarbageCollector,
-            heap_storage: Storage,
-            tags: IndexMap<StackValue, NativeFnObjectKey, BuildFastHasher>,
-            byte_strings: FastHashMap<ByteString, BytesObjectKey>,
+            metatable_keys: MetatableKeys,
+            debug_hook: DebugHook,
             singletons: TypeSet,
+            registry: TableRef,
+            default_environment: TableRef,
         }
 
         // enable deduplication
@@ -169,15 +167,22 @@ impl<'de> Deserialize<'de> for Vm {
         let data: Data = result?;
 
         // apply
-        let mut vm = Vm::default();
-        vm.execution_data.limits = data.limits;
-        vm.execution_data.gc = data.gc;
-        vm.execution_data.heap.storage = data.heap_storage;
-        vm.execution_data.heap.tags = data.tags;
-        vm.execution_data.heap.byte_strings = data.byte_strings;
-        vm.singletons = data.singletons;
-
-        Ok(vm)
+        Ok(Vm {
+            execution_data: ExecutionAccessibleData {
+                limits: data.limits,
+                heap: data.heap,
+                gc: data.gc,
+                coroutine_data: Default::default(),
+                metatable_keys: Rc::new(data.metatable_keys),
+                cache_pools: Default::default(),
+                tracked_stack_size: Default::default(),
+                debug_hook: data.debug_hook,
+            },
+            execution_stack: Default::default(),
+            registry: data.registry,
+            default_environment: data.default_environment,
+            singletons: data.singletons,
+        })
     }
 }
 

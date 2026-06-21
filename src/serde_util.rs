@@ -49,10 +49,20 @@ macro_rules! impl_serde_rc {
 use serde::de::Error;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 macro_rules! impl_serde_deduplicating_rc {
-    ($module_name:ident, $boxed:ty, $id_callback:expr, $se_conversion:expr, $de_conversion:expr) => {
+    (
+        $module_name:ident,
+        $boxed:ty,
+        $id_callback:expr,
+        $se_conversion:expr,
+        $de_conversion:expr
+        $(,
+            $weak:ty,
+            $weak_id_callback:expr
+        )?
+    ) => {
         pub(crate) mod $module_name {
             use super::*;
 
@@ -62,6 +72,7 @@ macro_rules! impl_serde_deduplicating_rc {
                 static SET: RefCell<HashSet<usize>> = Default::default();
             }
 
+            #[allow(unused)]
             pub(crate) fn serialize<S>(rc: &$boxed, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,
@@ -84,6 +95,7 @@ macro_rules! impl_serde_deduplicating_rc {
                 }
             }
 
+            #[allow(unused)]
             pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<$boxed, D::Error>
             where
                 D: serde::Deserializer<'de>,
@@ -115,6 +127,76 @@ macro_rules! impl_serde_deduplicating_rc {
                 }
             }
 
+            $(
+            pub(crate) mod weak {
+                use super::*;
+
+                pub(crate) fn serialize<S>(weak: &$weak, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    let conversion = $se_conversion;
+
+
+                    if DEDUPLICATING.get() {
+                        let id: usize = ($weak_id_callback)(weak);
+
+                        let serialize = |v| {
+                            serde::Serialize::serialize(v, serializer)
+                        };
+
+                        if let Some(rc) = weak.upgrade() && SET.with_borrow_mut(|set| set.insert(id)) {
+                            let s = conversion(&*rc);
+
+                            return serialize(&(id, Some(s)))
+                        } else {
+                            return serialize(&(id, None))
+                        }
+                    }
+
+                    let serialize = |v| {
+                        serde::Serialize::serialize(v, serializer)
+                    };
+
+                    if let Some(rc) = weak.upgrade() {
+                        let s = conversion(&*rc);
+                        serialize(&Some(s))
+                    } else {
+                        serialize(&None)
+                    }
+                }
+
+                pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<$weak, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    let conversion = $de_conversion;
+
+                    if DEDUPLICATING.get() {
+                        let (id, data) = serde::Deserialize::deserialize(deserializer)?;
+
+                        match data {
+                            Some(data) => {
+                                let rc: $boxed = conversion(data);
+                                MAP.with_borrow_mut(|map| {
+                                    map.insert(id, rc.clone());
+                                });
+                                Ok(Rc::downgrade(&rc))
+                            }
+                            None => MAP.with_borrow(|map| match map.get(&id) {
+                                Some(rc) => Ok(Rc::downgrade(rc)),
+                                None => Ok(Weak::new()),
+                            }),
+                        }
+                    } else if let Some(data) = serde::Deserialize::deserialize(deserializer)? {
+                        Ok(Rc::downgrade(&conversion(data)))
+                    } else {
+                        Ok(Weak::new())
+                    }
+                }
+            }
+            )?
+
             pub(crate) fn begin_dedup() {
                 DEDUPLICATING.set(true);
             }
@@ -134,6 +216,10 @@ use slice_dst::SliceWithHeader;
 
 fn rc_id<T: ?Sized>(rc: &Rc<T>) -> usize {
     Rc::as_ptr(rc) as *const () as usize
+}
+
+fn weak_id<T: ?Sized>(weak: &Weak<T>) -> usize {
+    Weak::as_ptr(weak) as *const () as usize
 }
 
 // self.keys.slice.as_ptr()
@@ -170,18 +256,29 @@ impl_serde_deduplicating_rc!(
     |data| { data },
     |data: FunctionDefinition| { data.into() }
 );
+impl_serde_deduplicating_rc!(
+    serde_unit_rc,
+    Rc<()>,
+    rc_id,
+    |data| data,
+    |_: ()| { ().into() },
+    Weak<()>,
+    weak_id
+);
 
 pub(crate) fn begin_dedup() {
     serde_str_rc::begin_dedup();
     serde_u8_thin_slice_rc::begin_dedup();
     serde_stack_object_key_slice_rc::begin_dedup();
     serde_function_definition_rc::begin_dedup();
+    serde_unit_rc::begin_dedup();
 }
 pub(crate) fn end_dedup() {
     serde_str_rc::end_dedup();
     serde_u8_thin_slice_rc::end_dedup();
     serde_stack_object_key_slice_rc::end_dedup();
     serde_function_definition_rc::end_dedup();
+    serde_unit_rc::end_dedup();
 }
 
 // pub(crate) use impl_serde_deduplicating_rc;

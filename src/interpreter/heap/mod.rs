@@ -115,6 +115,7 @@ pub(crate) enum StorageKey {
 
 /// Faster than StorageKey when used as a HashMap Key, since the variant and value can be compared directly
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct FastStorageKey {
     variant: u8,
     value: u64,
@@ -166,6 +167,7 @@ impl From<FastStorageKey> for StorageKey {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Heap {
     pub(crate) storage: Storage,
     pub(crate) byte_strings: FastHashMap<ByteString, BytesObjectKey>,
@@ -176,6 +178,7 @@ pub(crate) struct Heap {
         NativeFnObjectKey,
         NativeFunction<(NativeCallContext, Result<(), RuntimeError>, MultiValue)>,
     >,
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub(crate) recycled_tables: Rc<VecCell<Table>>,
     // feels a bit weird in here and not on VM, but easier to work with here
     string_metatable_ref: HeapRef<TableObjectKey>,

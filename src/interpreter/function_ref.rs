@@ -3,7 +3,8 @@ use super::{ForEachValue, FromValues, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FunctionRef(pub(crate) HeapRef<StorageKey>);
 
 impl FunctionRef {

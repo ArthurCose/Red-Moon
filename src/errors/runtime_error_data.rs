@@ -30,8 +30,6 @@ pub enum RuntimeErrorData {
     OutOfBounds,
     ResumedDeadCoroutine,
     ResumedNonSuspendedCoroutine,
-    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_multi"))]
-    #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_multi"))]
     Yield(MultiValue),
     InvalidYield,
     UnhandledYield,
@@ -71,17 +69,6 @@ impl_serde_rc!(
     serde_runtime_error_data_rc,
     RuntimeErrorData,
     RuntimeErrorData
-);
-
-#[cfg(feature = "serde")]
-impl_serde_serialize_stub_fn!(serialize_multi, MultiValue);
-#[cfg(feature = "serde")]
-impl_serde_deserialize_stub_fn!(
-    deserialize_multi,
-    MultiValue,
-    MultiValue {
-        values: Default::default()
-    }
 );
 
 #[cfg(feature = "serde")]

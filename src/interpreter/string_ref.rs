@@ -1,10 +1,11 @@
+use super::ByteString;
 use super::heap::{BytesObjectKey, HeapRef, Storage};
 use super::vm::VmContext;
-use super::ByteString;
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StringRef(pub(crate) HeapRef<BytesObjectKey>);
 
 impl StringRef {

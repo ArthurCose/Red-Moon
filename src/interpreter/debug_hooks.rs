@@ -1,11 +1,12 @@
+use crate::interpreter::ReturnMode;
 use crate::interpreter::execution::CallResult;
 use crate::interpreter::heap::{GarbageCollector, Heap, StorageKey};
 use crate::interpreter::value_stack::{StackValue, ValueStack};
-use crate::interpreter::ReturnMode;
 use bitflags::bitflags;
 
 bitflags! {
     #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct HookMask: u8 {
         const CALL = 0b00000001;
         const RETURN = 0b00000010;
@@ -15,6 +16,7 @@ bitflags! {
 }
 
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct DebugHook {
     pub(crate) mask: HookMask,
     pub(crate) after_instructions: usize,

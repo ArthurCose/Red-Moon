@@ -45,6 +45,7 @@ impl std::fmt::Display for TypeName {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Value {
     Nil,
     Bool(bool),
@@ -225,7 +226,7 @@ impl Value {
                 return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
                     self.type_name(),
                     other.type_name(),
-                )))
+                )));
             }
         };
 
@@ -262,7 +263,7 @@ impl Value {
                 return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
                     self.type_name(),
                     other.type_name(),
-                )))
+                )));
             }
         };
 

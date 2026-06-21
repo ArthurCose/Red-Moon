@@ -1,6 +1,7 @@
 use super::CounterRef;
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct HeapRef<K> {
     pub(super) key: K,
     #[allow(dead_code)]

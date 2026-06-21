@@ -1,4 +1,5 @@
 use super::{FastStorageKey, Heap, NativeFnObjectKey, StorageKey, TableObjectKey};
+use crate::interpreter::Continuation;
 use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;
 use crate::interpreter::debug_hooks::DebugHook;
@@ -7,7 +8,6 @@ use crate::interpreter::metatable_keys::MetatableKeys;
 use crate::interpreter::up_values::UpValues;
 use crate::interpreter::value_stack::{StackValue, ValueStack};
 use crate::interpreter::vm::CoroutineData;
-use crate::interpreter::Continuation;
 use crate::{FastHashMap, FastHashSet};
 use std::rc::Rc;
 
@@ -377,6 +377,7 @@ impl GarbageCollector {
                         #[cfg(not(debug_assertions))]
                         continue;
                     };
+
                     self.used_memory -= std::mem::size_of_val(&native_fn);
 
                     if let Some(callback) = heap.resume_callbacks.remove(&key) {

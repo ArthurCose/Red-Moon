@@ -5,7 +5,8 @@ use super::{FromValue, IntoValue, Value, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use slotmap::Key;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TableRef(pub(crate) HeapRef<TableObjectKey>);
 
 impl TableRef {

@@ -295,15 +295,13 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     tointeger.rehydrate("math.tointeger", ctx)?;
 
     // type
-    let integer_string_ref = ctx.intern_string(b"integer");
-    let float_string_ref = ctx.intern_string(b"float");
     let r#type = ctx.create_function(move |call_ctx, ctx| {
         let x = coerce_number(call_ctx, 1, ctx)?;
 
         call_ctx.return_values(
             match x {
-                Number::Integer(_) => integer_string_ref.clone().into_value(ctx)?,
-                Number::Float(_) => float_string_ref.clone().into_value(ctx)?,
+                Number::Integer(_) => "integer",
+                Number::Float(_) => "float",
             },
             ctx,
         )
