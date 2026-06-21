@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-red_moon = { path = "../", features = ["native_closures"] }
+red_moon = { path = "../", features = ["implicit_closures"] }
 clap = { version = "4", features = ["derive"] }
 rustyline = { version = "14", default-features = false }
 tabled = { version = "0.19", optional = true }

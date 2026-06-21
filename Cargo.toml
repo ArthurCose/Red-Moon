@@ -35,7 +35,7 @@ ron = "0.8"
 [features]
 # separate feature as it affects performance
 instruction_metrics = []
-native_closures = []
+implicit_closures = []
 serde = [
   "dep:serde",
   "dep:erased-serde",

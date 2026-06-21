@@ -75,7 +75,7 @@ let mut vm = Vm::default();
 let ctx = &mut vm.context();
 
 // these can be captured, but not all are bug free:
-#[cfg(feature = "native_closures")]
+#[cfg(feature = "implicit_closures")]
 let f = ctx.create_function(move |call_ctx, ctx| {
   let count = counter.get();
   counter.set(count + 1);
@@ -83,7 +83,7 @@ let f = ctx.create_function(move |call_ctx, ctx| {
   call_ctx.return_values(rc_counter.get() + *data + count, ctx)
 });
 
-// the "native_closures" feature isn't enabled by default as data captured by a Rust closure can't be serialized
+// the "implicit_closures" feature isn't enabled by default as data captured by a Rust closure can't be serialized
 use red_moon::values::tag_native_type;
 
 #[derive(Clone)]
@@ -107,7 +107,7 @@ let f = ctx.create_function(|call_ctx, ctx| {
 
 Enabling the `serde` feature adds serialization support through [serde](https://crates.io/crates/serde).
 
-Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. App data is not serialized and must be handled separately from the VM. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of Rust captures as serialization of captures is not possible.
+Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of Rust captures as serialization of implicit captures is not possible.
 
 Rust functions can be tagged and reimplemented through the "rehydrate" function:
 
