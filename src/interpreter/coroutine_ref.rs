@@ -2,11 +2,14 @@ use super::coroutine::Coroutine;
 use super::heap::{CoroutineObjectKey, HeapRef, Storage};
 use super::{CoroutineStatus, ForEachValue, MultiValue, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::tag_native_type;
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CoroutineRef(pub(crate) HeapRef<CoroutineObjectKey>);
+
+tag_native_type!(CoroutineRef);
 
 impl CoroutineRef {
     #[inline]

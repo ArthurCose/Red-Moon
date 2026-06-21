@@ -1,11 +1,14 @@
 use super::heap::{Heap, HeapRef, Storage, StorageKey};
 use super::{ForEachValue, FromValues, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::tag_native_type;
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FunctionRef(pub(crate) HeapRef<StorageKey>);
+
+tag_native_type!(FunctionRef);
 
 impl FunctionRef {
     #[inline]

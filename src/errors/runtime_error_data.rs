@@ -1,5 +1,6 @@
 use super::{IllegalInstruction, NativeError};
 use crate::interpreter::{ByteString, MultiValue, TypeName};
+use crate::tag_native_type;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
@@ -58,6 +59,8 @@ pub enum RuntimeErrorData {
     #[serde(other)]
     LostInSerialization,
 }
+
+tag_native_type!(RuntimeErrorData);
 
 #[cfg(feature = "serde")]
 use crate::serde_util::{

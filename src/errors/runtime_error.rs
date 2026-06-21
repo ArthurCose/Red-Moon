@@ -1,6 +1,6 @@
 use super::RuntimeErrorData;
 use super::stack_trace::StackTrace;
-use crate::interpreter::ByteString;
+use crate::{interpreter::ByteString, tag_native_type};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,8 @@ pub struct RuntimeError {
     pub trace: StackTrace,
     pub data: RuntimeErrorData,
 }
+
+tag_native_type!(RuntimeError);
 
 impl RuntimeError {
     pub fn new_bad_argument(position: usize, mut error: RuntimeError) -> Self {

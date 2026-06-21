@@ -1,3 +1,4 @@
+use crate::tag_native_type;
 use erasable::Thin;
 use slice_dst::SliceWithHeader;
 use std::rc::Rc;
@@ -14,6 +15,8 @@ pub struct ByteString(
     #[cfg_attr(feature = "serde", serde(with = "serde_u8_thin_slice_rc"))]
     pub(crate)  Thin<Rc<SliceWithHeader<(), u8>>>,
 );
+
+tag_native_type!(ByteString);
 
 impl std::hash::Hash for ByteString {
     #[inline]

@@ -8,6 +8,7 @@ use super::{
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::languages::lua::parse_number;
+use crate::tag_native_type;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -56,6 +57,8 @@ pub enum Value {
     Function(FunctionRef),
     Coroutine(CoroutineRef),
 }
+
+tag_native_type!(Value);
 
 impl Eq for Value {}
 

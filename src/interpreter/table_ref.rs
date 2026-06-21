@@ -3,11 +3,14 @@ use super::table::Table;
 use super::value_stack::StackValue;
 use super::{FromValue, IntoValue, Value, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::tag_native_type;
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TableRef(pub(crate) HeapRef<TableObjectKey>);
+
+tag_native_type!(TableRef);
 
 impl TableRef {
     #[inline]

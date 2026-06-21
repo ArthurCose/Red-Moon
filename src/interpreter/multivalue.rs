@@ -4,6 +4,7 @@ use super::value_stack::{StackValue, ValueStack};
 use super::vm::VmContext;
 use super::{ForEachValue, FromValues, Value};
 use crate::errors::RuntimeError;
+use crate::tag_native_type;
 use thin_vec::ThinVec;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -11,6 +12,8 @@ use thin_vec::ThinVec;
 pub struct MultiValue<T = Value> {
     pub(crate) values: ThinVec<T>,
 }
+
+tag_native_type!(MultiValue);
 
 impl<T> Default for MultiValue<T> {
     fn default() -> Self {
