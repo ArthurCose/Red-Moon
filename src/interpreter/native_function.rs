@@ -164,14 +164,18 @@ impl NativeCallContext {
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub trait NativeFunctionTrait<A>:
-    Fn(A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
+pub(crate) trait NativeFunctionTrait<A>:
+    Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
 {
     fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>>;
 }
 
-impl<A, T: Fn(A, &mut VmContext) -> Result<NativeCallContext, RuntimeError> + Clone + 'static>
-    NativeFunctionTrait<A> for T
+impl<
+    A,
+    T: Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
+        + Clone
+        + 'static,
+> NativeFunctionTrait<A> for T
 {
     fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>> {
         Rc::new(self.clone())
@@ -206,7 +210,7 @@ mod serde_callback {
     {
         let _: () = serde::Deserialize::deserialize(deserializer)?;
 
-        Ok(Rc::new(|_: A, _: &mut VmContext| {
+        Ok(Rc::new(|_, _: A, _: &mut VmContext| {
             Err(RuntimeErrorData::FunctionLostInSerialization.into())
         }))
     }
@@ -224,16 +228,17 @@ impl<A> NativeFunction<A> {
         if coroutine_data.yield_permissions.allows_yield {
             self.yieldable_call(key, args, ctx)
         } else {
-            self.non_yielding_call(args, ctx)
+            self.non_yielding_call(key, args, ctx)
         }
     }
 
     fn non_yielding_call(
         &self,
+        key: NativeFnObjectKey,
         args: A,
         ctx: &mut VmContext,
     ) -> Result<NativeCallContext, RuntimeError> {
-        (self.callback)(args, ctx).map_err(|mut err| {
+        (self.callback)(key, args, ctx).map_err(|mut err| {
             if matches!(err.data, RuntimeErrorData::Yield(_)) {
                 err.data = RuntimeErrorData::InvalidYield
             }
@@ -263,7 +268,7 @@ impl<A> NativeFunction<A> {
         };
         coroutine_data.continuation_state_set = false;
 
-        let result = match (self.callback)(args, ctx) {
+        let result = match (self.callback)(key, args, ctx) {
             Ok(values) => {
                 let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
 
@@ -322,7 +327,9 @@ impl<A> Clone for NativeFunction<A> {
 
 impl<A, F> From<F> for NativeFunction<A>
 where
-    F: Fn(A, &mut VmContext) -> Result<NativeCallContext, RuntimeError> + Clone + 'static,
+    F: Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
+        + Clone
+        + 'static,
 {
     fn from(value: F) -> Self {
         Self {

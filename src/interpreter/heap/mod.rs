@@ -5,13 +5,13 @@ mod ref_counter;
 pub use garbage_collector::*;
 pub(crate) use heap_ref::*;
 
+use super::MultiValue;
 use super::byte_string::ByteString;
 use super::coroutine::Coroutine;
 use super::interpreted_function::Function;
 use super::native_function::{NativeCallContext, NativeFunction};
 use super::table::Table;
 use super::value_stack::StackValue;
-use super::MultiValue;
 use crate::errors::RuntimeError;
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap};
@@ -282,16 +282,13 @@ impl Heap {
         self.storage.functions.insert(function)
     }
 
-    pub(crate) fn store_native_fn_with_key(
+    pub(crate) fn store_native_fn(
         &mut self,
         gc: &mut GarbageCollector,
-        callback: impl FnOnce(NativeFnObjectKey) -> NativeFunction<NativeCallContext>,
+        value: NativeFunction<NativeCallContext>,
     ) -> NativeFnObjectKey {
-        self.storage.native_functions.insert_with_key(|key| {
-            let value = callback(key);
-            gc.modify_used_memory(std::mem::size_of_val(&value) as _);
-            value
-        })
+        gc.modify_used_memory(std::mem::size_of_val(&value) as _);
+        self.storage.native_functions.insert(value)
     }
 
     pub(crate) fn store_coroutine(

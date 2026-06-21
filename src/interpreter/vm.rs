@@ -481,14 +481,12 @@ impl VmContext<'_> {
     ) -> FunctionRef {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
-        let key = heap.store_native_fn_with_key(gc, move |_| {
-            let wrapper = move |mut call_ctx, ctx: &mut VmContext| {
-                callback(&mut call_ctx, ctx)?;
-                Ok(call_ctx)
-            };
-            wrapper.into()
-        });
+        let wrapper = move |_, mut call_ctx, ctx: &mut VmContext| {
+            callback(&mut call_ctx, ctx)?;
+            Ok(call_ctx)
+        };
 
+        let key = heap.store_native_fn(gc, wrapper.into());
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
@@ -584,28 +582,27 @@ impl VmContext<'_> {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
 
-        let key = heap.store_native_fn_with_key(gc, move |key| {
-            let function_callback = move |call_ctx, ctx: &mut VmContext<'_>| {
-                let heap = &mut ctx.vm.execution_data.heap;
+        let function_callback = |key, call_ctx, ctx: &mut VmContext<'_>| {
+            let heap = &mut ctx.vm.execution_data.heap;
 
-                let Some(callback) = heap.resume_callbacks.get(&key) else {
-                    return Err(RuntimeErrorData::InvalidInternalState.into());
-                };
-
-                let callback = callback.shallow_clone();
-
-                let state = MultiValue {
-                    values: Default::default(),
-                };
-
-                (callback.callback)((call_ctx, Ok(()), state), ctx)
+            let Some(callback) = heap.resume_callbacks.get(&key) else {
+                return Err(RuntimeErrorData::InvalidInternalState.into());
             };
 
-            function_callback.into()
-        });
+            let callback = callback.shallow_clone();
+
+            let state = MultiValue {
+                values: Default::default(),
+            };
+
+            (callback.callback)(key, (call_ctx, Ok(()), state), ctx)
+        };
+
+        let key = heap.store_native_fn(gc, function_callback.into());
 
         let callback = NativeFunction::from(
-            move |(mut call_ctx, mut result, mut state): (
+            move |_: NativeFnObjectKey,
+                  (mut call_ctx, mut result, mut state): (
                 NativeCallContext,
                 Result<(), RuntimeError>,
                 MultiValue,
