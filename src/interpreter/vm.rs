@@ -1,3 +1,4 @@
+use super::Continuation;
 use super::cache_pools::CachePools;
 use super::coroutine::{Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
@@ -7,15 +8,15 @@ use super::heap::{
 use super::metatable_keys::MetatableKeys;
 use super::native_function::{NativeCallContext, NativeFunction};
 use super::value_stack::{StackValue, ValueStack};
-use super::{
-    Continuation, CoroutineRef, ForEachValue, FromValues, FunctionRef, Module, MultiValue,
-    StringRef, TableRef,
-};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::NativeValue;
+use crate::interpreter::Module;
 use crate::interpreter::debug_hooks::{DebugHook, HookMask};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
 use crate::interpreter::type_set::TypeSet;
+pub use crate::values::{
+    CoroutineRef, ForEachValue, FromValues, FunctionRef, MultiValue, NativeValue, StringRef,
+    TableRef,
+};
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_metrics")]
@@ -516,7 +517,8 @@ impl VmContext<'_> {
     /// The result received by this function is for handling errors raised by resumed sub calls.
     ///
     /// ```
-    /// # use red_moon::interpreter::{FunctionRef, MultiValue, Vm};
+    /// # use red_moon::interpreter::Vm;
+    /// # use red_moon::values::{FunctionRef, MultiValue};
     /// # use red_moon::errors::RuntimeError;
     /// # use red_moon::languages::lua::std::{load_basic, load_coroutine};
     /// # use red_moon::languages::lua::compile;

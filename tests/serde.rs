@@ -1,9 +1,10 @@
 #![cfg(feature = "serde")]
 
 use red_moon::errors::{RuntimeError, RuntimeErrorData};
-use red_moon::interpreter::{CoroutineRef, FunctionRef, MultiValue, TableRef, Vm, tag_native_type};
+use red_moon::interpreter::Vm;
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::load_coroutine;
+use red_moon::values::{CoroutineRef, FunctionRef, MultiValue, TableRef, tag_native_type};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]

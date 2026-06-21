@@ -5,15 +5,13 @@ mod ref_counter;
 pub use garbage_collector::*;
 pub(crate) use heap_ref::*;
 
-use super::MultiValue;
-use super::byte_string::ByteString;
 use super::coroutine::Coroutine;
 use super::interpreted_function::Function;
 use super::native_function::{NativeCallContext, NativeFunction};
 use super::table::Table;
 use super::value_stack::StackValue;
 use crate::errors::RuntimeError;
-use crate::interpreter::NativeValue;
+use crate::values::{ByteString, MultiValue, NativeValue};
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap};
 use indexmap::IndexMap;

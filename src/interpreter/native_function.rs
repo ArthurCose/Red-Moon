@@ -1,10 +1,9 @@
 use super::coroutine::YieldPermissions;
 use super::heap::NativeFnObjectKey;
 use super::value_stack::StackValue;
-use super::{Continuation, ForEachValue, FromValue, Value, Vm};
-use super::{FromValues, VmContext};
+use super::{Continuation, Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::NativeValue;
+use crate::values::{ForEachValue, FromValue, FromValues, NativeValue, Value};
 use std::ops::RangeBounds;
 use std::rc::Rc;
 

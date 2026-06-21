@@ -2,14 +2,14 @@ use super::coroutine::Continuation;
 use super::heap::{BytesObjectKey, FnObjectKey, Heap, NativeFnObjectKey};
 use super::instruction::{Instruction, Register, ReturnMode};
 use super::interpreted_function::Function;
-use super::multivalue::MultiValue;
 use super::native_function::NativeCallContext;
 use super::table::Table;
 use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
-use super::{FromValues, TypeName, UpValueSource, Value, VmContext};
+use super::{UpValueSource, VmContext};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::coerce_integer;
+use crate::values::{FromValues, MultiValue, TypeName, Value};
 use std::borrow::Cow;
 
 #[cfg(feature = "serde")]

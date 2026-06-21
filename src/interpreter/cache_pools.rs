@@ -1,6 +1,6 @@
 use super::heap::TableObjectKey;
 use super::value_stack::{StackValue, ValueStack};
-use super::MultiValue;
+use crate::values::MultiValue;
 use crate::vec_cell::VecCell;
 
 pub(crate) const RECYCLE_LIMIT: usize = 64;

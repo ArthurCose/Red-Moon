@@ -1,4 +1,5 @@
-use red_moon::interpreter::{Chunk, Instruction, Module, ReturnMode, Value, Vm};
+use red_moon::interpreter::{Chunk, Instruction, Module, ReturnMode, Vm};
+use red_moon::values::Value;
 
 #[test]
 fn instructions_print() {

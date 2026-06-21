@@ -6,9 +6,9 @@ use crate::errors::{
     LuaCompilationError, LuaCompilationErrorData, SourcePosition, SyntaxError, SyntaxErrorData,
 };
 use crate::interpreter::{
-    Chunk, ConstantIndex, Instruction, Module, Number, Register, ReturnMode, SourceMapping,
-    UpValueSource,
+    Chunk, ConstantIndex, Instruction, Module, Register, ReturnMode, SourceMapping, UpValueSource,
 };
+use crate::values::Number;
 use std::borrow::Cow;
 use std::iter::Peekable;
 use std::ops::Range;

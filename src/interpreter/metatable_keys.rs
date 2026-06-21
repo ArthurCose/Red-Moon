@@ -1,5 +1,5 @@
-use super::StringRef;
 use super::heap::{GarbageCollector, Heap};
+use crate::values::StringRef;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MetatableKeys {

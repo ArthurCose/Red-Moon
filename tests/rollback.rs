@@ -1,5 +1,6 @@
 use pretty_assertions::assert_eq;
-use red_moon::interpreter::{Value, Vm};
+use red_moon::interpreter::Vm;
+use red_moon::values::Value;
 
 #[test]
 fn basic() {

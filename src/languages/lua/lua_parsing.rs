@@ -1,8 +1,6 @@
 use super::{LuaToken, LuaTokenLabel};
-use crate::{
-    errors::{SourcePosition, SyntaxError, SyntaxErrorData},
-    interpreter::Number,
-};
+use crate::errors::{SourcePosition, SyntaxError, SyntaxErrorData};
+use crate::values::Number;
 use std::borrow::Cow;
 
 // private as we have assumptions that can cause panics

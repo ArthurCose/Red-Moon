@@ -1,7 +1,8 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{ByteString, Number, StringRef, TableRef, Value, VmContext};
+use crate::interpreter::VmContext;
 use crate::languages::lua::parse_number;
 use crate::languages::lua::std::{BytePattern, PatternMatcher};
+use crate::values::{ByteString, Number, StringRef, TableRef, Value};
 
 pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // byte

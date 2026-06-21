@@ -1,9 +1,10 @@
 use crate::app_data::AppData;
 use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
-use red_moon::interpreter::{ByteString, TableRef, Vm};
+use red_moon::interpreter::Vm;
 use red_moon::languages::lua::std::{load_basic, load_math, load_table};
 use red_moon::languages::lua::{coerce_integer, parse_number};
+use red_moon::values::{ByteString, TableRef};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::panic::Location;
@@ -20,8 +21,8 @@ pub struct RegistryKey {
 #[derive(Clone)]
 struct MutableResources {
     multivalue_pool: Vec<Vec<Value<'static>>>,
-    registry: slotmap::SlotMap<slotmap::DefaultKey, red_moon::interpreter::Value>,
-    named_registry: FxHashMap<ByteString, red_moon::interpreter::Value>,
+    registry: slotmap::SlotMap<slotmap::DefaultKey, red_moon::values::Value>,
+    named_registry: FxHashMap<ByteString, red_moon::values::Value>,
 }
 
 #[derive(Clone)]
@@ -464,7 +465,7 @@ impl Lua {
     /// representation as an integer, or a string that can be converted to an integer. Refer to the
     /// Lua manual for details.
     pub fn coerce_integer(&self, v: Value) -> Result<Option<Integer>> {
-        use red_moon::interpreter::Number;
+        use red_moon::values::Number;
 
         Ok(match v {
             Value::Integer(i) => Some(i),
@@ -487,7 +488,7 @@ impl Lua {
     /// To succeed, the value must be a number or a string that can be converted to a number. Refer
     /// to the Lua manual for details.
     pub fn coerce_number(&self, v: Value) -> Result<Option<Number>> {
-        use red_moon::interpreter::Number;
+        use red_moon::values::Number;
 
         Ok(match v {
             Value::Number(n) => Some(n),

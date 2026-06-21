@@ -2,7 +2,7 @@ use super::heap::{
     BytesObjectKey, CoroutineObjectKey, FnObjectKey, Heap, NativeFnObjectKey, StackObjectKey,
     StorageKey, TableObjectKey,
 };
-use super::{Number, TypeName};
+use crate::values::{Number, TypeName};
 use std::ops::Range;
 
 #[cfg(feature = "serde")]

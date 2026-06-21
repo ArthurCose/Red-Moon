@@ -1,5 +1,5 @@
 use crate::Lua;
-use red_moon::interpreter::CoroutineRef;
+use red_moon::values::CoroutineRef;
 use std::ffi::c_void;
 use std::fmt;
 

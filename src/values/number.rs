@@ -1,6 +1,7 @@
 use super::TypeName;
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{FromValue, IntoValue, Value, VmContext};
+use crate::interpreter::VmContext;
+use crate::values::{FromValue, IntoValue, Value};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {

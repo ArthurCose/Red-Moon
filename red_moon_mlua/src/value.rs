@@ -136,7 +136,7 @@ impl<'lua> Value<'lua> {
                     let tostring_key = ctx.metatable_keys().tostring.clone();
 
                     if let Ok(function_value) =
-                        metatable.raw_get::<_, red_moon::interpreter::Value>(tostring_key, ctx)
+                        metatable.raw_get::<_, red_moon::values::Value>(tostring_key, ctx)
                     {
                         return Ok(function_value.call(t.table_ref.clone(), ctx)?);
                     }
@@ -144,7 +144,7 @@ impl<'lua> Value<'lua> {
                     let name_key = ctx.metatable_keys().name.clone();
 
                     if let Ok(name) =
-                        metatable.raw_get::<_, red_moon::interpreter::ByteString>(name_key, ctx)
+                        metatable.raw_get::<_, red_moon::values::ByteString>(name_key, ctx)
                     {
                         return Ok(format!("{name}: 0x{:x}", t.to_pointer() as usize));
                     }
@@ -464,8 +464,8 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    pub(crate) fn from_red_moon(lua: &'lua Lua, value: red_moon::interpreter::Value) -> Self {
-        use red_moon::interpreter::Value as RedMoonValue;
+    pub(crate) fn from_red_moon(lua: &'lua Lua, value: red_moon::values::Value) -> Self {
+        use red_moon::values::Value as RedMoonValue;
 
         match value {
             RedMoonValue::Nil => Self::Nil,
@@ -483,8 +483,8 @@ impl<'lua> Value<'lua> {
         }
     }
 
-    pub(crate) fn into_red_moon(self) -> red_moon::interpreter::Value {
-        use red_moon::interpreter::Value as RedMoonValue;
+    pub(crate) fn into_red_moon(self) -> red_moon::values::Value {
+        use red_moon::values::Value as RedMoonValue;
 
         match self {
             Value::Nil => RedMoonValue::Nil,
@@ -718,7 +718,7 @@ impl<'lua> MultiValue<'lua> {
 
     pub(crate) fn from_red_moon(
         lua: &'lua Lua,
-        mut red_moon_multi: red_moon::interpreter::MultiValue,
+        mut red_moon_multi: red_moon::values::MultiValue,
     ) -> Self {
         let mut mlua_multi = Self::with_lua_and_capacity(lua, red_moon_multi.len());
 
@@ -733,10 +733,7 @@ impl<'lua> MultiValue<'lua> {
         mlua_multi
     }
 
-    pub(crate) fn into_red_moon(
-        mut self,
-        lua: &'lua Lua,
-    ) -> Result<red_moon::interpreter::MultiValue> {
+    pub(crate) fn into_red_moon(mut self, lua: &'lua Lua) -> Result<red_moon::values::MultiValue> {
         let vm = unsafe { lua.vm_mut() };
         let ctx = &mut vm.context();
         let mut red_moon_multi = ctx.create_multi();

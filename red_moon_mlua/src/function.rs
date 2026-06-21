@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::lua::Lua;
 use crate::value::{FromLuaMulti, IntoLuaMulti};
 use crate::MultiValue;
-use red_moon::interpreter::FunctionRef;
+use red_moon::values::FunctionRef;
 use std::ffi::c_void;
 use std::fmt;
 
@@ -68,8 +68,7 @@ impl<'lua> Function<'lua> {
         let red_moon_args = mlua_multi.into_red_moon(self.lua)?;
 
         // call function
-        let results: red_moon::interpreter::MultiValue =
-            self.function_ref.call(red_moon_args, ctx)?;
+        let results: red_moon::values::MultiValue = self.function_ref.call(red_moon_args, ctx)?;
 
         // translate results
         let mlua_multi = MultiValue::from_red_moon(self.lua, results);

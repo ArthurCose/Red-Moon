@@ -1,5 +1,6 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{ByteString, FromValue, TableRef, Value, VmContext};
+use crate::interpreter::VmContext;
+use crate::values::{ByteString, FromValue, TableRef, Value};
 
 pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // concat

@@ -1,7 +1,8 @@
-use super::coroutine::Coroutine;
-use super::heap::{CoroutineObjectKey, HeapRef, Storage};
-use super::{CoroutineStatus, ForEachValue, MultiValue, VmContext};
+use super::{ForEachValue, MultiValue};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::VmContext;
+use crate::interpreter::coroutine::{Coroutine, CoroutineStatus};
+use crate::interpreter::heap::{CoroutineObjectKey, HeapRef, Storage};
 use crate::tag_native_type;
 use slotmap::Key;
 

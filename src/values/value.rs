@@ -1,12 +1,12 @@
-use super::execution::ExecutionContext;
-use super::heap::{BytesObjectKey, Heap, StorageKey};
-use super::value_stack::StackValue;
-use super::vm::VmContext;
 use super::{
     ByteString, CoroutineRef, ForEachValue, FromValues, FunctionRef, MultiValue, Number, StringRef,
     TableRef,
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::VmContext;
+use crate::interpreter::execution::ExecutionContext;
+use crate::interpreter::heap::{BytesObjectKey, Heap, StorageKey};
+use crate::interpreter::value_stack::StackValue;
 use crate::languages::lua::parse_number;
 use crate::tag_native_type;
 

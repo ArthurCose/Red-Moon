@@ -3,7 +3,7 @@ use crate::{
     Error, FromLua, FromLuaMulti, Function, Integer, IntoLua, IntoLuaMulti, Lua, MultiValue, Nil,
     Result, Value,
 };
-use red_moon::interpreter::TableRef;
+use red_moon::values::TableRef;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::fmt;
@@ -294,7 +294,7 @@ impl<'lua> Table<'lua> {
                 let vm = unsafe { self.lua.vm_mut() };
                 let ctx = &mut vm.context();
                 self.table_ref
-                    .raw_remove::<red_moon::interpreter::Value>(idx, ctx)?;
+                    .raw_remove::<red_moon::values::Value>(idx, ctx)?;
 
                 Ok(())
             }
@@ -585,8 +585,7 @@ where
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..len {
-            let red_moon_val: red_moon::interpreter::Value =
-                self.table_ref.raw_get(i + 1, ctx).unwrap();
+            let red_moon_val: red_moon::values::Value = self.table_ref.raw_get(i + 1, ctx).unwrap();
 
             let val = Value::from_red_moon(self.lua, red_moon_val);
             let Ok(other_val) = other[i].clone().into_lua(self.lua) else {
@@ -671,8 +670,8 @@ impl<'lua> TableExt<'lua> for Table<'lua> {
         let red_moon_args = mlua_multi.into_red_moon(self.lua)?;
 
         // call function
-        let results: red_moon::interpreter::MultiValue =
-            red_moon::interpreter::Value::Table(self.table_ref.clone()).call(red_moon_args, ctx)?;
+        let results: red_moon::values::MultiValue =
+            red_moon::values::Value::Table(self.table_ref.clone()).call(red_moon_args, ctx)?;
 
         // translate results
         let mlua_multi = MultiValue::from_red_moon(self.lua, results);
@@ -802,7 +801,7 @@ where
     type Item = Result<(K, V)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use red_moon::interpreter::Value as RedMoonValue;
+        use red_moon::values::Value as RedMoonValue;
 
         let prev_key = self.key.take()?;
 

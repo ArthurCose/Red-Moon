@@ -1,6 +1,6 @@
 // Comments in CharacterClass, PatternItem, and Repetition declarations are taken from https://www.lua.org/manual/5.4/manual.html#6.4.1
 
-use crate::interpreter::ByteString;
+use crate::values::ByteString;
 use std::ops::Range;
 use std::rc::Rc;
 

@@ -1,7 +1,8 @@
 use clap::Parser;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeError, RuntimeErrorData, SyntaxErrorData};
-use red_moon::interpreter::{FunctionRef, IntoValue, MultiValue, Value, Vm, VmContext};
+use red_moon::interpreter::{Vm, VmContext};
 use red_moon::languages::lua::{compile, std as lua_std};
+use red_moon::values::{FunctionRef, IntoValue, MultiValue, Value};
 use rustyline::error::ReadlineError;
 use std::cell::{Cell, RefCell};
 use std::process::ExitCode;

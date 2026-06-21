@@ -1,9 +1,10 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorData};
-use red_moon::interpreter::{MultiValue, Value, Vm};
+use red_moon::interpreter::Vm;
 use red_moon::languages::lua::std::{load_basic, load_coroutine, load_debug, load_string};
 use red_moon::languages::lua::{LuaTokenLabel, compile};
 use red_moon::tag_native_type;
+use red_moon::values::{MultiValue, Value};
 use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;

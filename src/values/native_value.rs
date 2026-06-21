@@ -7,7 +7,7 @@
 /// ### impl Example
 /// ```
 /// # #![cfg(feature = "serde")]
-/// use red_moon::interpreter::tag_native_type;
+/// use red_moon::values::tag_native_type;
 /// use serde::{Serialize, Deserialize};
 ///
 /// #[derive(Clone, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ downcast::downcast!(dyn NativeValue);
 macro_rules! tag_native_type {
     ($struct: ty) => {
         #[$crate::typetag::serde]
-        impl $crate::interpreter::NativeValue for $struct {}
+        impl $crate::values::NativeValue for $struct {}
     };
 }
 

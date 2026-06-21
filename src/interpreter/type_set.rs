@@ -1,5 +1,5 @@
 use crate::FastHashMap;
-use crate::interpreter::NativeValue;
+use crate::values::NativeValue;
 use std::any::TypeId;
 
 #[derive(Default, Clone)]

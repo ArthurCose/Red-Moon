@@ -1,7 +1,7 @@
-use super::heap::{Heap, HeapRef, Storage, StorageKey};
-use super::{ForEachValue, FromValues, VmContext};
+use super::{ForEachValue, FromValues, NativeValue};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::NativeValue;
+use crate::interpreter::VmContext;
+use crate::interpreter::heap::{Heap, HeapRef, Storage, StorageKey};
 use crate::tag_native_type;
 use slotmap::Key;
 

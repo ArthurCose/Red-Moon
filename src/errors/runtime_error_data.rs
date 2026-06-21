@@ -1,6 +1,6 @@
 use super::{IllegalInstruction, NativeError};
-use crate::interpreter::{ByteString, MultiValue, TypeName};
 use crate::tag_native_type;
+use crate::values::{ByteString, MultiValue, TypeName};
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]

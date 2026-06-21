@@ -1,8 +1,9 @@
-use super::heap::{HeapRef, Storage, TableObjectKey};
-use super::table::Table;
-use super::value_stack::StackValue;
-use super::{FromValue, IntoValue, Value, VmContext};
+use super::{FromValue, IntoValue, Value};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::VmContext;
+use crate::interpreter::heap::{HeapRef, Storage, TableObjectKey};
+use crate::interpreter::table::Table;
+use crate::interpreter::value_stack::StackValue;
 use crate::tag_native_type;
 use slotmap::Key;
 

@@ -9,6 +9,7 @@ pub use typetag;
 pub mod errors;
 pub mod interpreter;
 pub mod languages;
+pub mod values;
 
 type BuildFastHasher = rustc_hash::FxBuildHasher;
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildFastHasher>;

@@ -1,8 +1,9 @@
 use super::execution::ExecutionContext;
 use super::heap::{CoroutineObjectKey, NativeFnObjectKey, StorageKey};
 use super::value_stack::ValueStack;
-use super::{MultiValue, Vm, VmContext};
+use super::{Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::values::MultiValue;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

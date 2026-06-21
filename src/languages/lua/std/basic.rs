@@ -1,8 +1,7 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{
-    ByteString, FromValue, FunctionRef, MultiValue, StringRef, TableRef, Value, VmContext,
-};
+use crate::interpreter::VmContext;
 use crate::languages::lua::{compile, parse_number};
+use crate::values::{ByteString, FromValue, FunctionRef, MultiValue, StringRef, TableRef, Value};
 
 pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // assert

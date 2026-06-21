@@ -1,5 +1,5 @@
 use crate::*;
-use red_moon::interpreter::{ByteString, StringRef};
+use red_moon::values::{ByteString, StringRef};
 use std::borrow::{Borrow, Cow};
 use std::cell::OnceCell;
 use std::ffi::c_void;

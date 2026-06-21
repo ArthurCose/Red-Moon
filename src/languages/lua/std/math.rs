@@ -1,7 +1,8 @@
 use crate::errors::RuntimeError;
-use crate::interpreter::{IntoValue, NativeCallContext, Number, Value, VmContext};
+use crate::interpreter::{NativeCallContext, VmContext};
 use crate::languages::lua::{coerce_integer, parse_number};
 use crate::tag_native_type;
+use crate::values::{IntoValue, Number, Value};
 use rand::RngExt;
 use rand_xoshiro::Xoshiro256StarStar;
 use rand_xoshiro::rand_core::SeedableRng;

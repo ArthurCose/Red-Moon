@@ -45,7 +45,7 @@ serde = [
   "indexmap/serde",
   "rand_xoshiro/serde",
 ]
-default = ["serde"]
+default = []
 
 [lints]
 workspace = true

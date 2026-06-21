@@ -1,7 +1,8 @@
 use thin_vec::ThinVec;
 
-use super::{FromValue, IntoValue, MultiValue, Value, VmContext};
+use super::{FromValue, IntoValue, MultiValue, Value};
 use crate::errors::RuntimeError;
+use crate::interpreter::VmContext;
 
 pub trait ForEachValue {
     fn for_each_value(

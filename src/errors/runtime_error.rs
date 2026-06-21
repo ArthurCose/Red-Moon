@@ -1,6 +1,7 @@
 use super::RuntimeErrorData;
 use super::stack_trace::StackTrace;
-use crate::{interpreter::ByteString, tag_native_type};
+use crate::tag_native_type;
+use crate::values::ByteString;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

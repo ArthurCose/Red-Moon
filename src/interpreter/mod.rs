@@ -1,48 +1,28 @@
-mod byte_string;
-mod cache_pools;
-mod coroutine;
-mod coroutine_ref;
 mod debug_hooks;
-mod execution;
-mod function_ref;
-mod heap;
 mod instruction;
 mod interpreted_function;
 mod metatable_keys;
 mod module;
-mod multivalue;
 mod native_function;
-mod native_value;
-mod number;
-mod string_ref;
-mod table;
-mod table_ref;
 mod type_set;
 mod up_values;
-mod value;
-mod value_stack;
-mod value_traits;
 mod vm;
+
+pub(crate) mod cache_pools;
+pub(crate) mod coroutine;
+pub(crate) mod execution;
+pub(crate) mod heap;
+pub(crate) mod table;
+pub(crate) mod value_stack;
 
 #[cfg(feature = "instruction_metrics")]
 mod instruction_metrics;
 
-pub use byte_string::ByteString;
-pub use coroutine::CoroutineStatus;
-pub use coroutine_ref::CoroutineRef;
 pub use debug_hooks::HookMask;
-pub use function_ref::FunctionRef;
 pub use heap::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use module::{Chunk, Module, SourceMapping, UpValueSource};
-pub use multivalue::MultiValue;
 pub use native_function::NativeCallContext;
-pub use native_value::{NativeValue, tag_native_type};
-pub use number::Number;
-pub use string_ref::StringRef;
-pub use table_ref::TableRef;
-pub use value::{FromValue, IntoValue, TypeName, Value};
-pub use value_traits::{ForEachValue, FromValues};
 pub use vm::{Vm, VmContext, VmLimits};
 
 pub(crate) use coroutine::Continuation;

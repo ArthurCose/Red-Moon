@@ -1,7 +1,8 @@
 use red_moon::errors::RuntimeError;
-use red_moon::interpreter::{FunctionRef, Vm};
+use red_moon::interpreter::Vm;
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::{load_basic, load_coroutine};
+use red_moon::values::FunctionRef;
 
 #[test]
 fn resumable() -> Result<(), RuntimeError> {

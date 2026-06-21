@@ -84,7 +84,7 @@ let f = ctx.create_function(move |call_ctx, ctx| {
 });
 
 // the "native_closures" feature isn't enabled by default as data captured by a Rust closure can't be serialized
-use red_moon::interpreter::tag_native_type;
+use red_moon::values::tag_native_type;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -114,7 +114,8 @@ Rust functions can be tagged and reimplemented through the "rehydrate" function:
 ```rust
 #![cfg(feature = "serde")]
 
-use red_moon::interpreter::{Vm, VmContext, FunctionRef, Value};
+use red_moon::interpreter::{Vm, VmContext};
+use red_moon::values::{FunctionRef, Value};
 use red_moon::errors::RuntimeError;
 
 fn implement_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {

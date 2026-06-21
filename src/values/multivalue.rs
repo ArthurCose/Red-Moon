@@ -1,9 +1,9 @@
-use super::cache_pools::CachePools;
-use super::heap::Heap;
-use super::value_stack::{StackValue, ValueStack};
-use super::vm::VmContext;
 use super::{ForEachValue, FromValues, Value};
 use crate::errors::RuntimeError;
+use crate::interpreter::VmContext;
+use crate::interpreter::cache_pools::CachePools;
+use crate::interpreter::heap::Heap;
+use crate::interpreter::value_stack::{StackValue, ValueStack};
 use crate::tag_native_type;
 use thin_vec::ThinVec;
 

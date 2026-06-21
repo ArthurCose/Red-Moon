@@ -1,7 +1,6 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::{
-    CoroutineRef, CoroutineStatus, FunctionRef, MultiValue, Value, VmContext,
-};
+use crate::interpreter::VmContext;
+use crate::values::{CoroutineRef, CoroutineStatus, FunctionRef, MultiValue, Value};
 
 pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // todo: close
