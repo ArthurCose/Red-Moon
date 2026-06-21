@@ -12,10 +12,10 @@ use super::{
     StringRef, TableRef,
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::TypeErasedSnapshot;
+use crate::interpreter::NativeValue;
 use crate::interpreter::debug_hooks::{DebugHook, HookMask};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
-use crate::interpreter::struct_set::StructSet;
+use crate::interpreter::type_set::TypeSet;
 use std::rc::Rc;
 
 #[cfg(feature = "instruction_metrics")]
@@ -102,7 +102,7 @@ pub struct Vm {
     pub(crate) execution_stack: Vec<ExecutionContext>,
     registry: TableRef,
     default_environment: TableRef,
-    singletons: StructSet,
+    singletons: TypeSet,
 }
 
 #[cfg(feature = "serde")]
@@ -154,7 +154,7 @@ impl<'de> Deserialize<'de> for Vm {
             heap_storage: Storage,
             tags: IndexMap<StackValue, NativeFnObjectKey, BuildFastHasher>,
             byte_strings: FastHashMap<ByteString, BytesObjectKey>,
-            singletons: StructSet,
+            singletons: TypeSet,
         }
 
         // enable deduplication
@@ -317,10 +317,7 @@ impl VmContext<'_> {
     }
 
     #[inline]
-    pub fn set_singleton<T: TypeErasedSnapshot + Clone + 'static>(
-        &mut self,
-        value: T,
-    ) -> Option<T> {
+    pub fn set_singleton<T: NativeValue + Clone + 'static>(&mut self, value: T) -> Option<T> {
         self.vm.singletons.insert(value)
     }
 

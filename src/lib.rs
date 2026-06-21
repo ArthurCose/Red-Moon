@@ -3,6 +3,9 @@ mod vec_cell;
 #[cfg(feature = "serde")]
 mod serde_util;
 
+#[cfg(feature = "serde")]
+pub use typetag;
+
 pub mod errors;
 pub mod interpreter;
 pub mod languages;

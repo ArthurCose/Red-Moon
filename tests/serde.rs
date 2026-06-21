@@ -2,7 +2,7 @@
 
 use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{
-    CoroutineRef, FunctionRef, MultiValue, TableRef, TypeErasedSnapshot, Vm,
+    CoroutineRef, FunctionRef, MultiValue, TableRef, Vm, tag_native_value,
 };
 use red_moon::languages::lua::LuaCompiler;
 use red_moon::languages::lua::std::impl_coroutine;
@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 struct MySingleton(i32);
 
-#[typetag::serde]
-impl TypeErasedSnapshot for MySingleton {}
+tag_native_value!(MySingleton);
 
 fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();

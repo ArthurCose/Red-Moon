@@ -1,12 +1,12 @@
 use crate::FastHashMap;
-use crate::interpreter::TypeErasedSnapshot;
+use crate::interpreter::NativeValue;
 use std::any::TypeId;
 
 #[derive(Default, Clone)]
-pub(crate) struct StructSet(FastHashMap<TypeId, Box<dyn TypeErasedSnapshot>>);
+pub(crate) struct TypeSet(FastHashMap<TypeId, Box<dyn NativeValue>>);
 
-impl StructSet {
-    pub fn insert<T: TypeErasedSnapshot + Clone + 'static>(&mut self, value: T) -> Option<T> {
+impl TypeSet {
+    pub fn insert<T: NativeValue + Clone + 'static>(&mut self, value: T) -> Option<T> {
         self.0
             .insert(TypeId::of::<T>(), Box::new(value))
             .map(|b| *b.downcast::<T>().unwrap())
@@ -32,7 +32,7 @@ impl StructSet {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for StructSet {
+impl serde::Serialize for TypeSet {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -50,7 +50,7 @@ impl serde::Serialize for StructSet {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for StructSet {
+impl<'de> serde::Deserialize<'de> for TypeSet {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -58,19 +58,19 @@ impl<'de> serde::Deserialize<'de> for StructSet {
         struct SeqVisitor;
 
         impl<'de> serde::de::Visitor<'de> for SeqVisitor {
-            type Value = StructSet;
+            type Value = TypeSet;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("StructSet")
+                formatter.write_str("TypeSet")
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let mut set = StructSet::default();
+                let mut set = TypeSet::default();
 
-                while let Some(element) = seq.next_element::<Box<dyn TypeErasedSnapshot>>()? {
+                while let Some(element) = seq.next_element::<Box<dyn NativeValue>>()? {
                     set.0.insert(element.type_id(), element);
                 }
 
