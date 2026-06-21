@@ -55,9 +55,15 @@ There are parts of Red Moon that won't work with rollback such as the `os` modul
 
 ### Functions
 
-Values entering the VM must support Clone, and should avoid interior mutability, as modifying shared data will affect the state of snapshots, and modified captures can not be serialized.
+Values entering the VM must support Clone, and should avoid interior mutability, as modifying shared data will affect the state of snapshots.
 
-Note: this is only an issue for Rc, interior mutability with direct ownership is acceptable.
+Note: this is only an issue for Rc, interior mutability with direct ownership is acceptable as long as serialization is not a requirement.
+
+Rust closures are prevented by default as implicit captures can not be seen by the VM for serialization.
+If serialization is not necessary, the `implicit_closures` feature can be enabled to loosen `fn` parameters to `impl Fn`.
+
+In any case, function references created from `ctx.create_function()` can use the `create_closure` method to create an explicit closure,
+which allows the VM to serialize and enforce serialization on captures.
 
 ```rust
 use red_moon::interpreter::Vm;
@@ -107,7 +113,7 @@ let f = ctx.create_function(|call_ctx, ctx| {
 
 Enabling the `serde` feature adds serialization support through [serde](https://crates.io/crates/serde).
 
-Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of Rust captures as serialization of implicit captures is not possible.
+Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of implicit captures as serialization of captures outside of explicit API methods is not possible.
 
 Rust functions can be tagged and reimplemented through the "rehydrate" function:
 
@@ -118,8 +124,20 @@ use red_moon::interpreter::{Vm, VmContext};
 use red_moon::values::{FunctionRef, Value};
 use red_moon::errors::RuntimeError;
 
-fn implement_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
-  let f = ctx.create_function(|call_ctx, ctx| call_ctx.return_values("hello", ctx));
+fn load_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
+  // Value implements Clone + Serialize + Deserialize + NativeValue
+  let count = Value::Integer(0);
+
+  let f = ctx.create_function(|call_ctx, ctx| {
+    let Some(Value::Integer(count)) = call_ctx.read_capture_mut::<Value>(ctx) else {
+      panic!("Failed to deserialize");
+    };
+
+    *count += 1;
+
+    call_ctx.return_values(*count, ctx)
+  })
+    .create_closure(count, ctx)?;
 
   // rehydrate our function using a tag
   // on the first run this will just tag our function
@@ -130,7 +148,7 @@ fn implement_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
   if !rehydrating {
     // if we're rehydrating we don't want to set values,
     // since a script may have written over our values
-    // and we want to keep in sync
+    // and we want to preserve the existing state
 
     let env = ctx.default_environment();
     env.set("foo", f, ctx)?;
@@ -143,11 +161,15 @@ let mut vm = Vm::default();
 let ctx = &mut vm.context();
 
 // implement some API
-implement_foo(ctx);
+load_foo(ctx);
 
-// copy a reference of foo to bar
+// test out foo
 let env = ctx.default_environment();
 let foo: Value = env.get("foo", ctx).unwrap();
+let result: i64 = foo.call((), ctx).unwrap();
+assert_eq!(result, 1);
+
+// copy a reference of foo to bar
 env.set("bar", foo, ctx).unwrap();
 
 // serialize for the network
@@ -160,13 +182,13 @@ let mut vm: Vm = bincode::deserialize(&serialized_vm).unwrap();
 let ctx = &mut vm.context();
 
 // rehydrate
-assert!(implement_foo(ctx).unwrap());
+assert!(load_foo(ctx).unwrap());
 
 // testing if bar was updated
 let env = ctx.default_environment();
 let bar: FunctionRef = env.get("bar", ctx).unwrap();
-let result: String = bar.call((), ctx).unwrap();
-assert_eq!(result, "hello");
+let result: i64 = bar.call((), ctx).unwrap();
+assert_eq!(result, 2);
 ```
 
 ## Lua Support
