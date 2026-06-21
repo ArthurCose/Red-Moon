@@ -1,23 +1,19 @@
-mod garbage_collector;
-mod heap_ref;
-mod ref_counter;
-
-pub use garbage_collector::*;
-pub(crate) use heap_ref::*;
-
 use super::coroutine::Coroutine;
 use super::interpreted_function::Function;
 use super::native_function::{NativeCallContext, NativeFunction};
+use super::ref_counter::*;
 use super::table::Table;
 use super::value_stack::StackValue;
 use crate::errors::RuntimeError;
+use crate::interpreter::garbage_collector::GarbageCollector;
 use crate::values::{ByteString, MultiValue, NativeValue};
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap};
 use indexmap::IndexMap;
-use ref_counter::*;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+pub(crate) use crate::interpreter::heap_ref::HeapRef;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -48,7 +44,7 @@ impl Storage {
         (key.as_ffi() & mask) | (tag << 32)
     }
 
-    fn keys(&self) -> impl Iterator<Item = StorageKey> + '_ {
+    pub(crate) fn keys(&self) -> impl Iterator<Item = StorageKey> + '_ {
         self.stack_values
             .keys()
             .map(StorageKey::from)

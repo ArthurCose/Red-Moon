@@ -2,9 +2,8 @@ use super::Continuation;
 use super::cache_pools::CachePools;
 use super::coroutine::{Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
-use super::heap::{
-    CoroutineObjectKey, GarbageCollector, GarbageCollectorConfig, Heap, NativeFnObjectKey,
-};
+use super::garbage_collector::{GarbageCollector, GarbageCollectorConfig};
+use super::heap::{CoroutineObjectKey, Heap, NativeFnObjectKey};
 use super::metatable_keys::MetatableKeys;
 use super::native_function::{NativeCallContext, NativeFunction};
 use super::value_stack::{StackValue, ValueStack};

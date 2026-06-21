@@ -1,6 +1,7 @@
 use crate::interpreter::ReturnMode;
 use crate::interpreter::execution::CallResult;
-use crate::interpreter::heap::{GarbageCollector, Heap, StorageKey};
+use crate::interpreter::garbage_collector::GarbageCollector;
+use crate::interpreter::heap::{Heap, StorageKey};
 use crate::interpreter::value_stack::{StackValue, ValueStack};
 use bitflags::bitflags;
 

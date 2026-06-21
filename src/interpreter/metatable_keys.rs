@@ -1,4 +1,5 @@
-use super::heap::{GarbageCollector, Heap};
+use super::garbage_collector::GarbageCollector;
+use super::heap::Heap;
 use crate::values::StringRef;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

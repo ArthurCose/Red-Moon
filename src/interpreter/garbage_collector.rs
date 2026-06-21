@@ -1,4 +1,4 @@
-use super::{FastStorageKey, Heap, NativeFnObjectKey, StorageKey, TableObjectKey};
+use super::heap::{FastStorageKey, Heap, NativeFnObjectKey, StorageKey, TableObjectKey};
 use crate::interpreter::Continuation;
 use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;

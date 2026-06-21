@@ -1,9 +1,12 @@
 mod debug_hooks;
+mod garbage_collector;
+mod heap_ref;
 mod instruction;
 mod interpreted_function;
 mod metatable_keys;
 mod module;
 mod native_function;
+mod ref_counter;
 mod type_set;
 mod up_values;
 mod vm;
@@ -19,7 +22,7 @@ pub(crate) mod value_stack;
 mod instruction_metrics;
 
 pub use debug_hooks::HookMask;
-pub use heap::GarbageCollectorConfig;
+pub use garbage_collector::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use module::{Chunk, Module, SourceMapping, UpValueSource};
 pub use native_function::NativeCallContext;

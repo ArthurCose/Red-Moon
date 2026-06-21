@@ -1,4 +1,4 @@
-use super::CounterRef;
+use super::ref_counter::CounterRef;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
