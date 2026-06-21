@@ -85,7 +85,7 @@ let f = ctx.create_function(move |call_ctx, ctx| {
 
 ## Serialization
 
-Enabling the `serde` feature enables serialization support through [serde](https://crates.io/crates/serde).
+Enabling the `serde` feature adds serialization support through [serde](https://crates.io/crates/serde).
 
 Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. App data is not serialized and must be handled separately from the VM. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of Rust captures as serialization of captures is not possible.
 
@@ -161,7 +161,7 @@ The garbage collector is incremental only.
 | `basic`     | ⚠️ Missing `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                                                |
 | `coroutine` | ⚠️ Missing `coroutine.close`                                                                                                                      |
 | `debug`     | ⚠️ Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.traceback`, `debug.gethook` and count support for `debug.sethook` |
-| `math`      | ⚠️ Missing `math.random` and `math.randomseed`                                                                                                    |
+| `math`      | ✅ Note: A time based seed is not supplied to `math.randomseed` for determinism.                                                                  |
 | `os`        | ⚠️ Only `os.clock`                                                                                                                                |
 | `package`   | ⛔ Not yet                                                                                                                                        |
 | `string`    | ⚠️ Missing `string.gmatch`, `string.gsub`, `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                   |

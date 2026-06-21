@@ -23,6 +23,8 @@ thin-vec = { version = "0.2", features = ["serde"] }
 erasable = "1"
 slice-dst = "1"
 bitflags = "2"
+rand = { version = "0.10", default-features = false }
+rand_xoshiro = "0.8"
 
 [dev-dependencies]
 pretty_assertions = "1"
@@ -38,7 +40,8 @@ serde = [
   "dep:erased-serde",
   "dep:typetag",
   "slotmap/serde",
-  "indexmap/serde"
+  "indexmap/serde",
+  "rand_xoshiro/serde",
 ]
 default = []
 

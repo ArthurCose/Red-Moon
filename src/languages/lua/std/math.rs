@@ -1,8 +1,24 @@
 use crate::errors::RuntimeError;
 use crate::interpreter::{IntoValue, NativeCallContext, Number, Value, VmContext};
 use crate::languages::lua::{coerce_integer, parse_number};
+use crate::tag_native_value;
+use rand::RngExt;
+use rand_xoshiro::Xoshiro256StarStar;
+use rand_xoshiro::rand_core::SeedableRng;
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+struct RedMoonRng {
+    rng: rand_xoshiro::Xoshiro256StarStar,
+}
+
+tag_native_value!(RedMoonRng);
 
 pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    ctx.set_singleton(RedMoonRng {
+        rng: Xoshiro256StarStar::from_seed(Default::default()),
+    });
+
     // abs
     let abs = ctx.create_function(|call_ctx, ctx| {
         let x = coerce_number(call_ctx, 1, ctx)?;
@@ -174,6 +190,75 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     rad.rehydrate("math.rad", ctx)?;
 
+    // random
+    let random = ctx.create_function(|call_ctx, ctx| {
+        let (n, m): (Option<i64>, Option<i64>) = call_ctx.get_args(ctx)?;
+
+        let Some(rng) = ctx.singleton_mut::<RedMoonRng>() else {
+            return Err(RuntimeError::new_static_string("missing rng struct"));
+        };
+
+        let rng = &mut rng.rng;
+
+        let Some(n) = n else {
+            return call_ctx.return_values(rng.random::<f64>(), ctx);
+        };
+
+        let Some(m) = m else {
+            if n < 0 {
+                return Err(RuntimeError::new_static_string(
+                    "bad argument #1 to 'random' (interval is empty)",
+                ));
+            }
+
+            if n == 0 {
+                return call_ctx.return_values(rng.random::<u64>(), ctx);
+            }
+
+            return call_ctx.return_values(rng.random_range(1..=n), ctx);
+        };
+
+        if m < n {
+            return Err(RuntimeError::new_static_string(
+                "bad argument #1 to 'random' (interval is empty)",
+            ));
+        }
+
+        call_ctx.return_values(rng.random_range(n..=m), ctx)
+    });
+    random.rehydrate("math.random", ctx)?;
+
+    // randomseed
+    let randomseed = ctx.create_function(|call_ctx, ctx| {
+        let (n, m): (Option<i64>, Option<i64>) = call_ctx.get_args(ctx)?;
+
+        let Some(rng) = ctx.singleton_mut::<RedMoonRng>() else {
+            return Err(RuntimeError::new_static_string("missing rng struct"));
+        };
+
+        let (n, m) = if let Some(n) = n {
+            (n, m.unwrap_or_default())
+        } else {
+            (0, 0)
+        };
+
+        // same seed logic as lua 5.4
+        let mut seed = [0u8; 32];
+
+        seed[..8].copy_from_slice(&n.to_le_bytes());
+        seed[8..16].copy_from_slice(&(0xFFu64.to_le_bytes()));
+        seed[16..24].copy_from_slice(&m.to_le_bytes());
+
+        rng.rng = Xoshiro256StarStar::from_seed(seed);
+
+        for _ in 0..16 {
+            rng.rng.random::<i64>();
+        }
+
+        call_ctx.return_values((n, m), ctx)
+    });
+    randomseed.rehydrate("math.randomseed", ctx)?;
+
     // sin
     let sin = ctx.create_function(|call_ctx, ctx| {
         let x: f64 = call_ctx.get_args(ctx)?;
@@ -254,6 +339,8 @@ pub fn impl_math(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         math.raw_set("modf", modf, ctx)?;
         math.raw_set("pi", std::f64::consts::PI, ctx)?;
         math.raw_set("rad", rad, ctx)?;
+        math.raw_set("random", random, ctx)?;
+        math.raw_set("randomseed", randomseed, ctx)?;
         math.raw_set("sin", sin, ctx)?;
         math.raw_set("sqrt", sqrt, ctx)?;
         math.raw_set("tan", tan, ctx)?;
