@@ -5,8 +5,7 @@ use crate::languages::lua::parse_number;
 pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // byte
     let byte = ctx.create_function(|call_ctx, ctx| {
-        let (string, start, end): (StringRef, Option<isize>, Option<isize>) =
-            call_ctx.get_args(ctx)?;
+        let (string, start, end): (StringRef, Option<i64>, Option<i64>) = call_ctx.get_args(ctx)?;
 
         let mut multi = ctx.create_multi();
 
@@ -107,7 +106,7 @@ pub fn impl_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // sub
     let sub = ctx.create_function(|call_ctx, ctx| {
-        let (string, start, end): (ByteString, isize, Option<isize>) = call_ctx.get_args(ctx)?;
+        let (string, start, end): (ByteString, i64, Option<i64>) = call_ctx.get_args(ctx)?;
         let bytes = string.as_bytes();
 
         let range = remap_range(bytes, Some(start), end, |bytes, _| bytes.len() as _);
@@ -292,9 +291,9 @@ fn coerce_float(value: &Value, ctx: &mut VmContext) -> Option<f64> {
 
 fn remap_range(
     bytes: &[u8],
-    start: Option<isize>,
-    end: Option<isize>,
-    default_end: fn(&[u8], isize) -> isize,
+    start: Option<i64>,
+    end: Option<i64>,
+    default_end: fn(&[u8], i64) -> i64,
 ) -> std::ops::Range<usize> {
     let mut start = start.unwrap_or(1);
 
@@ -309,13 +308,13 @@ fn remap_range(
     });
 
     if start < 0 {
-        start = (bytes.len() as isize).saturating_add(start) + 1;
+        start = (bytes.len() as i64).saturating_add(start) + 1;
     } else if start == 0 {
         start = 1;
     }
 
     if end < 0 {
-        end = (bytes.len() as isize).saturating_add(end) + 1;
+        end = (bytes.len() as i64).saturating_add(end) + 1;
     } else if end == 0 {
         end = 1;
     }
@@ -324,8 +323,8 @@ fn remap_range(
     start -= 1;
 
     // keep within bounds
-    let start = start.clamp(0, bytes.len() as isize) as usize;
-    let end = end.clamp(0, bytes.len() as isize) as usize;
+    let start = start.clamp(0, bytes.len() as i64) as usize;
+    let end = end.clamp(0, bytes.len() as i64) as usize;
 
     if start < end { start..end } else { 0..0 }
 }
