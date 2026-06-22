@@ -99,6 +99,29 @@ pub(crate) fn parse_string<'source>(
                     bytes_vec.push(*b);
                     i += 1;
                 }
+                // hex
+                b'x' => {
+                    i += 1;
+
+                    let mut b: u8 = 0;
+
+                    for _ in 0..2 {
+                        let Some(digit) = bytes_slice.get(i).and_then(|d| parse_hex_digit(*d))
+                        else {
+                            return Err(SyntaxError {
+                                source_position: SourcePosition::new(source, token.offset + i),
+                                data: SyntaxErrorData::UnexpectedCharacter,
+                            });
+                        };
+
+                        b <<= 4;
+                        b |= digit;
+
+                        i += 1;
+                    }
+
+                    bytes_vec.push(b);
+                }
                 // skip any following whitespace characters
                 b'z' => {
                     i += 1;
@@ -210,6 +233,17 @@ pub(crate) fn parse_unsigned_number(s: &str) -> Option<Number> {
     Some(Number::Float(float))
 }
 
+fn parse_hex_digit(byte: u8) -> Option<u8> {
+    let digit = match byte {
+        b'A'..=b'F' => byte - b'A' + 10,
+        b'a'..=b'f' => byte - b'a' + 10,
+        b'0'..=b'9' => byte - b'0',
+        _ => return None,
+    };
+
+    Some(digit)
+}
+
 /// Trims input
 pub fn parse_number(mut s: &str) -> Option<Number> {
     s = s.trim();
@@ -252,8 +286,8 @@ mod test {
 
     #[test]
     fn string_parsing() {
-        let source = r#""\a \b \f \n \r \t \v \\ \" \' \z    b""#;
-        let expected = b"\x07 \x08 \x0C \x0A \x0D \x09 \x0B \\ \" ' b";
+        let source = r#""\a \b \f \n \r \t \v \\ \" \' \xFF \z    b""#;
+        let expected = b"\x07 \x08 \x0C \x0A \x0D \x09 \x0B \\ \" ' \xFF b";
 
         let lexer = LuaLexer::default();
         let mut token_iter = lexer.lex(source);
