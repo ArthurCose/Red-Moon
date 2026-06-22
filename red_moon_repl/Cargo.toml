@@ -1,5 +1,5 @@
 [package]
-name = "red_moon_cli"
+name = "red_moon_repl"
 version.workspace = true
 edition = "2021"
 

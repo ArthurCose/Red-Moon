@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["red_moon_cli", "red_moon_mlua"]
+members = ["red_moon_repl", "red_moon_mlua"]
 
 [workspace.package]
 version = "0.1.0"

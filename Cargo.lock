@@ -694,16 +694,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "red_moon_cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "red_moon",
- "rustyline",
- "tabled",
-]
-
-[[package]]
 name = "red_moon_mlua"
 version = "0.1.0"
 dependencies = [
@@ -719,6 +709,16 @@ dependencies = [
  "serde_json",
  "slotmap",
  "static_assertions",
+]
+
+[[package]]
+name = "red_moon_repl"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "red_moon",
+ "rustyline",
+ "tabled",
 ]
 
 [[package]]
