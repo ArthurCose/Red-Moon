@@ -88,6 +88,12 @@ impl Value {
         matches!(self, Self::Nil)
     }
 
+    /// Returns true if the value isn't explicitly false or nil.
+    #[inline]
+    pub fn is_truthy(&self) -> bool {
+        !matches!(self, Self::Nil | Self::Bool(false))
+    }
+
     #[inline]
     pub fn as_number(&self) -> Option<Number> {
         match self {
