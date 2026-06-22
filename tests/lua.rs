@@ -52,7 +52,7 @@ fn valid() {
         .create_function(|call_ctx, ctx| {
             let len = call_ctx.arg_count();
 
-            let out_capture: &PrintCapture = call_ctx.read_capture(ctx).unwrap();
+            let out_capture: &PrintCapture = call_ctx.get_capture(ctx).unwrap();
             let out_capture = out_capture.out.clone();
             let mut out = out_capture.borrow_mut();
 

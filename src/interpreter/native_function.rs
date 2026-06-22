@@ -80,13 +80,13 @@ impl NativeCallContext {
         Some(*prev_capture.downcast().ok()?)
     }
 
-    pub fn read_capture<'vm, V: NativeValue>(&self, ctx: &'vm VmContext) -> Option<&'vm V> {
+    pub fn get_capture<'vm, V: NativeValue>(&self, ctx: &'vm VmContext) -> Option<&'vm V> {
         let heap = &ctx.vm.execution_data.heap;
         let capture = heap.storage.captures.get(&self.key)?;
         capture.downcast_ref().ok()
     }
 
-    pub fn read_capture_mut<'vm, V: NativeValue>(
+    pub fn get_capture_mut<'vm, V: NativeValue>(
         &self,
         ctx: &'vm mut VmContext,
     ) -> Option<&'vm mut V> {

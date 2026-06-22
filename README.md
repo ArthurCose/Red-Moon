@@ -102,7 +102,7 @@ tag_native_type!(Counter);
 
 let f = ctx.create_function(|call_ctx, ctx| {
   // data is stored in the Vm, we're free to modify it without serialization issues
-  let capture = call_ctx.read_capture_mut::<Counter>(ctx).unwrap();
+  let capture = call_ctx.get_capture_mut::<Counter>(ctx).unwrap();
   capture.0 += 1;
 
   call_ctx.return_values(capture.0, ctx)
@@ -129,7 +129,7 @@ fn load_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
   let count = Value::Integer(0);
 
   let f = ctx.create_function(|call_ctx, ctx| {
-    let Some(Value::Integer(count)) = call_ctx.read_capture_mut::<Value>(ctx) else {
+    let Some(Value::Integer(count)) = call_ctx.get_capture_mut::<Value>(ctx) else {
       panic!("Failed to deserialize");
     };
 

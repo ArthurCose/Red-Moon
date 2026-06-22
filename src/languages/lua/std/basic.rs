@@ -252,7 +252,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let ipairs = ctx.create_function(|call_ctx, ctx| {
         let table: TableRef = call_ctx.get_args(ctx)?;
 
-        let Some(ipairs_iterator) = call_ctx.read_capture::<FunctionRef>(ctx) else {
+        let Some(ipairs_iterator) = call_ctx.get_capture::<FunctionRef>(ctx) else {
             return Ok(());
         };
 
@@ -288,7 +288,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let pairs = ctx.create_function(|call_ctx, ctx| {
         let table: TableRef = call_ctx.get_args(ctx)?;
 
-        let Some(pairs_iterator) = call_ctx.read_capture::<FunctionRef>(ctx) else {
+        let Some(pairs_iterator) = call_ctx.get_capture::<FunctionRef>(ctx) else {
             return Ok(());
         };
 

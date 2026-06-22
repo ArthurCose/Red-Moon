@@ -79,7 +79,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let wrapped = ctx.create_function(|call_ctx, ctx| {
         let args: MultiValue = call_ctx.get_args(ctx)?;
 
-        if let Some(co) = call_ctx.read_capture::<CoroutineRef>(ctx) {
+        if let Some(co) = call_ctx.get_capture::<CoroutineRef>(ctx) {
             let values = co.clone().resume(args, ctx)?;
             call_ctx.return_values(values, ctx)?;
         }
@@ -92,7 +92,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let function = call_ctx.get_args(ctx)?;
         let co = ctx.create_coroutine(function)?;
 
-        if let Some(f) = call_ctx.read_capture::<FunctionRef>(ctx) {
+        if let Some(f) = call_ctx.get_capture::<FunctionRef>(ctx) {
             let f = f.clone().create_closure(co, ctx)?;
             call_ctx.return_values(f, ctx)?;
         }
