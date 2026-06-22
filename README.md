@@ -106,7 +106,7 @@ let f = ctx.create_function(|call_ctx, ctx| {
   capture.0 += 1;
 
   call_ctx.return_values(capture.0, ctx)
-}).create_closure(Counter(1), ctx);
+}).create_closure(Counter(1), ctx); // explicit capture
 ```
 
 ## Serialization
@@ -137,7 +137,7 @@ fn load_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
 
     call_ctx.return_values(*count, ctx)
   })
-    .create_closure(count, ctx)?;
+    .create_closure(count, ctx)?; // explicit capture, serializes with the VM
 
   // rehydrate our function using a tag
   // on the first run this will just tag our function
@@ -147,7 +147,7 @@ fn load_foo(ctx: &mut VmContext) -> Result<bool, RuntimeError> {
 
   if !rehydrating {
     // if we're rehydrating we don't want to set values,
-    // since a script may have written over our values
+    // since the previous execution may have written over our values
     // and we want to preserve the existing state
 
     let env = ctx.default_environment();
