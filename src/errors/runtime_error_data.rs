@@ -47,6 +47,7 @@ pub enum RuntimeErrorData {
         expected: TypeName,
         received: TypeName,
     },
+    ValueOutOfRange,
     #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_native_err"))]
     #[cfg_attr(feature = "serde", serde(deserialize_with = "deserialize_native_err"))]
     NativeError(NativeError),
@@ -163,6 +164,9 @@ impl std::fmt::Display for RuntimeErrorData {
             }
             RuntimeErrorData::ExpectedType { expected, received } => {
                 write!(f, "{expected} expected, got {received}")
+            }
+            RuntimeErrorData::ValueOutOfRange => {
+                write!(f, "value out of range")
             }
             RuntimeErrorData::NativeError(err) => write!(f, "{err}"),
             RuntimeErrorData::ByteString(s) => write!(f, "{s}"),

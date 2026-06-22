@@ -641,7 +641,38 @@ impl FromValue for bool {
     }
 }
 
-macro_rules! number_from_value {
+macro_rules! int_from_value {
+    ($name:ty) => {
+        impl FromValue for $name {
+            #[inline]
+            fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
+                let i = match value {
+                    Value::Integer(i) => i,
+                    Value::Float(f) => f as i64,
+                    Value::String(s)
+                        if let Some(number) = parse_number(&*s.fetch(ctx)?.to_string_lossy()) =>
+                    {
+                        match number {
+                            Number::Integer(i) => i,
+                            Number::Float(f) => f as i64,
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeErrorData::ExpectedType {
+                            expected: TypeName::Number,
+                            received: value.type_name(),
+                        }
+                        .into());
+                    }
+                };
+
+                <$name>::try_from(i).map_err(|_| RuntimeErrorData::ValueOutOfRange.into())
+            }
+        }
+    };
+}
+
+macro_rules! float_from_value {
     ($name:ty) => {
         impl FromValue for $name {
             #[inline]
@@ -670,15 +701,15 @@ macro_rules! number_from_value {
     };
 }
 
-number_from_value!(i8);
-number_from_value!(i16);
-number_from_value!(i32);
-number_from_value!(i64);
-number_from_value!(isize);
-number_from_value!(u8);
-number_from_value!(u16);
-number_from_value!(u32);
-number_from_value!(u64);
-number_from_value!(usize);
-number_from_value!(f32);
-number_from_value!(f64);
+int_from_value!(i8);
+int_from_value!(i16);
+int_from_value!(i32);
+int_from_value!(i64);
+int_from_value!(isize);
+int_from_value!(u8);
+int_from_value!(u16);
+int_from_value!(u32);
+int_from_value!(u64);
+int_from_value!(usize);
+float_from_value!(f32);
+float_from_value!(f64);
