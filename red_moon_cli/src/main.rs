@@ -212,6 +212,9 @@ fn repl(vm: &mut Vm) -> Result<(), ()> {
                 match compile(&input_buffer) {
                     Ok(module) => module,
                     Err(err) => {
+                        // store the original input in the history to allow the user to try to fix it
+                        let _ = rl.add_history_entry(&input_buffer);
+
                         // give up and report error
                         println!("stdin:{err}");
                         input_buffer.clear();
