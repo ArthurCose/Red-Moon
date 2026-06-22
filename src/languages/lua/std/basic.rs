@@ -204,6 +204,15 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     rawget.rehydrate("lua.rawget", ctx)?;
 
+    // rawlen
+    let rawlen = ctx.create_function(|call_ctx, ctx| {
+        let table: TableRef = call_ctx.get_args(ctx)?;
+        let len = table.raw_len(ctx)?;
+
+        call_ctx.return_values(len, ctx)
+    });
+    rawlen.rehydrate("lua.rawlen", ctx)?;
+
     // rawset
     let rawset = ctx.create_function(|call_ctx, ctx| {
         let (table, key, value): (TableRef, Value, Value) = call_ctx.get_args(ctx)?;
@@ -627,6 +636,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         env.set("setmetatable", setmetatable, ctx)?;
         env.set("rawequal", rawequal, ctx)?;
         env.set("rawget", rawget, ctx)?;
+        env.set("rawlen", rawlen, ctx)?;
         env.set("rawset", rawset, ctx)?;
         env.set("next", next, ctx)?;
         env.set("ipairs", ipairs, ctx)?;
