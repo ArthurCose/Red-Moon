@@ -60,6 +60,10 @@ pub(crate) fn parse_string<'source>(
 
         if let Some(b) = bytes_slice.get(i) {
             match b {
+                b'0' => {
+                    bytes_vec.push(0);
+                    i += 1;
+                }
                 // bell
                 b'a' => {
                     bytes_vec.push(7);
