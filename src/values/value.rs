@@ -534,15 +534,17 @@ impl<T: FromValue> FromValue for Option<T> {
 
 impl FromValue for StringRef {
     #[inline]
-    fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
-        if let Value::String(string_ref) = value {
-            Ok(string_ref)
-        } else {
-            Err(RuntimeErrorData::ExpectedType {
+    fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
+        match value {
+            Value::String(string_ref) => Ok(string_ref),
+            _ if let Some(number) = value.as_number() => {
+                Ok(ctx.intern_string(number.to_string().as_bytes()))
+            }
+            _ => Err(RuntimeErrorData::ExpectedType {
                 expected: TypeName::String,
                 received: value.type_name(),
             }
-            .into())
+            .into()),
         }
     }
 }
@@ -595,31 +597,40 @@ impl FromValue for CoroutineRef {
 impl FromValue for String {
     #[inline]
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
-        let Value::String(string_ref) = value else {
-            return Err(RuntimeErrorData::ExpectedType {
-                expected: TypeName::String,
-                received: value.type_name(),
+        let s = match value {
+            Value::String(string_ref) => string_ref.fetch(ctx)?.to_string_lossy().into_owned(),
+            _ if let Some(number) = value.as_number() => number.to_string(),
+            _ => {
+                return Err(RuntimeErrorData::ExpectedType {
+                    expected: TypeName::String,
+                    received: value.type_name(),
+                }
+                .into());
             }
-            .into());
         };
 
-        let s = string_ref.fetch(ctx)?.to_string_lossy();
-        Ok(s.into_owned())
+        Ok(s)
     }
 }
 
 impl FromValue for ByteString {
     #[inline]
     fn from_value(value: Value, ctx: &mut VmContext) -> Result<Self, RuntimeError> {
-        let Value::String(string_ref) = value else {
-            return Err(RuntimeErrorData::ExpectedType {
-                expected: TypeName::String,
-                received: value.type_name(),
+        let s = match value {
+            Value::String(string_ref) => string_ref.fetch(ctx)?.clone(),
+            _ if let Some(number) = value.as_number() => {
+                ByteString::from(number.to_string().as_bytes())
             }
-            .into());
+            _ => {
+                return Err(RuntimeErrorData::ExpectedType {
+                    expected: TypeName::String,
+                    received: value.type_name(),
+                }
+                .into());
+            }
         };
 
-        Ok(string_ref.fetch(ctx)?.clone())
+        Ok(s)
     }
 }
 
