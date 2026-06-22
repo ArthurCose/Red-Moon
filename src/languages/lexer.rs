@@ -74,7 +74,11 @@ impl<Label: Copy> Lexer<Label> {
     fn lex_token(&self, source: &str, start: usize) -> Option<(Label, usize)> {
         let max_test_len = self.longest_token.min(source.len() - start);
         for len in (1..=max_test_len).rev() {
-            if let Some(label) = self.tokens.get(&source[start..start + len]) {
+            let Some(substr) = source.get(start..start + len) else {
+                continue;
+            };
+
+            if let Some(label) = self.tokens.get(substr) {
                 return Some((*label, len));
             }
         }

@@ -112,14 +112,15 @@ impl Default for LuaLexer {
         lexer.add_lexer(move |_, source, start| {
             let first_char = source[start..].chars().next().unwrap();
 
-            if !first_char.is_alphabetic() && first_char != '_' {
+            if !first_char.is_ascii_alphabetic() && first_char != '_' {
                 return None;
             }
 
             let word_len = source[start + 1..]
                 .chars()
                 .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .count()
+                .map(|c| c.len_utf8())
+                .sum::<usize>()
                 + 1;
 
             let word = &source[start..start + word_len];
@@ -144,7 +145,7 @@ impl Default for LuaLexer {
 
             let mut previous_char = '"';
 
-            let string_length = &source_substr[1..]
+            let string_length: usize = source_substr[1..]
                 .chars()
                 .take_while(|c| {
                     let c = *c;
@@ -154,7 +155,8 @@ impl Default for LuaLexer {
 
                     !is_end
                 })
-                .count();
+                .map(|c| c.len_utf8())
+                .sum();
 
             let last_char = source_substr[string_length + 1..].chars().next();
 
@@ -224,8 +226,8 @@ impl Default for LuaLexer {
         // whitespace
         lexer.add_ignorer(|source, start| {
             source[start..]
-                .chars()
-                .take_while(|c| c.is_whitespace())
+                .bytes()
+                .take_while(|c| c.is_ascii_whitespace())
                 .count()
         });
 
@@ -325,6 +327,19 @@ mod test {
                 (token.label, token.content),
                 (LuaTokenLabel::StringLiteral, s)
             );
+        }
+    }
+
+    #[test]
+    fn utf8() {
+        let strings = ["test(\"あ23\")"];
+
+        let lexer = LuaLexer::default();
+
+        for s in strings {
+            for token in lexer.lex(s) {
+                token.unwrap();
+            }
         }
     }
 }
