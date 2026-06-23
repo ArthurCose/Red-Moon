@@ -132,7 +132,9 @@ impl GarbageCollector {
         self.phase_queue.push(key);
     }
 
-    pub(crate) fn revive(&mut self, key: StorageKey) {
+    /// Resurrects a single object during the sweep phase,
+    /// as long as the object hasn't already been deleted.
+    pub(crate) fn shallow_revive(&mut self, key: StorageKey) {
         if self.phase == Phase::Sweep {
             self.marked.insert(key.into(), Mark::Black);
         }
