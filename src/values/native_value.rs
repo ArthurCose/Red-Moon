@@ -41,6 +41,19 @@ impl Clone for Box<dyn NativeValue> {
 
 downcast::downcast!(dyn NativeValue);
 
+/// Implements [NativeValue] and applies `typetag::serde` when the `serde` feature is enabled.
+///
+/// ```
+/// # #![cfg(feature = "serde")]
+/// use red_moon::values::tag_native_type;
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Clone, Serialize, Deserialize)]
+/// struct MySingleton {}
+///
+/// // required only when the "serde" feature is enabled, has no effect otherwise
+/// tag_native_type!(MySingleton);
+/// ```
 #[cfg(feature = "serde")]
 #[macro_export]
 macro_rules! tag_native_type {
@@ -50,6 +63,19 @@ macro_rules! tag_native_type {
     };
 }
 
+/// Implements [NativeValue] and applies `typetag::serde` when the `serde` feature is enabled.
+///
+/// ```
+/// # #![cfg(feature = "serde")]
+/// use red_moon::values::tag_native_type;
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Clone, Serialize, Deserialize)]
+/// struct MySingleton {}
+///
+/// // required only when the "serde" feature is enabled, has no effect otherwise
+/// tag_native_type!(MySingleton);
+/// ```
 #[cfg(not(feature = "serde"))]
 #[macro_export]
 macro_rules! tag_native_type {
