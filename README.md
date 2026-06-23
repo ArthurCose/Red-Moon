@@ -6,18 +6,24 @@ A Lua VM designed for multiplayer games with player-made scripts.
 
 - Safe and Sandboxed
   - For sharing untrusted custom content between players
-- Rollback
-  - A primary motivation, ensuring Lua fully works with rollback, by allowing the entire VM to be cloned and preventing clones from accidentally modifying each other
+- Determinism and Rollback
+  - A primary motivation, ensuring Lua is fully capable of rollback, by allowing the entire VM to be cloned and preventing clones from accidentally modifying each other
 - Serialization
   - For allowing players to spectate or join in the middle of an active game
 
-## Safety
+## Sandboxing
 
 Parts of the standard library that are unsafe for untrusted code are kept obvious in Red Moon, such as `io` and `os`.
 
 For unsafe functions in non-obvious parts of Lua's standard library:
 
 `require()` is currently unimplemented. When it is implemented: there will be no support for loading C libraries (to prevent execution of untrusted files that could be on the system from other programs, as well as inherent compatibility issues).
+
+## Determinism
+
+`pairs` and `next` iterate based on insertion order for map keys.
+
+`math.randomseed` always uses 0, 0 as a default instead of the system time.
 
 ## Rollback
 
@@ -50,8 +56,6 @@ let ctx = &mut vm.context();
 let a: i32 = env.get("a", ctx).unwrap();
 assert_eq!(a, 1);
 ```
-
-There are parts of Red Moon that won't work with rollback such as the `os` module.
 
 ### Functions
 
@@ -190,6 +194,10 @@ let bar: FunctionRef = env.get("bar", ctx).unwrap();
 let result: i64 = bar.call((), ctx).unwrap();
 assert_eq!(result, 2);
 ```
+
+Something to note: Refs, such as `FunctionRef` are serializable, but should not serialize from outside the VM. Any ref deserialized outside of the VM can be garbage collected while still live.
+
+To properly serialize a Ref, it can be stored with `ctx.set_singleton()`, `function_ref.create_closure()`, or similar.
 
 ## Lua Support
 
