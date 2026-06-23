@@ -57,17 +57,11 @@ let a: i32 = env.get("a", ctx).unwrap();
 assert_eq!(a, 1);
 ```
 
-### Functions
+### Closures
 
-Values entering the VM must support Clone, and should avoid interior mutability, as modifying shared data will affect the state of snapshots.
+Values entering the VM must support Clone, and should avoid shared interior mutability, as modifying shared data will affect the state of snapshots.
 
-Note: this is only an issue for Rc, interior mutability with direct ownership is acceptable as long as serialization is not a requirement.
-
-Rust closures are prevented by default as implicit captures can not be seen by the VM for serialization.
-If serialization is not necessary, the `implicit_closures` feature can be enabled to loosen `fn` parameters to `impl Fn`.
-
-In any case, function references created from `ctx.create_function()` can use the `create_closure` method to create an explicit closure,
-which allows the VM to serialize and enforce serialization on captures.
+Note: this is only an issue for interior mutability with shared ownership, such as Rc. Interior mutability with direct ownership is acceptable as long as serialization is not a requirement.
 
 ```rust
 use red_moon::interpreter::Vm;
@@ -92,8 +86,15 @@ let f = ctx.create_function(move |call_ctx, ctx| {
 
   call_ctx.return_values(rc_counter.get() + *data + count, ctx)
 });
+```
 
-// the "implicit_closures" feature isn't enabled by default as data captured by a Rust closure can't be serialized
+Rust closures are prevented by default as implicit captures can not be seen by the VM for serialization.
+If serialization is not necessary, the `implicit_closures` feature can be enabled to loosen `fn` parameters to `impl Fn`.
+
+In any case, function references created from `ctx.create_function()` can use the `create_closure` method to create an explicit closure,
+which allows the VM to serialize and enforce serialization on captures.
+
+```rust
 use red_moon::values::tag_native_type;
 
 #[derive(Clone)]
@@ -117,9 +118,11 @@ let f = ctx.create_function(|call_ctx, ctx| {
 
 Enabling the `serde` feature adds serialization support through [serde](https://crates.io/crates/serde).
 
-Lua values and functions are serialized without issue, but special attention is necessary for app data and Rust functions. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of implicit captures as serialization of captures outside of explicit API methods is not possible.
+Data stored directly within the VM is serialized without issue, but special attention is necessary for external data and Rust functions. Dynamically creating Rust functions should be avoided to allow for "rehydration", also be mindful of implicit captures as serialization of captures outside of explicit API methods is not possible.
 
-Rust functions can be tagged and reimplemented through the "rehydrate" function:
+As for external data: Refs, such as `FunctionRef`, should not be serialized from outside the VM. Any ref deserialized outside of the VM can be garbage collected while still live.
+
+To properly serialize a Ref, it can be stored with `ctx.set_singleton()`, `function_ref.create_closure()`, or similar.
 
 ```rust
 #![cfg(feature = "serde")]
@@ -194,10 +197,6 @@ let bar: FunctionRef = env.get("bar", ctx).unwrap();
 let result: i64 = bar.call((), ctx).unwrap();
 assert_eq!(result, 2);
 ```
-
-Something to note: Refs, such as `FunctionRef` are serializable, but should not serialize from outside the VM. Any ref deserialized outside of the VM can be garbage collected while still live.
-
-To properly serialize a Ref, it can be stored with `ctx.set_singleton()`, `function_ref.create_closure()`, or similar.
 
 ## Lua Support
 
