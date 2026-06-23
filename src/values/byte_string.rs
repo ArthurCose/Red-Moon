@@ -9,7 +9,7 @@ use {
     serde::{Deserialize, Serialize},
 };
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ByteString(
     #[cfg_attr(feature = "serde", serde(with = "serde_u8_thin_slice_rc"))]
@@ -98,5 +98,16 @@ impl std::borrow::Borrow<[u8]> for ByteString {
 impl std::fmt::Display for ByteString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.to_string_lossy(), f)
+    }
+}
+
+impl std::fmt::Debug for ByteString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let bytes = self.as_bytes();
+
+        match str::from_utf8(bytes) {
+            Ok(s) => write!(f, "{s:?}"),
+            Err(_) => write!(f, "{bytes:?}"),
+        }
     }
 }
