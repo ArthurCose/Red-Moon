@@ -475,6 +475,13 @@ impl IntoValue for &str {
     }
 }
 
+impl IntoValue for ByteString {
+    #[inline]
+    fn into_value(self, ctx: &mut VmContext) -> Result<Value, RuntimeError> {
+        Ok(Value::String(ctx.intern_string(self.as_bytes())))
+    }
+}
+
 impl IntoValue for bool {
     #[inline]
     fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
