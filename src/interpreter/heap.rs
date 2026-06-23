@@ -328,6 +328,7 @@ impl Heap {
         bytes: &[u8],
     ) -> BytesObjectKey {
         if let Some(&key) = self.byte_strings.get(bytes) {
+            gc.revive(key.into());
             return key;
         }
 

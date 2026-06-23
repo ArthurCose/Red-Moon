@@ -42,7 +42,7 @@ impl Default for GarbageCollectorConfig {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     #[default]
     Idle,
@@ -51,7 +51,7 @@ enum Phase {
     Stopped,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 enum Mark {
     Black,
     Gray,
@@ -130,6 +130,12 @@ impl GarbageCollector {
         // mark as gray again and place in the queue
         *mark = Mark::Gray;
         self.phase_queue.push(key);
+    }
+
+    pub(crate) fn revive(&mut self, key: StorageKey) {
+        if self.phase == Phase::Sweep {
+            self.marked.insert(key.into(), Mark::Black);
+        }
     }
 
     pub(crate) fn is_running(&self) -> bool {
@@ -314,6 +320,11 @@ impl GarbageCollector {
         let mut delete_count = 0;
 
         while let Some(key) = self.phase_queue.pop() {
+            if self.marked.get(&key.into()) == Some(&Mark::Black) {
+                // revived
+                continue;
+            }
+
             // clear weak associations
             if let Some(list) = self.weak_associations.remove(&key.into()) {
                 let key_stack_value: StackValue = key.into();
