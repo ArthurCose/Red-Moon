@@ -95,6 +95,7 @@ In any case, function references created from `ctx.create_function()` can use th
 which allows the VM to serialize and enforce serialization on captures.
 
 ```rust
+use red_moon::interpreter::Vm;
 use red_moon::values::tag_native_type;
 
 #[derive(Clone)]
@@ -104,6 +105,9 @@ struct Counter(i64);
 // if serde isn't enabled it's not necessary to include this,
 // but it doesn't hurt to leave in
 tag_native_type!(Counter);
+
+let mut vm = Vm::default();
+let ctx = &mut vm.context();
 
 let f = ctx.create_function(|call_ctx, ctx| {
   // data is stored in the Vm, we're free to modify it without serialization issues

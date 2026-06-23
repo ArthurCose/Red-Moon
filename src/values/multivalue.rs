@@ -124,10 +124,11 @@ impl<T> MultiValue<T> {
         self.values.is_empty()
     }
 
+    /// Get a value using a zero based index.
     #[inline]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.values.len() {
-            return self.values.get(self.values.len() - index - 1);
+            return self.values.get(self.values.len() - index);
         }
         None
     }

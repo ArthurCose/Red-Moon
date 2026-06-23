@@ -4,7 +4,6 @@
 ///
 /// Automatically derived if the "serde" flag is not enabled, [tag_native_type] can be used otherwise.
 ///
-/// ### impl Example
 /// ```
 /// # #![cfg(feature = "serde")]
 /// use red_moon::values::tag_native_type;
