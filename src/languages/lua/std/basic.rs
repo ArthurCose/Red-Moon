@@ -312,7 +312,9 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let select = ctx.create_function(|call_ctx, ctx| {
         let arg: Value = call_ctx.get_arg(0, ctx)?;
 
-        if let Ok(s) = ByteString::from_value(arg.clone(), ctx) {
+        if let Some(string_ref) = arg.as_string_ref()
+            && let Ok(s) = string_ref.fetch(ctx)
+        {
             let len = call_ctx.arg_count() - 1;
 
             if s.as_bytes() != b"#" {
