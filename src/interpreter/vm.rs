@@ -802,7 +802,7 @@ impl VmContext<'_> {
         gc.modify_used_memory(-(bytes as isize));
     }
 
-    fn try_gc_step(&mut self) {
+    pub(crate) fn try_gc_step(&mut self) {
         let exec_data = &mut self.vm.execution_data;
         let gc = &mut exec_data.gc;
         let heap = &mut exec_data.heap;

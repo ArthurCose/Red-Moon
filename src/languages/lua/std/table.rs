@@ -114,7 +114,33 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     unpack.rehydrate("table.unpack", ctx)?;
 
-    // todo: table.move() https://www.lua.org/manual/5.4/manual.html#pdf-table.move
+    // move
+    let table_move = ctx.create_function(|call_ctx, ctx| {
+        let (src_table, src_start, src_end, dest_start, dest_table): (
+            TableRef,
+            i64,
+            i64,
+            i64,
+            Option<TableRef>,
+        ) = call_ctx.get_args(ctx)?;
+
+        let src_start = usize::try_from(src_start).unwrap_or(0);
+        let src_end = usize::try_from(src_end).unwrap_or(0);
+        let dest_table = dest_table.unwrap_or_else(|| src_table.clone());
+
+        if src_start > src_end {
+            return Ok(());
+        }
+
+        let len = src_end.saturating_sub(1) - src_start.saturating_sub(1) + 1;
+        let dest_start = usize::try_from(dest_start).unwrap_or(0);
+
+        dest_table.copy_from(src_start, dest_start, len, &src_table, ctx)?;
+
+        call_ctx.return_values(dest_table, ctx)
+    });
+    table_move.rehydrate("table.move", ctx)?;
+
     // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort
 
     if !rehydrating {
@@ -124,6 +150,7 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         table.raw_set("remove", remove, ctx)?;
         table.raw_set("pack", pack, ctx)?;
         table.raw_set("unpack", unpack, ctx)?;
+        table.raw_set("move", table_move, ctx)?;
 
         let env = ctx.default_environment();
         env.set("table", table, ctx)?;

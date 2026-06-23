@@ -368,6 +368,18 @@ impl Heap {
         self.storage.tables.get_mut(key)
     }
 
+    pub(crate) fn get_disjoint_mut<const N: usize>(
+        &mut self,
+        gc: &mut GarbageCollector,
+        keys: [TableObjectKey; N],
+    ) -> Option<[&mut Table; N]> {
+        for key in keys {
+            gc.acknowledge_write(key.into());
+        }
+
+        self.storage.tables.get_disjoint_mut(keys)
+    }
+
     pub(crate) fn get_interpreted_fn(&self, key: FnObjectKey) -> Option<&Function> {
         self.storage.functions.get(key)
     }

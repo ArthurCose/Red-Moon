@@ -204,11 +204,11 @@ The garbage collector is incremental only.
 | `basic`     |  23 / 26 | Missing `dofile`, `require`, `warn` and level parameter for `error`. `load` and `loadfile` can't read binary chunks.                           |
 | `coroutine` |    7 / 8 | Missing `coroutine.close`                                                                                                                      |
 | `debug`     |   6 / 16 | Only `debug.getregistry`, `debug.getmetatable`, `debug.setmetatable`, `debug.traceback`, `debug.gethook` and count support for `debug.sethook` |
-| `math`      |  27 / 27 | A time based seed is not supplied to `math.randomseed` for determinism.                                                                        |
+| `math`      |  27 / 27 | A time based seed is not supplied to `math.randomseed` for determinism by default.                                                             |
 | `os`        |   1 / 11 | Only `os.clock`                                                                                                                                |
 | `package`   |    0 / 8 |                                                                                                                                                |
 | `string`    |  10 / 17 | Missing `string.gmatch`, `string.gsub`, `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                   |
-| `table`     |    5 / 7 | Missing `table.move` and `table.sort`                                                                                                          |
+| `table`     |    6 / 7 | Missing `table.sort`                                                                                                                           |
 | `utf8`      |    0 / 6 |                                                                                                                                                |
 | `io`        |   0 / 21 |                                                                                                                                                |
 

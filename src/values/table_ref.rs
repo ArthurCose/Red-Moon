@@ -102,6 +102,8 @@ impl TableRef {
         let new_size = table.heap_size();
         gc.modify_used_memory(new_size as isize - original_size as isize);
 
+        ctx.try_gc_step();
+
         Ok(())
     }
 
@@ -221,6 +223,8 @@ impl TableRef {
 
         gc.modify_used_memory(Table::LIST_ELEMENT_SIZE as isize);
 
+        ctx.try_gc_step();
+
         Ok(())
     }
 
@@ -255,6 +259,87 @@ impl TableRef {
         let value = Value::from_stack_value(heap, value);
 
         V::from_value(value, ctx)
+    }
+
+    pub fn copy_within(
+        &self,
+        src_start: usize,
+        dest_start: usize,
+        len: usize,
+        ctx: &mut VmContext,
+    ) -> Result<(), RuntimeError> {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+
+        let table_key = self.0.key();
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        };
+
+        let original_size = table.heap_size();
+
+        if dest_start < src_start {
+            // dest is less than src, we can move from left to right without overwriting the src
+            for i in 0..len {
+                let src = src_start + i;
+                let dest = dest_start + i;
+                let value = table.get(StackValue::Integer(src as _));
+                table.set(StackValue::Integer(dest as _), value);
+            }
+        } else {
+            // dest is greater than src, we should move reversed to avoid overwriting the src
+            for i in (0..len).rev() {
+                let src = src_start + i;
+                let dest = dest_start + i;
+                let value = table.get(StackValue::Integer(src as _));
+                table.set(StackValue::Integer(dest as _), value);
+            }
+        }
+
+        let new_size = table.heap_size();
+        gc.modify_used_memory(new_size as isize - original_size as isize);
+
+        ctx.try_gc_step();
+
+        Ok(())
+    }
+
+    pub fn copy_from(
+        &self,
+        src_start: usize,
+        dest_start: usize,
+        len: usize,
+        src_table: &TableRef,
+        ctx: &mut VmContext,
+    ) -> Result<(), RuntimeError> {
+        if self == src_table {
+            return self.copy_within(src_start, dest_start, len, ctx);
+        }
+
+        let heap = &mut ctx.vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+
+        let table_keys = [self.0.key(), src_table.0.key()];
+        let Some([table, other_table]) = heap.get_disjoint_mut(gc, table_keys) else {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        };
+
+        let original_size = table.heap_size();
+
+        // copy logic
+        for i in 0..len {
+            let src = src_start + i;
+            let dest = dest_start + i;
+            let value = other_table.get(StackValue::Integer(src as _));
+            table.set(StackValue::Integer(dest as _), value);
+        }
+
+        let new_size = table.heap_size();
+        gc.modify_used_memory(new_size as isize - original_size as isize);
+
+        ctx.try_gc_step();
+
+        Ok(())
     }
 
     pub fn next<P: IntoValue, K: FromValue, V: FromValue>(

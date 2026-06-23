@@ -132,7 +132,7 @@ impl FunctionRef {
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
-        ctx.gc_step(0);
+        ctx.try_gc_step();
 
         Ok(Self(heap_ref))
     }
