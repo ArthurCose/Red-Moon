@@ -261,6 +261,31 @@ impl TableRef {
         V::from_value(value, ctx)
     }
 
+    pub fn push<V: IntoValue>(&self, value: V, ctx: &mut VmContext) -> Result<(), RuntimeError> {
+        let value = value.into_value(ctx)?.to_stack_value();
+
+        let heap = &mut ctx.vm.execution_data.heap;
+        let gc = &mut ctx.vm.execution_data.gc;
+
+        let table_key = self.0.key();
+        let Some(table) = heap.get_table_mut(gc, table_key) else {
+            return Err(RuntimeErrorData::InvalidRef.into());
+        };
+
+        let original_size = table.heap_size();
+
+        // push
+        let len = table.list_len();
+        table.set(StackValue::Integer((len + 1) as _), value);
+
+        let new_size = table.heap_size();
+        gc.modify_used_memory(new_size as isize - original_size as isize);
+
+        ctx.try_gc_step();
+
+        Ok(())
+    }
+
     pub fn copy_within(
         &self,
         src_start: usize,

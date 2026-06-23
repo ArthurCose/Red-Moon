@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::Vm;
-use red_moon::languages::lua::std::{load_basic, load_coroutine, load_debug, load_string};
+use red_moon::languages::lua::std::*;
 use red_moon::languages::lua::{LuaTokenLabel, compile};
 use red_moon::tag_native_type;
 use red_moon::values::{MultiValue, Value};
@@ -32,6 +32,7 @@ fn valid() {
         "metatables.lua",
         "munchausen_numbers.lua",
         "semicolons.lua",
+        "std_table.lua",
         "tables.lua.txt",
         "variables.lua.txt",
     ];
@@ -41,6 +42,7 @@ fn valid() {
     load_basic(ctx).unwrap();
     load_string(ctx).unwrap();
     load_coroutine(ctx).unwrap();
+    load_table(ctx).unwrap();
     load_debug(ctx).unwrap();
 
     let env = ctx.default_environment();
@@ -89,6 +91,8 @@ fn valid() {
 
     // the actual tests
     for path in test_files {
+        println!("testing {path}");
+
         let full_path = folder_path.clone() + path;
 
         let source = std::fs::read_to_string(&full_path).expect(&full_path);

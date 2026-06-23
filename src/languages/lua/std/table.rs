@@ -5,43 +5,54 @@ use crate::values::{ByteString, FromValue, TableRef, Value};
 pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // concat
     let concat = ctx.create_function(|call_ctx, ctx| {
-        let (table, separator, start, end): (TableRef, Option<ByteString>, i64, i64) =
-            call_ctx.get_args(ctx)?;
+        let (table, separator, start, end): (
+            TableRef,
+            Option<ByteString>,
+            Option<i64>,
+            Option<i64>,
+        ) = call_ctx.get_args(ctx)?;
 
         let mut bytes = Vec::<u8>::new();
 
         let separator = separator.as_ref().map(|b| b.as_bytes()).unwrap_or(&[]);
 
-        if start <= end {
-            for index in start..=end {
-                let value = table.raw_get(index, ctx)?;
+        let start = start.unwrap_or(1);
+        let end = if let Some(end) = end {
+            end
+        } else {
+            table.raw_len(ctx)? as _
+        };
 
-                match value {
-                    Value::String(s) => {
-                        bytes.extend(s.fetch(ctx)?.as_bytes());
-                    }
-                    Value::Integer(i) => {
-                        bytes.extend(i.to_string().as_bytes());
-                    }
-                    Value::Float(f) => {
-                        // todo: use lua's formatting
-                        bytes.extend(f.to_string().as_bytes());
-                    }
-                    _ => {
-                        return Err(RuntimeError::new_string(format!(
-                            "invalid value ({:?}) at index 2 in table for `concat`",
-                            value
-                        )));
-                    }
-                }
+        if start > end {
+            let string = ctx.intern_string(&bytes);
+            return call_ctx.return_values(string, ctx);
+        }
 
-                if index < end {
-                    bytes.extend(separator);
+        for index in start..=end {
+            let value = table.raw_get(index, ctx)?;
+
+            match value {
+                Value::String(s) => {
+                    bytes.extend(s.fetch(ctx)?.as_bytes());
                 }
+                _ if let Some(n) = value.as_number() => {
+                    bytes.extend(n.to_string().as_bytes());
+                }
+                _ => {
+                    return Err(RuntimeError::new_string(format!(
+                        "invalid value ({:?}) at index 2 in table for `concat`",
+                        value
+                    )));
+                }
+            }
+
+            if index < end {
+                bytes.extend(separator);
             }
         }
 
-        Ok(())
+        let string = ctx.intern_string(&bytes);
+        call_ctx.return_values(string, ctx)
     });
     let rehydrating = concat.rehydrate("table.concat", ctx)?;
 
@@ -49,9 +60,8 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let insert = ctx.create_function(|call_ctx, ctx| {
         let (table, middle, last): (TableRef, Value, Value) = call_ctx.get_args(ctx)?;
 
-        if last.is_nil() {
-            let index = table.raw_len(ctx)?;
-            table.raw_insert(index as i64, middle, ctx)?;
+        if call_ctx.arg_count() <= 2 {
+            table.push(middle, ctx)?;
         } else {
             let map_err = |err: RuntimeError| {
                 // assume it's related to the middle arg
@@ -97,7 +107,7 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             table.raw_insert((i + 1) as _, value, ctx)?;
         }
 
-        Ok(())
+        call_ctx.return_values(table, ctx)
     });
     pack.rehydrate("table.pack", ctx)?;
 
