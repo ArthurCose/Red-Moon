@@ -312,11 +312,11 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let select = ctx.create_function(|call_ctx, ctx| {
         let arg: Value = call_ctx.get_arg(0, ctx)?;
 
+        let len = call_ctx.arg_count() - 1;
+
         if let Some(string_ref) = arg.as_string_ref()
             && let Ok(s) = string_ref.fetch(ctx)
         {
-            let len = call_ctx.arg_count() - 1;
-
             if s.as_bytes() != b"#" {
                 return Err(RuntimeError::new_bad_argument(
                     1,
@@ -327,26 +327,26 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             return call_ctx.return_values(len, ctx);
         }
 
-        let mut index = match i64::from_value(arg, ctx) {
+        let index = match i64::from_value(arg, ctx) {
             Ok(index) => index,
             Err(err) => {
                 return Err(RuntimeError::new_bad_argument(1, err));
             }
         };
 
-        if index < 0 {
-            index += call_ctx.arg_count() as i64 + 1;
-        }
-
-        if index <= 0 {
+        if index == 0 {
             return Err(RuntimeError::new_bad_argument(
                 1,
                 RuntimeError::from(RuntimeErrorData::OutOfBounds),
             ));
         }
 
-        let index = index as usize;
-        call_ctx.return_arg(index, ctx);
+        let index = remap_index(len, index) + 1;
+
+        if index < call_ctx.arg_count() {
+            call_ctx.return_args(index..call_ctx.arg_count(), ctx);
+        }
+
         Ok(())
     });
     select.rehydrate("lua.select", ctx)?;
@@ -682,5 +682,13 @@ fn to_string(value: Value, ctx: &mut VmContext) -> Result<String, RuntimeError> 
         }
         Value::Function(f) => Ok(format!("function: 0x{:x}", f.id())),
         Value::Coroutine(f) => Ok(format!("thread: 0x{:x}", f.id())),
+    }
+}
+
+fn remap_index(len: usize, i: i64) -> usize {
+    match i.cmp(&0) {
+        std::cmp::Ordering::Less => len.saturating_sub(-i as usize),
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => (i - 1) as usize,
     }
 }
