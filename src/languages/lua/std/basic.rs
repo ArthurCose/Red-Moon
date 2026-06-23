@@ -273,18 +273,6 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     ipairs.rehydrate("lua.ipairs", ctx)?;
 
     // pairs
-    let pairs_iterator = ctx.create_function(|call_ctx, ctx| {
-        let (table, prev_key): (TableRef, Value) = call_ctx.get_args(ctx)?;
-
-        let Some((key, value)): Option<(Value, Value)> = table.next(prev_key, ctx)? else {
-            // lua returns a single nil, not zero values
-            return call_ctx.return_values(Value::default(), ctx);
-        };
-
-        call_ctx.return_values((key, value), ctx)
-    });
-    pairs_iterator.rehydrate("lua.pairs.iterator", ctx)?;
-
     let pairs = ctx.create_function(|call_ctx, ctx| {
         let table: TableRef = call_ctx.get_args(ctx)?;
 
@@ -292,20 +280,20 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             return Ok(());
         };
 
-        let pairs_iterator = pairs_iterator.clone();
+        let next = pairs_iterator.clone();
 
         let iterator = if let Some(metatable) = table.metatable(ctx)? {
             // try metatable
             metatable
                 .raw_get(ctx.metatable_keys().pairs.clone(), ctx)
-                .unwrap_or(pairs_iterator)
+                .unwrap_or(next)
         } else {
-            pairs_iterator
+            next
         };
 
         call_ctx.return_values((iterator, table, Value::default()), ctx)
     });
-    let pairs = pairs.create_closure(pairs_iterator, ctx)?;
+    let pairs = pairs.create_closure(next.clone(), ctx)?;
     pairs.rehydrate("lua.pairs", ctx)?;
 
     // select
