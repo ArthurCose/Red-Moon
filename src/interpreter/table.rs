@@ -283,7 +283,22 @@ impl Table {
 
     pub(crate) fn next(&self, previous: StackValue) -> Option<(StackValue, StackValue)> {
         if previous == StackValue::Nil {
+            if let Some(&v) = self.list.first() {
+                return Some((StackValue::Integer(1), v));
+            }
+
             return self.map.first().map(|(k, v)| (k.into(), *v));
+        }
+
+        if let StackValue::Integer(i) = previous
+            && i > 0
+            && let Ok(i) = usize::try_from(i)
+        {
+            if let Some(&v) = self.list.get(i) {
+                return Some((StackValue::Integer((i + 1) as i64), v));
+            } else if i == self.list.len() {
+                return self.map.first().map(|(k, v)| (k.into(), *v));
+            }
         }
 
         let index = self.map.get_index_of(&MapKey::from(previous))?;
