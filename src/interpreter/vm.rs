@@ -377,7 +377,25 @@ impl VmContext<'_> {
         TableRef(heap_ref)
     }
 
-    /// If the environment is unset, the function will use the default environment
+    /// Loads a compiled lua module as a function.
+    ///
+    /// If the environment is unset, the function will use the default environment.
+    ///
+    /// ```
+    /// # use red_moon::errors::RuntimeError;
+    /// use red_moon::interpreter::Vm;
+    /// use red_moon::languages::lua::compile;
+    ///
+    /// let mut vm = Vm::default();
+    /// let ctx = &mut vm.context();
+    ///
+    /// let module = compile("return 1 + 2").unwrap();
+    /// let function = ctx.load_function("main", None, module)?;
+    /// let result: i64 = function.call((), ctx)?;
+    ///
+    /// assert_eq!(result, 3);
+    /// # Ok::<_, RuntimeError>(())
+    /// ```
     #[inline]
     pub fn load_function<'a, Label, ByteStrings, B>(
         &mut self,
