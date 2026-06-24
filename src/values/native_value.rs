@@ -5,7 +5,8 @@
 /// Automatically derived if the "serde" flag is not enabled, [tag_native_type] can be used otherwise.
 ///
 /// ```
-/// # #![cfg(feature = "serde")]
+/// # fn main() {
+/// # #[cfg(feature = "serde")] {
 /// use red_moon::values::tag_native_type;
 /// use serde::{Serialize, Deserialize};
 ///
@@ -14,6 +15,7 @@
 ///
 /// // required only when the "serde" feature is enabled, has no effect otherwise
 /// tag_native_type!(MySingleton);
+/// # } }
 /// ```
 #[cfg_attr(feature = "serde", typetag::serde)]
 pub trait NativeValue: downcast::Any + CloneBoxedNativeValue {}
@@ -43,7 +45,6 @@ downcast::downcast!(dyn NativeValue);
 /// Implements [NativeValue] and applies `typetag::serde` when the `serde` feature is enabled.
 ///
 /// ```
-/// # #![cfg(feature = "serde")]
 /// use red_moon::values::tag_native_type;
 /// use serde::{Serialize, Deserialize};
 ///
@@ -65,7 +66,8 @@ macro_rules! tag_native_type {
 /// Implements [NativeValue] and applies `typetag::serde` when the `serde` feature is enabled.
 ///
 /// ```
-/// # #![cfg(feature = "serde")]
+/// # fn main() {
+/// # #[cfg(feature = "serde")] {
 /// use red_moon::values::tag_native_type;
 /// use serde::{Serialize, Deserialize};
 ///
@@ -74,6 +76,7 @@ macro_rules! tag_native_type {
 ///
 /// // required only when the "serde" feature is enabled, has no effect otherwise
 /// tag_native_type!(MySingleton);
+/// # } }
 /// ```
 #[cfg(not(feature = "serde"))]
 #[macro_export]
