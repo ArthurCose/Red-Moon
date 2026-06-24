@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(any(not(doctest), feature = "serde"), doc = include_str!("../README.md"))]
 
 mod vec_cell;
 
@@ -16,19 +16,6 @@ pub mod values;
 type BuildFastHasher = rustc_hash::FxBuildHasher;
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildFastHasher>;
 type FastHashSet<K> = std::collections::HashSet<K, BuildFastHasher>;
-
-// https://github.com/rust-lang/cargo/issues/383#issuecomment-720873790
-#[cfg(doctest)]
-mod test_readme {
-    macro_rules! external_doc_test {
-        ($x:expr) => {
-            #[doc = $x]
-            unsafe extern "C" {}
-        };
-    }
-
-    external_doc_test!(include_str!("../README.md"));
-}
 
 macro_rules! debug_unreachable {
     ($($arg:tt)*) => {
