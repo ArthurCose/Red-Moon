@@ -4,38 +4,29 @@ use super::{Continuation, NativeCallContext, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use std::rc::Rc;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct NativeFunction<A> {
-    #[cfg_attr(feature = "serde", serde(with = "serde_callback"))]
     pub(crate) callback: Rc<dyn NativeFunctionTrait<A>>,
 }
 
 #[cfg(feature = "serde")]
-mod serde_callback {
-    use super::*;
-
-    pub(super) fn serialize<A, S>(
-        _: &Rc<dyn NativeFunctionTrait<A>>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
+impl<A> serde::Serialize for NativeFunction<A> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        Serialize::serialize(&(), serializer)
+        serde::Serialize::serialize(&(), serializer)
     }
+}
 
-    pub(super) fn deserialize<'de, A, D>(
-        deserializer: D,
-    ) -> Result<Rc<dyn NativeFunctionTrait<A>>, D::Error>
+#[cfg(feature = "serde")]
+impl<'de, A> serde::Deserialize<'de> for NativeFunction<A> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let _: () = serde::Deserialize::deserialize(deserializer)?;
 
-        Ok(Rc::new(|_, _: A, _: &mut VmContext| {
+        Ok(Self::from(|_, _: A, _: &mut VmContext| {
             Err(RuntimeErrorData::FunctionLostInSerialization.into())
         }))
     }
