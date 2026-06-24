@@ -83,7 +83,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
 
     // create native function
     let f = ctx.create_function(|call_ctx, ctx| {
-        call_ctx.return_args(.., ctx);
+        call_ctx.return_arg_range(.., ctx);
         Ok(())
     });
 
@@ -127,7 +127,7 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // rehydrate
     let f = ctx.create_function(|call_ctx, ctx| {
-        call_ctx.return_args(.., ctx);
+        call_ctx.return_arg_range(.., ctx);
         Ok(())
     });
     assert!(f.rehydrate("hydrated_fn", ctx)?);

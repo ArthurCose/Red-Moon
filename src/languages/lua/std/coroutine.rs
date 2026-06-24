@@ -114,7 +114,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             let args = call_ctx.get_args(ctx)?;
             Err(RuntimeErrorData::Yield(args).into())
         } else {
-            call_ctx.return_args(.., ctx);
+            call_ctx.return_arg_range(.., ctx);
             result
         }
     });

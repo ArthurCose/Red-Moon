@@ -137,22 +137,10 @@ impl NativeCallContext {
     }
 
     /// Appends values from the call arguments to the return multivalue
-    pub fn return_args<R: RangeBounds<usize>>(&mut self, range: R, ctx: &mut VmContext) {
+    pub fn return_args(&mut self, start: usize, len: usize, ctx: &mut VmContext) {
         let execution = ctx.vm.execution_stack.last_mut().unwrap();
 
-        let start = match range.start_bound() {
-            std::ops::Bound::Included(i) => *i,
-            std::ops::Bound::Excluded(i) => *i + 1,
-            std::ops::Bound::Unbounded => 0,
-        };
-
-        let end = match range.end_bound() {
-            std::ops::Bound::Included(i) => *i + 1,
-            std::ops::Bound::Excluded(i) => *i,
-            std::ops::Bound::Unbounded => self.arg_count,
-        };
-
-        for index in start..end {
+        for index in start..start + len {
             let value = if index < self.arg_count {
                 // add two to skip the function ref and arg count
                 let stack_index = self.stack_start + index + 2;
@@ -165,7 +153,24 @@ impl NativeCallContext {
             execution.value_stack.push(value);
         }
 
-        self.return_count += end - start;
+        self.return_count += len;
+    }
+
+    /// Appends values from the call arguments to the return multivalue
+    pub fn return_arg_range<R: RangeBounds<usize>>(&mut self, range: R, ctx: &mut VmContext) {
+        let start = match range.start_bound() {
+            std::ops::Bound::Included(i) => *i,
+            std::ops::Bound::Excluded(i) => *i + 1,
+            std::ops::Bound::Unbounded => 0,
+        };
+
+        let end = match range.end_bound() {
+            std::ops::Bound::Included(i) => *i + 1,
+            std::ops::Bound::Excluded(i) => *i,
+            std::ops::Bound::Unbounded => self.arg_count,
+        };
+
+        self.return_args(start, end - start, ctx);
     }
 
     #[inline]

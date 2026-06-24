@@ -332,7 +332,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let index = remap_index(len, index) + 1;
 
         if index < call_ctx.arg_count() {
-            call_ctx.return_args(index..call_ctx.arg_count(), ctx);
+            call_ctx.return_arg_range(index..call_ctx.arg_count(), ctx);
         }
 
         Ok(())
@@ -480,7 +480,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                 return Err(err);
             }
 
-            call_ctx.return_args(.., ctx);
+            call_ctx.return_arg_range(.., ctx);
         } else {
             result?;
 
