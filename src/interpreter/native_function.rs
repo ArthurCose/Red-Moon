@@ -7,24 +7,6 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub(crate) trait NativeFunctionTrait<A>:
-    Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
-{
-    fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>>;
-}
-
-impl<
-    A,
-    T: Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
-        + Clone
-        + 'static,
-> NativeFunctionTrait<A> for T
-{
-    fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>> {
-        Rc::new(self.clone())
-    }
-}
-
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct NativeFunction<A> {
     #[cfg_attr(feature = "serde", serde(with = "serde_callback"))]
@@ -178,5 +160,23 @@ where
         Self {
             callback: Rc::new(value),
         }
+    }
+}
+
+pub(crate) trait NativeFunctionTrait<A>:
+    Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
+{
+    fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>>;
+}
+
+impl<
+    A,
+    T: Fn(NativeFnObjectKey, A, &mut VmContext) -> Result<NativeCallContext, RuntimeError>
+        + Clone
+        + 'static,
+> NativeFunctionTrait<A> for T
+{
+    fn deep_clone(&self) -> Rc<dyn NativeFunctionTrait<A>> {
+        Rc::new(self.clone())
     }
 }
