@@ -1,12 +1,12 @@
-use super::Continuation;
 use super::cache_pools::CachePools;
 use super::coroutine::{Coroutine, YieldPermissions};
 use super::execution::ExecutionContext;
 use super::garbage_collector::{GarbageCollector, GarbageCollectorConfig};
 use super::heap::{CoroutineObjectKey, Heap, NativeFnObjectKey};
 use super::metatable_keys::MetatableKeys;
-use super::native_function::{NativeCallContext, NativeFunction};
+use super::native_function::NativeFunction;
 use super::value_stack::{StackValue, ValueStack};
+use super::{Continuation, NativeCallContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::Module;
 use crate::interpreter::debug_hooks::{DebugHook, HookMask};

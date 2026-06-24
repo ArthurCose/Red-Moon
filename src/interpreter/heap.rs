@@ -1,6 +1,7 @@
+use super::NativeCallContext;
 use super::coroutine::Coroutine;
 use super::interpreted_function::Function;
-use super::native_function::{NativeCallContext, NativeFunction};
+use super::native_function::NativeFunction;
 use super::ref_counter::*;
 use super::table::Table;
 use super::value_stack::StackValue;

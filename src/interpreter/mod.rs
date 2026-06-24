@@ -5,6 +5,7 @@ mod instruction;
 mod interpreted_function;
 mod metatable_keys;
 mod module;
+mod native_call_context;
 mod native_function;
 mod ref_counter;
 mod type_set;
@@ -25,7 +26,7 @@ pub use debug_hooks::HookMask;
 pub use garbage_collector::GarbageCollectorConfig;
 pub use instruction::{ConstantIndex, Instruction, Register, ReturnMode};
 pub use module::{Chunk, Module, SourceMapping, UpValueSource};
-pub use native_function::NativeCallContext;
+pub use native_call_context::NativeCallContext;
 pub use vm::{Vm, VmContext, VmLimits};
 
 pub(crate) use coroutine::Continuation;
