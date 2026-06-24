@@ -30,6 +30,11 @@ pub(crate) struct Storage {
         slotmap::SlotMap<NativeFnObjectKey, NativeFunction<NativeCallContext>>,
     pub(super) functions: slotmap::SlotMap<FnObjectKey, Function>,
     pub(super) coroutines: slotmap::SlotMap<CoroutineObjectKey, Coroutine>,
+    #[cfg(feature = "serde")]
+    pub(crate) closure_to_base: FastHashMap<NativeFnObjectKey, NativeFnObjectKey>,
+    #[cfg(feature = "serde")]
+    pub(crate) base_to_closures:
+        FastHashMap<NativeFnObjectKey, indexmap::IndexSet<NativeFnObjectKey>>,
     pub(super) captures: HashMap<NativeFnObjectKey, Box<dyn NativeValue>>,
 }
 
@@ -425,11 +430,15 @@ impl Heap {
     #[cfg(feature = "serde")]
     pub(crate) fn rehydrate(
         &mut self,
-        gc: &mut GarbageCollector,
         key: NativeFnObjectKey,
         value: NativeFunction<NativeCallContext>,
     ) {
-        gc.acknowledge_write(key.into());
+        if let Some(closure_keys) = self.storage.base_to_closures.get(&key) {
+            for &closure_key in closure_keys {
+                self.storage.native_functions[closure_key] = value.clone();
+            }
+        }
+
         self.storage.native_functions[key] = value;
     }
 

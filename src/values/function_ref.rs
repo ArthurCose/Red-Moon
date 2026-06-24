@@ -75,7 +75,10 @@ impl FunctionRef {
             let old_key = match heap.tags.entry(tag) {
                 indexmap::map::Entry::Occupied(entry) => *entry.get(),
                 indexmap::map::Entry::Vacant(entry) => {
-                    entry.insert(new_key);
+                    let closure_to_base = &mut heap.storage.closure_to_base;
+                    let tagged_key = closure_to_base.get(&new_key).unwrap_or(&new_key);
+
+                    entry.insert(*tagged_key);
                     return Ok(false);
                 }
             };
@@ -86,8 +89,7 @@ impl FunctionRef {
 
             let function = function.clone();
 
-            let gc = &mut ctx.vm.execution_data.gc;
-            heap.rehydrate(gc, old_key, function);
+            heap.rehydrate(old_key, function);
 
             if let Some(callback) = heap.resume_callbacks.get(&new_key) {
                 heap.resume_callbacks.insert(old_key, callback.clone());
@@ -126,10 +128,20 @@ impl FunctionRef {
         };
 
         let cloned_fn = native_fn.clone();
-        let key = heap.store_native_fn(gc, cloned_fn);
-        heap.store_capture(key, capture);
+        let closure_key = heap.store_native_fn(gc, cloned_fn);
+        heap.store_capture(closure_key, capture);
 
-        let heap_ref = heap.create_ref(key.into());
+        // track base implementation for rehydration
+        #[cfg(feature = "serde")]
+        {
+            let base_key = *heap.storage.closure_to_base.get(&key).unwrap_or(&key);
+            heap.storage.closure_to_base.insert(closure_key, base_key);
+
+            let closure_keys = heap.storage.base_to_closures.entry(base_key).or_default();
+            closure_keys.insert(closure_key);
+        }
+
+        let heap_ref = heap.create_ref(closure_key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
         ctx.try_gc_step();

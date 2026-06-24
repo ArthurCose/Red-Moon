@@ -241,10 +241,11 @@ impl GarbageCollector {
             keep
         });
 
-        // mark tags, we don't want to delete a string required for rehydration
+        // mark tagged functions, we don't want to delete data required for rehydration
         #[cfg(feature = "serde")]
-        for tag_value in heap.tags.keys() {
-            self.mark_stack_value(tag_value);
+        for (key, value) in &heap.tags {
+            self.mark_stack_value(key);
+            self.mark_stack_value(&StackValue::NativeFunction(*value));
         }
 
         // mark the stack
@@ -391,6 +392,20 @@ impl GarbageCollector {
                         continue;
                     };
 
+                    #[cfg(feature = "serde")]
+                    if let Some(base_key) = heap.storage.closure_to_base.remove(&key)
+                        && let std::collections::hash_map::Entry::Occupied(mut closure_keys_entry) =
+                            heap.storage.base_to_closures.entry(base_key)
+                    {
+                        let closure_keys = closure_keys_entry.get_mut();
+
+                        closure_keys.swap_remove(&key);
+
+                        if closure_keys.is_empty() {
+                            closure_keys_entry.remove();
+                        }
+                    }
+
                     heap.storage.captures.remove(&key);
 
                     self.used_memory -= std::mem::size_of_val(&native_fn);
@@ -503,6 +518,12 @@ impl GarbageCollector {
                     for key in &function.definition.functions {
                         self.mark_storage_key(key.into());
                     }
+                }
+            }
+            #[cfg(feature = "serde")]
+            StorageKey::NativeFunction(key) => {
+                if let Some(base_key) = heap.storage.closure_to_base.get(&key) {
+                    self.mark_storage_key(base_key.into());
                 }
             }
             StorageKey::Table(table_key) => {

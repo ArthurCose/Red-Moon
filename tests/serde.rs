@@ -1,16 +1,29 @@
 #![cfg(feature = "serde")]
 
 use red_moon::errors::{RuntimeError, RuntimeErrorData};
-use red_moon::interpreter::Vm;
+use red_moon::interpreter::{Vm, VmContext};
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::load_coroutine;
-use red_moon::values::{CoroutineRef, FunctionRef, MultiValue, TableRef, tag_native_type};
+use red_moon::values::{CoroutineRef, FunctionRef, MultiValue, TableRef, Value, tag_native_type};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 struct MySingleton(i32);
 
 tag_native_type!(MySingleton);
+
+// create a closure expecting an integer capture
+fn create_closure_base(ctx: &mut VmContext) -> FunctionRef {
+    ctx.create_function(|call_ctx, ctx| {
+        let Some(Value::Integer(i)) = call_ctx.get_capture_mut::<Value>(ctx) else {
+            panic!("Capture lost");
+        };
+
+        *i += 1;
+
+        call_ctx.return_values(*i, ctx)
+    })
+}
 
 fn create_vm() -> Result<Vm, RuntimeError> {
     let mut vm = Vm::default();
@@ -36,6 +49,18 @@ fn create_vm() -> Result<Vm, RuntimeError> {
 
     assert!(!resumable.rehydrate("resumable_fn", ctx)?);
     env.set("resumable_fn", resumable, ctx)?;
+
+    // create a native closure
+    let closure = create_closure_base(ctx);
+
+    // rehydrate before capturing to test if the implementation propagates
+    assert!(!closure.rehydrate("closure", ctx)?);
+
+    // capture a value
+    let closure = closure.create_closure(Value::Integer(0), ctx)?;
+    env.set("native_closure", closure.clone(), ctx)?;
+
+    assert_eq!(closure.call::<_, i64>((), ctx)?, 1);
 
     // load lua
     const SOURCE: &str = r#"
@@ -115,6 +140,14 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     let co: CoroutineRef = env.get("co", ctx)?;
     assert_eq!(co.resume((), ctx)?, MultiValue::pack("resumed", ctx)?);
+
+    // rehydrate closure using the same implementation
+    let closure = create_closure_base(ctx);
+    assert!(closure.rehydrate("closure", ctx)?);
+
+    // test closure
+    let stored_closure: FunctionRef = env.get("native_closure", ctx)?;
+    assert_eq!(stored_closure.call::<_, i64>((), ctx)?, 2);
 
     // retrieve singleton
     let my_singleton: &MySingleton = ctx.singleton().unwrap();
