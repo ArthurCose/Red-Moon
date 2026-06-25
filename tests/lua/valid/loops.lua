@@ -121,6 +121,25 @@ for a in foo, 5, 0 do
   end
 end
 
+print("\ngeneric for loop simple:")
+local function iter(max)
+  local i = 0
+
+  return function()
+    if i >= max then
+      return
+    end
+
+    i = i + 1
+
+    return i
+  end
+end
+
+for a in iter(5) do
+  print(a)
+end
+
 print("\nnested break:")
 for i = 1, 10 do
   print(i)
