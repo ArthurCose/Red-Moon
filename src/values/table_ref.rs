@@ -1,7 +1,8 @@
 use super::{FromValue, IntoValue, Value};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
-use crate::interpreter::heap::{HeapRef, Storage, TableObjectKey};
+use crate::interpreter::garbage_collector::GarbageCollector;
+use crate::interpreter::heap::{Heap, HeapRef, Storage, TableObjectKey};
 use crate::interpreter::table::Table;
 use crate::interpreter::value_stack::StackValue;
 use crate::tag_native_type;
@@ -60,10 +61,7 @@ impl TableRef {
     ) -> Result<V, RuntimeError> {
         let key = key.into_value(ctx)?.to_stack_value();
         let heap = &mut ctx.vm.execution_data.heap;
-
-        let Some(table) = heap.get_table(self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table(heap)?;
 
         let value = table.get(key);
         let value = Value::from_stack_value(heap, value);
@@ -88,9 +86,7 @@ impl TableRef {
         key.test_validity(heap)?;
         value.test_validity(heap)?;
 
-        let Some(table) = heap.get_table_mut(gc, self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut(gc, heap)?;
 
         let key = key.to_stack_value();
         let value = value.to_stack_value();
@@ -110,9 +106,7 @@ impl TableRef {
     /// Gets the length of the sequential part of the table without invoking the `__len` metamethod.
     pub fn raw_len(&self, ctx: &VmContext) -> Result<usize, RuntimeError> {
         let heap = &ctx.vm.execution_data.heap;
-        let Some(table) = heap.get_table(self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table(heap)?;
 
         Ok(table.list_len())
     }
@@ -160,16 +154,13 @@ impl TableRef {
     /// Gets the length of the sequential part of the table, using the `__len` metamethod if available, and falling back to direct access.
     pub fn len(&self, ctx: &mut VmContext) -> Result<usize, RuntimeError> {
         let heap = &mut ctx.vm.execution_data.heap;
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table(table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table(heap)?;
 
         let len = table.list_len();
         let len_key = ctx.metatable_keys().len.0.key();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(function_key) = heap.get_table_metamethod(table_key, len_key) else {
+        let Some(function_key) = heap.get_table_metamethod(self.0.key(), len_key) else {
             return Ok(len);
         };
 
@@ -180,9 +171,7 @@ impl TableRef {
     pub fn clear(&self, ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
-        let Some(table) = heap.get_table_mut(gc, self.0.key()) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut_unmarked(heap)?;
 
         let original_size = table.heap_size();
 
@@ -208,10 +197,7 @@ impl TableRef {
 
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut(gc, heap)?;
 
         let index = (index - 1) as usize;
 
@@ -239,10 +225,7 @@ impl TableRef {
 
         let gc = &mut ctx.vm.execution_data.gc;
         let heap = &mut ctx.vm.execution_data.heap;
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut_unmarked(heap)?;
 
         let index = (index - 1) as usize;
 
@@ -266,11 +249,7 @@ impl TableRef {
 
         let heap = &mut ctx.vm.execution_data.heap;
         let gc = &mut ctx.vm.execution_data.gc;
-
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut(gc, heap)?;
 
         let original_size = table.heap_size();
 
@@ -296,10 +275,7 @@ impl TableRef {
         let heap = &mut ctx.vm.execution_data.heap;
         let gc = &mut ctx.vm.execution_data.gc;
 
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let table = self.table_mut_unmarked(heap)?;
 
         let original_size = table.heap_size();
 
@@ -375,11 +351,7 @@ impl TableRef {
         let previous_key = previous_key.into_value(ctx)?.to_stack_value();
 
         let heap = &mut ctx.vm.execution_data.heap;
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table(table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
-
+        let table = self.table(heap)?;
         let Some((k, v)) = table.next(previous_key) else {
             return Ok(None);
         };
@@ -394,14 +366,36 @@ impl TableRef {
     }
 
     pub fn is_map_empty(&self, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
-        let heap = &mut ctx.vm.execution_data.heap;
-        let table_key = self.0.key();
-        let Some(table) = heap.get_table(table_key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
-        };
+        let heap = &ctx.vm.execution_data.heap;
+        let table = self.table(heap)?;
 
         let has_next = table.next(StackValue::Nil).is_some();
 
         Ok(!has_next)
+    }
+
+    fn table<'a>(&self, heap: &'a Heap) -> Result<&'a Table, RuntimeErrorData> {
+        let table_key = self.0.key();
+        heap.get_table(table_key)
+            .ok_or(RuntimeErrorData::InvalidRef)
+    }
+
+    fn table_mut<'a>(
+        &self,
+        gc: &mut GarbageCollector,
+        heap: &'a mut Heap,
+    ) -> Result<&'a mut Table, RuntimeErrorData> {
+        let table_key = self.0.key();
+        heap.get_table_mut(gc, table_key)
+            .ok_or(RuntimeErrorData::InvalidRef)
+    }
+
+    fn table_mut_unmarked<'a>(
+        &self,
+        heap: &'a mut Heap,
+    ) -> Result<&'a mut Table, RuntimeErrorData> {
+        let table_key = self.0.key();
+        heap.get_table_mut_unmarked(table_key)
+            .ok_or(RuntimeErrorData::InvalidRef)
     }
 }

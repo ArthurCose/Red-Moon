@@ -1,5 +1,4 @@
 mod debug_hooks;
-mod garbage_collector;
 mod heap_ref;
 mod instruction;
 mod interpreted_function;
@@ -15,6 +14,7 @@ mod vm;
 pub(crate) mod cache_pools;
 pub(crate) mod coroutine;
 pub(crate) mod execution;
+pub(crate) mod garbage_collector;
 pub(crate) mod heap;
 pub(crate) mod table;
 pub(crate) mod value_stack;

@@ -375,6 +375,10 @@ impl Heap {
         self.storage.tables.get_mut(key)
     }
 
+    pub(crate) fn get_table_mut_unmarked(&mut self, key: TableObjectKey) -> Option<&mut Table> {
+        self.storage.tables.get_mut(key)
+    }
+
     pub(crate) fn get_disjoint_mut<const N: usize>(
         &mut self,
         gc: &mut GarbageCollector,
