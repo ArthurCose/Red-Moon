@@ -52,7 +52,8 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let start = init.map(|i| remap_index(bytes, i)).unwrap_or(0);
 
         if start >= bytes.len() {
-            return Ok(());
+            // return explicit nil
+            return call_ctx.return_values(Value::Nil, ctx);
         }
 
         if plain {
@@ -64,25 +65,31 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                 }
             }
 
-            return Ok(());
+            // return explicit nil
+            return call_ctx.return_values(Value::Nil, ctx);
         }
 
         let pattern = BytePattern::from_byte_string(pattern_string)
             .map_err(|err| RuntimeError::new_string(err.to_string()))?;
         let mut pattern_matcher = PatternMatcher::default();
 
-        let Some(len) = pattern_matcher.try_match(&pattern, bytes, start) else {
+        for i in start..bytes.len() {
+            let Some(len) = pattern_matcher.try_match(&pattern, bytes, i) else {
+                continue;
+            };
+
+            call_ctx.return_values((i + 1, i + len), ctx)?;
+
+            for range in pattern_matcher.captures() {
+                let string_ref = ctx.intern_string(&bytes[range.clone()]);
+                call_ctx.return_values(string_ref, ctx)?;
+            }
+
             return Ok(());
-        };
-
-        call_ctx.return_values((start + 1, start + len), ctx)?;
-
-        for range in pattern_matcher.captures() {
-            let string_ref = ctx.intern_string(&bytes[range.clone()]);
-            call_ctx.return_values(string_ref, ctx)?;
         }
 
-        Ok(())
+        // return explicit nil
+        call_ctx.return_values(Value::Nil, ctx)
     });
     find.rehydrate("str.find", ctx)?;
 
@@ -114,21 +121,25 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             .map_err(|err| RuntimeError::new_string(err.to_string()))?;
         let mut pattern_matcher = PatternMatcher::default();
 
-        let Some(len) = pattern_matcher.try_match(&pattern, bytes, start) else {
-            return Ok(());
-        };
+        for i in start..bytes.len() {
+            let Some(len) = pattern_matcher.try_match(&pattern, bytes, i) else {
+                continue;
+            };
 
-        if pattern_matcher.captures().is_empty() {
-            let string_ref = ctx.intern_string(&bytes[start..start + len]);
-            call_ctx.return_values(string_ref, ctx)?;
-        } else {
-            for range in pattern_matcher.captures() {
-                let string_ref = ctx.intern_string(&bytes[range.clone()]);
+            if pattern_matcher.captures().is_empty() {
+                let string_ref = ctx.intern_string(&bytes[i..i + len]);
                 call_ctx.return_values(string_ref, ctx)?;
+            } else {
+                for range in pattern_matcher.captures() {
+                    let string_ref = ctx.intern_string(&bytes[range.clone()]);
+                    call_ctx.return_values(string_ref, ctx)?;
+                }
             }
+
+            return Ok(());
         }
 
-        Ok(())
+        call_ctx.return_values(Value::Nil, ctx)
     });
     match_func.rehydrate("str.match", ctx)?;
 
