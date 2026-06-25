@@ -244,10 +244,6 @@ impl ValueStack {
         debug_assert_eq!(self.len(), start + keep)
     }
 
-    pub(crate) fn truncate(&mut self, len: usize) {
-        self.values.truncate(len);
-    }
-
     pub(crate) fn copy_within(&mut self, src: Range<usize>, dest: usize) {
         let min_len = if src.start > dest {
             src.end

@@ -270,12 +270,9 @@ impl ExecutionContext {
                             };
                             return_context.register_base = native_call_ctx.return_count_index();
 
-                            // truncate value stack to free us to simple pushes
+                            // resize the value stack to free us to simple pushes
                             let value_stack = &mut execution.value_stack;
-                            value_stack.truncate(return_context.register_base);
-
-                            // push a placeholder for the return count
-                            value_stack.push(Default::default());
+                            value_stack.resize(return_context.register_base + 1);
 
                             // update tracked stack size in case the native function calls an interpreted function
                             let old_stack_size = exec_data.tracked_stack_size;
