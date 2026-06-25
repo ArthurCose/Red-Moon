@@ -4,7 +4,7 @@ use crate::values::ByteString;
 use std::ops::Range;
 use std::rc::Rc;
 
-const SEQUENCE_END: &[u8] = b"*+-?()[";
+const SEQUENCE_END: &[u8] = b"*+-?()[.";
 
 enum CharacterSetItem {
     Character(u8),
@@ -890,6 +890,7 @@ mod test {
             (".", "", &[]),
             (".", "1", &[0..1]),
             (".*", "", &[0..0]),
+            ("a.d", "asdfasdf", &[0..3, 4..7]),
             ("%d", "1", &[0..1]),
             ("%d", "a", &[]),
             ("%D", "1", &[]),
