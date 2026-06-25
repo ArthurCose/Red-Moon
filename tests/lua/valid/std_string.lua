@@ -1,0 +1,56 @@
+print("string.byte():")
+print(string.byte("abc", 2, -1))
+
+print("\nstring.char():")
+print(string.char(97, 98, 99))
+
+print("\nstring.find():")
+print(string.find("asdfasdf", "a(.)(d)"))
+print(string.find("asdfasdf", "a.d"))
+print(string.find("asdfasdf", "a.d", 2))
+print(string.find("asdfasdf", "a.d", -4))
+print(string.find("asdfasdf", "a.d", nil, true))
+print(string.find("asdfasdf", ".-"))
+print(string.find("asdfasdf", ".-$"))
+
+print("\nstring.match():")
+print(string.match("asdfabdf", "a.df"))
+print(string.match("asdfabdf", "a.df", 1))
+print(string.match("asdfabdf", "a.df", 2))
+print(string.match("asdfabdf", "a(.)d(f)"))
+print(string.match("asdfabdf", "a(.)d(f)", 2))
+
+print("\nstring.gsub():")
+print(string.gsub("asdfasdf", "(a)sdf", "%0"))
+print(string.gsub("asdfasdf", "(a)sdf", "%0%0"))
+print(string.gsub("asdfasdf", "(a)sdf", "%1"))
+print(string.gsub("asdfasdf", "(a)sdf", "%%"))
+print(string.gsub("asdfasdf", "(a)sdf", "[%%]"))
+print(string.gsub("asdfasdf", "(a)sdf", "[%%]", 0))
+print(string.gsub("asdfasdf", "(a)sdf", "[%%]", 1))
+print(string.gsub("asdfasdf", "(a)s(d)f", function(a, b) return a .. b end))
+print(string.gsub("asdfasdf", "(a)(s)(d)f", { a = "test", d = 1 }))
+
+print("\nstring.lower():")
+print(string.lower("AbC"))
+
+print("\nstring.upper():")
+print(string.upper("AbC"))
+
+print("\nstring.sub():")
+print(string.sub("AbC", -2))
+print(string.sub("AbC", -2, -2))
+print(string.sub("AbC", -2, 3))
+print(string.sub("AbC", 1, 3))
+print(string.sub("AbC", 2))
+print(string.sub("AbC", 3, 1))
+
+print("\nstring.reverse():")
+print(string.reverse("AbC"))
+
+print("\nstring.len():")
+print(string.len("AbC"))
+
+print("\nstring.rep():")
+print(string.rep("123", 3))
+print(string.rep("123", 3, ","))

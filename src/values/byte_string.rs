@@ -88,6 +88,12 @@ impl From<&str> for ByteString {
     }
 }
 
+impl From<String> for ByteString {
+    fn from(value: String) -> Self {
+        value.as_bytes().into()
+    }
+}
+
 impl std::borrow::Borrow<[u8]> for ByteString {
     #[inline]
     fn borrow(&self) -> &[u8] {

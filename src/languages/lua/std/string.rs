@@ -2,7 +2,8 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
 use crate::languages::lua::parse_number;
 use crate::languages::lua::std::{BytePattern, PatternMatcher};
-use crate::values::{ByteString, Number, StringRef, TableRef, Value};
+use crate::values::{ByteString, FromValue, Number, StringRef, TableRef, Value};
+use std::ops::Range;
 
 pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // byte
@@ -92,6 +93,187 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         call_ctx.return_values(Value::Nil, ctx)
     });
     find.rehydrate("str.find", ctx)?;
+
+    // gsub
+    let gsub = ctx.create_function(|call_ctx, ctx| {
+        let (s, pattern, repl, n): (ByteString, ByteString, Value, Option<usize>) =
+            call_ctx.get_args(ctx)?;
+
+        if n == Some(0) {
+            return call_ctx.return_values((s, 0), ctx);
+        }
+
+        let bytes = s.as_bytes();
+        let pattern = BytePattern::from_byte_string(pattern)
+            .map_err(|err| RuntimeError::new_string(err.to_string()))?;
+
+        fn push_replacement(
+            value: Value,
+            buffer: &mut Vec<u8>,
+            ctx: &mut VmContext,
+        ) -> Result<(), RuntimeErrorData> {
+            if !value.is_truthy() {
+                return Ok(());
+            }
+
+            let type_name = value.type_name();
+            let Ok(replacement_string) = ByteString::from_value(value, ctx) else {
+                return Err(RuntimeErrorData::ByteString(
+                    format!("invalid replacement value (a {})", type_name).into(),
+                ));
+            };
+
+            buffer.extend_from_slice(replacement_string.as_bytes());
+
+            Ok(())
+        }
+
+        fn process(
+            bytes: &[u8],
+            pattern: BytePattern,
+            n: Option<usize>,
+            ctx: &mut VmContext,
+            callback: impl Fn(
+                Range<usize>,
+                &PatternMatcher,
+                &mut Vec<u8>,
+                &mut VmContext,
+            ) -> Result<(), RuntimeError>,
+        ) -> Result<(Vec<u8>, usize), RuntimeError> {
+            let mut buffer = Vec::new();
+            let mut matcher = PatternMatcher::default();
+            let mut i = 0;
+            let mut last_read = 0;
+            let mut last_push = 0;
+            let mut total_matches = 0;
+
+            while i <= bytes.len() {
+                let Some(read) = matcher.try_match(&pattern, bytes, i) else {
+                    i += 1;
+                    continue;
+                };
+
+                if read > 0 || last_read == 0 {
+                    buffer.extend_from_slice(&bytes[last_push..i]);
+                    last_push = i + read;
+
+                    callback(i..i + read, &matcher, &mut buffer, ctx)?;
+
+                    total_matches += 1;
+
+                    if n == Some(total_matches) {
+                        break;
+                    }
+                }
+
+                last_read = read;
+                i += read.max(1);
+            }
+
+            buffer.extend_from_slice(&bytes[last_push..]);
+
+            Ok((buffer, total_matches))
+        }
+
+        let (buffer, matches) = match repl {
+            Value::Table(table_ref) => {
+                process(bytes, pattern, n, ctx, |range, matcher, buffer, ctx| {
+                    let capture_range = matcher.captures().first().unwrap_or(&range);
+                    let key = ctx.intern_string(&bytes[capture_range.clone()]);
+                    let replacement_value = table_ref.get(key, ctx)?;
+                    push_replacement(replacement_value, buffer, ctx)?;
+                    Ok(())
+                })?
+            }
+            Value::Function(function_ref) => {
+                process(bytes, pattern, n, ctx, |range, matcher, buffer, ctx| {
+                    let replacement_value = if matcher.captures().is_empty() {
+                        let string_ref = ctx.intern_string(&bytes[range]);
+                        function_ref.call(string_ref, ctx)?
+                    } else {
+                        let mut args = ctx.create_multi();
+
+                        for capture in matcher.captures().iter().rev() {
+                            let string_ref = ctx.intern_string(&bytes[capture.clone()]);
+                            args.push_front(string_ref.into());
+                        }
+
+                        function_ref.call(args, ctx)?
+                    };
+
+                    push_replacement(replacement_value, buffer, ctx)?;
+
+                    Ok(())
+                })?
+            }
+            _ if let Ok(replacement) = ByteString::from_value(repl.clone(), ctx) => {
+                let replacement_bytes = replacement.as_bytes();
+
+                process(bytes, pattern, n, ctx, |range, matcher, buffer, _| {
+                    let captures = if matcher.captures().is_empty() {
+                        std::slice::from_ref(&range)
+                    } else {
+                        matcher.captures()
+                    };
+
+                    let mut last_push = 0;
+                    let mut iter = replacement_bytes.iter().enumerate();
+
+                    while let Some((i, &b)) = iter.next() {
+                        if b != b'%' {
+                            continue;
+                        }
+
+                        buffer.extend_from_slice(&replacement_bytes[last_push..i]);
+                        last_push = i + 2;
+
+                        match iter.next() {
+                            Some((_, b @ b'%')) => {
+                                buffer.push(*b);
+                            }
+                            Some((_, b'0')) => {
+                                buffer.extend_from_slice(&bytes[range.clone()]);
+                            }
+                            Some((_, b @ b'1'..=b'9')) => {
+                                let index = b - b'1';
+                                let Some(capture_range) = captures.get(index as usize) else {
+                                    let message = format!(
+                                        "invalid capture index %{}",
+                                        char::from_u32(*b as _).unwrap()
+                                    );
+                                    return Err(RuntimeError::new_string(message));
+                                };
+                                buffer.extend_from_slice(&bytes[capture_range.clone()]);
+                            }
+                            _ => {
+                                return Err(RuntimeError::new_static_string(
+                                    "invalid use of '%' in replacement string",
+                                ));
+                            }
+                        };
+                    }
+
+                    buffer.extend_from_slice(&replacement_bytes[last_push..]);
+
+                    Ok(())
+                })?
+            }
+            _ => {
+                let error_message =
+                    format!("string/function/table expected, got {}", repl.type_name());
+
+                return Err(RuntimeErrorData::BadArgument {
+                    position: 3,
+                    reason: RuntimeErrorData::ByteString(error_message.into()).into(),
+                }
+                .into());
+            }
+        };
+
+        let string = ctx.intern_string(&buffer);
+        call_ctx.return_values((string, matches), ctx)
+    });
+    gsub.rehydrate("str.gsub", ctx)?;
 
     // len
     let len = ctx.create_function(|call_ctx, ctx| {
@@ -208,6 +390,7 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         string.set("byte", byte, ctx)?;
         string.set("char", char, ctx)?;
         string.set("find", find, ctx)?;
+        string.set("gsub", gsub, ctx)?;
         string.set("len", len, ctx)?;
         string.set("lower", lower, ctx)?;
         string.set("match", match_func, ctx)?;

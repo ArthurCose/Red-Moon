@@ -33,6 +33,7 @@ fn valid() {
         "munchausen_numbers.lua",
         "semicolons.lua",
         "std_basic.lua",
+        "std_string.lua",
         "std_table.lua",
         "tables.lua.txt",
         "variables.lua.txt",

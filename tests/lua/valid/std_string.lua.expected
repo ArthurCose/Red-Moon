@@ -1,0 +1,56 @@
+string.byte():
+98	99
+
+string.char():
+abc
+
+string.find():
+1	3	s	d
+1	3
+5	7
+5	7
+nil
+1	0
+1	8
+
+string.match():
+asdf
+asdf
+abdf
+s	f
+b	f
+
+string.gsub():
+asdfasdf	2
+asdfasdfasdfasdf	2
+aa	2
+%%	2
+[%][%]	2
+asdfasdf	0
+[%]asdf	1
+adad	2
+testtest	2
+
+string.lower():
+abc
+
+string.upper():
+ABC
+
+string.sub():
+bC
+b
+bC
+AbC
+bC
+
+
+string.reverse():
+CbA
+
+string.len():
+3
+
+string.rep():
+123123123
+123,123,123
