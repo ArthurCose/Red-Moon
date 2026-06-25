@@ -20,6 +20,13 @@ abdf
 s	f
 b	f
 
+string.gmatch():
+abc
+aBc
+key	value
+a	b
+b	c
+
 string.gsub():
 asdfasdf	2
 asdfasdfasdfasdf	2

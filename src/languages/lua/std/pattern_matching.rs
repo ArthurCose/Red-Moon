@@ -549,7 +549,7 @@ impl<'de> serde::Deserialize<'de> for BytePattern {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PatternMatcher {
     start: usize,

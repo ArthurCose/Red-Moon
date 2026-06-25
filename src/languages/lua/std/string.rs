@@ -2,7 +2,8 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
 use crate::languages::lua::parse_number;
 use crate::languages::lua::std::{BytePattern, PatternMatcher};
-use crate::values::{ByteString, FromValue, Number, StringRef, TableRef, Value};
+use crate::tag_native_type;
+use crate::values::{ByteString, FromValue, FunctionRef, Number, StringRef, TableRef, Value};
 use std::ops::Range;
 
 pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
@@ -93,6 +94,112 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         call_ctx.return_values(Value::Nil, ctx)
     });
     find.rehydrate("str.find", ctx)?;
+
+    // gmatch
+    #[derive(Clone)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    struct RedMoonGmatch {
+        matcher: PatternMatcher,
+        pattern: BytePattern,
+        string: ByteString,
+        i: usize,
+        last_read: usize,
+    }
+
+    tag_native_type!(RedMoonGmatch);
+
+    let gmatch_iter = ctx.create_function(|call_ctx, ctx| {
+        println!("called gmatch_iter");
+        let Some(gmatch_state) = call_ctx.get_capture_mut::<RedMoonGmatch>(ctx) else {
+            return Err(RuntimeError::new_static_string(
+                "str.gmatch.iter capture removed?",
+            ));
+        };
+
+        let RedMoonGmatch {
+            matcher,
+            pattern,
+            string,
+            i,
+            last_read,
+        } = gmatch_state;
+
+        let bytes = string.as_bytes();
+
+        while *i < string.len() {
+            let Some(read) = matcher.try_match(pattern, bytes, *i) else {
+                *i += 1;
+                continue;
+            };
+
+            let should_return = read > 0 || *last_read == 0;
+            let range_start = *i;
+
+            *last_read = read;
+            *i += read.max(1);
+
+            if !should_return {
+                continue;
+            }
+
+            let s = string.clone();
+            let bytes = s.as_bytes();
+
+            if matcher.captures().is_empty() {
+                let range = range_start..range_start + read;
+                println!(
+                    "gmatch gup {:?}",
+                    String::from_utf8(bytes[range.clone()].to_vec())
+                );
+                let capture_ref = ctx.intern_string(&bytes[range.clone()]);
+                call_ctx.return_values(capture_ref, ctx)?;
+            } else {
+                for capture_range in matcher.captures().to_vec() {
+                    println!(
+                        "gmatch gup {:?}",
+                        String::from_utf8(bytes[capture_range.clone()].to_vec())
+                    );
+                    let capture_ref = ctx.intern_string(&bytes[capture_range.clone()]);
+                    call_ctx.return_values(capture_ref, ctx)?;
+                }
+            };
+
+            break;
+        }
+
+        Ok(())
+    });
+    gmatch_iter.rehydrate("str.gmatch.iter", ctx)?;
+
+    let gmatch = ctx
+        .create_function(|call_ctx, ctx| {
+            let (string, pattern_string, init): (ByteString, ByteString, Option<i64>) =
+                call_ctx.get_args(ctx)?;
+
+            let Some(gmatch_iter) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                return Err(RuntimeError::new_static_string(
+                    "str.gmatch capture removed?",
+                ));
+            };
+
+            let bytes = string.as_bytes();
+            let start = init.map(|i| remap_index(bytes, i)).unwrap_or(0);
+            let pattern = BytePattern::from_byte_string(pattern_string)
+                .map_err(|err| RuntimeError::new_string(err.to_string()))?;
+
+            let capture = RedMoonGmatch {
+                matcher: PatternMatcher::default(),
+                pattern,
+                string,
+                i: start,
+                last_read: 0,
+            };
+
+            let closure = gmatch_iter.clone().create_closure(capture, ctx)?;
+            call_ctx.return_values(closure, ctx)
+        })
+        .create_closure(gmatch_iter, ctx)?;
+    gmatch.rehydrate("str.gmatch", ctx)?;
 
     // gsub
     let gsub = ctx.create_function(|call_ctx, ctx| {
@@ -390,6 +497,7 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         string.set("byte", byte, ctx)?;
         string.set("char", char, ctx)?;
         string.set("find", find, ctx)?;
+        string.set("gmatch", gmatch, ctx)?;
         string.set("gsub", gsub, ctx)?;
         string.set("len", len, ctx)?;
         string.set("lower", lower, ctx)?;

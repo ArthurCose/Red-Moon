@@ -218,7 +218,7 @@ The garbage collector is incremental only.
 | `math`      |  27 / 27 | A time based seed is not supplied to `math.randomseed` for determinism by default.                                                             |
 | `os`        |   1 / 11 | Only `os.clock`                                                                                                                                |
 | `package`   |    0 / 8 |                                                                                                                                                |
-| `string`    |  11 / 17 | Missing `string.gmatch`, `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                                  |
+| `string`    |  11 / 17 | Missing `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                                                   |
 | `table`     |    6 / 7 | Missing `table.sort`                                                                                                                           |
 | `utf8`      |    0 / 6 |                                                                                                                                                |
 | `io`        |   0 / 21 |                                                                                                                                                |

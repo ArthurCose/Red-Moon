@@ -20,6 +20,15 @@ print(string.match("asdfabdf", "a.df", 2))
 print(string.match("asdfabdf", "a(.)d(f)"))
 print(string.match("asdfabdf", "a(.)d(f)", 2))
 
+print("\nstring.gmatch():")
+for v in string.gmatch("abc aBc", "a.c") do
+  print(v)
+end
+
+for k, v in string.gmatch("key=value,a=b,b=c", ",?(.-)=([^,]+)") do
+  print(k, v)
+end
+
 print("\nstring.gsub():")
 print(string.gsub("asdfasdf", "(a)sdf", "%0"))
 print(string.gsub("asdfasdf", "(a)sdf", "%0%0"))
