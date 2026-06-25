@@ -61,11 +61,6 @@ single_range_in_vec_init = "allow"
 panic = "abort"
 codegen-units = 1
 lto = true
-opt-level = 2
-
-[profile.performance]
-inherits = "release"
-strip = true
 
 [profile.profiling]
 inherits = "release"

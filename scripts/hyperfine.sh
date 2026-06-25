@@ -2,10 +2,10 @@
 
 # call from workspace root
 
-cargo build -p red_moon_repl --profile performance
+cargo build -p red_moon_repl --profile release
 
 MEASUREMENTS=30
 
 hyperfine --warmup 50 --min-runs $MEASUREMENTS\
-  "./target/performance/red_moon_repl $*"\
+  "./target/release/red_moon_repl $*"\
   "lua $*"
