@@ -109,7 +109,6 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     tag_native_type!(RedMoonGmatch);
 
     let gmatch_iter = ctx.create_function(|call_ctx, ctx| {
-        println!("called gmatch_iter");
         let Some(gmatch_state) = call_ctx.get_capture_mut::<RedMoonGmatch>(ctx) else {
             return Err(RuntimeError::new_static_string(
                 "str.gmatch.iter capture removed?",
@@ -147,18 +146,10 @@ pub fn load_string(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
             if matcher.captures().is_empty() {
                 let range = range_start..range_start + read;
-                println!(
-                    "gmatch gup {:?}",
-                    String::from_utf8(bytes[range.clone()].to_vec())
-                );
                 let capture_ref = ctx.intern_string(&bytes[range.clone()]);
                 call_ctx.return_values(capture_ref, ctx)?;
             } else {
                 for capture_range in matcher.captures().to_vec() {
-                    println!(
-                        "gmatch gup {:?}",
-                        String::from_utf8(bytes[capture_range.clone()].to_vec())
-                    );
                     let capture_ref = ctx.intern_string(&bytes[capture_range.clone()]);
                     call_ctx.return_values(capture_ref, ctx)?;
                 }
