@@ -57,8 +57,8 @@ impl std::fmt::Display for RuntimeError {
         if let Some(instruction_trace) = frames.iter().flat_map(|f| f.instruction_trace()).next() {
             write!(
                 f,
-                "{}:{}: ",
-                instruction_trace.source_name, instruction_trace.col
+                "{}:{}:{}: ",
+                instruction_trace.source_name, instruction_trace.line, instruction_trace.col
             )?;
         }
 
