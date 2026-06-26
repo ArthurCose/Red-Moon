@@ -27,7 +27,8 @@ print(table.unpack(t))
 print("\ntable.remove():")
 for i = 1, 4 do
   t = { 1, 2, 3 }
-  table.remove(t, i)
+  print(table.remove(t, i))
+  print(table.remove(t))
   print(table.unpack(t))
 end
 

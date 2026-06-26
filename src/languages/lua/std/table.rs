@@ -78,23 +78,24 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // remove
     let remove = ctx.create_function(|call_ctx, ctx| {
-        let (table, index): (TableRef, i64) = call_ctx.get_args(ctx)?;
+        let (table, index): (TableRef, Option<i64>) = call_ctx.get_args(ctx)?;
 
         let len = table.raw_len(ctx)?;
+        let index = index.unwrap_or(len as _);
 
         // lua allows for `#table + 1`
         if index == len as i64 + 1 {
-            return Ok(());
+            return call_ctx.return_values(Value::Nil, ctx);
         }
 
         // lua allows index to be 0 when the table len is 0
         if len == 0 && index == 0 {
-            return Ok(());
+            return call_ctx.return_values(Value::Nil, ctx);
         }
 
-        table.raw_remove::<Value>(index, ctx)?;
+        let value = table.raw_remove::<Value>(index, ctx)?;
 
-        Ok(())
+        call_ctx.return_values(value, ctx)
     });
     remove.rehydrate("table.remove", ctx)?;
 
