@@ -36,7 +36,7 @@ impl<T: NativeValue + Clone + 'static> CloneBoxedNativeValue for T {
 
 impl Clone for Box<dyn NativeValue> {
     fn clone(&self) -> Self {
-        self.clone_to_boxed_native_value()
+        (**self).clone_to_boxed_native_value()
     }
 }
 
