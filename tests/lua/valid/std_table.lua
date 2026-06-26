@@ -49,3 +49,40 @@ for i = 1, 4 do
   table.insert(t, i, 0)
   print(table.unpack(t))
 end
+
+print("\ntable.sort():")
+t = {}
+table.sort(t)
+print(table.unpack(t))
+
+t = { 1 }
+table.sort(t)
+print(table.unpack(t))
+
+t = { 2, 1, 1 }
+table.sort(t)
+print(table.unpack(t))
+
+t = { 2, 1 }
+table.sort(t)
+print(table.unpack(t))
+
+t = { 1, 2 }
+table.sort(t)
+print(table.unpack(t))
+
+t = { 3, 1, 2, 5, 4 }
+table.sort(t)
+print(table.unpack(t))
+
+t = { 1, 2, 3 }
+table.sort(t, function(a, b)
+  return a < b
+end)
+print(table.unpack(t))
+
+t = { 1, 2, 3 }
+table.sort(t, function(a, b)
+  return a > b
+end)
+print(table.unpack(t))

@@ -21,7 +21,7 @@ For unsafe functions in non-obvious parts of Lua's standard library:
 
 ## Determinism
 
-`pairs` and `next` iterate based on insertion order for map keys.
+`pairs` and `next` iterate based on insertion and removal order for map keys.
 
 `math.randomseed` always uses 0, 0 as a default instead of the system time.
 
@@ -218,8 +218,8 @@ The garbage collector is incremental only.
 | `math`      |  27 / 27 | A time based seed is not supplied to `math.randomseed` for determinism by default.                                                             |
 | `os`        |   1 / 11 | Only `os.clock`                                                                                                                                |
 | `package`   |    0 / 8 |                                                                                                                                                |
-| `string`    |  11 / 17 | Missing `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                                                   |
-| `table`     |    6 / 7 | Missing `table.sort`                                                                                                                           |
+| `string`    |  12 / 17 | Missing `string.dump`, `string.format`, `string.pack`, `string.unpack` and `string.packsize`                                                   |
+| `table`     |    7 / 7 |                                                                                                                                                |
 | `utf8`      |    0 / 6 |                                                                                                                                                |
 | `io`        |   0 / 21 |                                                                                                                                                |
 

@@ -343,6 +343,131 @@ impl TableRef {
         Ok(())
     }
 
+    /// Using zero based index
+    fn get_from_list(&self, i: usize, heap: &mut Heap) -> Result<Value, RuntimeError> {
+        let table = self.table(heap)?;
+        let Some(&stack_value) = table.list.get(i) else {
+            return Ok(Default::default());
+        };
+
+        let value = Value::from_stack_value(heap, stack_value);
+
+        Ok(value)
+    }
+
+    pub fn sort_unstable_by(
+        &self,
+        ctx: &mut VmContext,
+        mut less_than_fn: impl FnMut(&Value, &Value, &mut VmContext) -> Result<bool, RuntimeError>,
+    ) -> Result<(), RuntimeError> {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let table = self.table(heap)?;
+
+        if table.list.len() < 2 {
+            return Ok(());
+        }
+
+        // quicksort
+        let mut partitions = vec![0..table.list.len()];
+
+        while let Some(range) = partitions.pop() {
+            if range.len() < 2 {
+                continue;
+            }
+
+            if range.len() == 2 {
+                let left_index = range.start;
+                let right_index = range.end - 1;
+
+                let heap = &mut ctx.vm.execution_data.heap;
+                let left = self.get_from_list(left_index, heap)?;
+                let right = self.get_from_list(right_index, heap)?;
+
+                if less_than_fn(&right, &left, ctx)? {
+                    let heap = &mut ctx.vm.execution_data.heap;
+                    let table = self.table_mut_unmarked(heap)?;
+
+                    if right_index < table.list.len() {
+                        table.list.swap(left_index, right_index);
+                    }
+                }
+
+                continue;
+            }
+
+            let mut left_index = range.start.wrapping_sub(1);
+            let mut right_index = range.end;
+
+            let pivot_index = range.start + range.len() / 2;
+
+            let heap = &mut ctx.vm.execution_data.heap;
+            let pivot_value = self.get_from_list(pivot_index, heap)?;
+
+            loop {
+                // increment left
+                loop {
+                    left_index = left_index.wrapping_add(1);
+
+                    let heap = &mut ctx.vm.execution_data.heap;
+                    let value = self.get_from_list(left_index, heap)?;
+                    if !less_than_fn(&value, &pivot_value, ctx)? {
+                        break;
+                    }
+
+                    if left_index == right_index {
+                        return Err(RuntimeError::new_static_string(
+                            "invalid order function for sorting",
+                        ));
+                    }
+
+                    if left_index > right_index {
+                        break;
+                    }
+                }
+
+                // decrement right
+                loop {
+                    right_index = right_index.wrapping_sub(1);
+
+                    let heap = &mut ctx.vm.execution_data.heap;
+                    let value = self.get_from_list(right_index, heap)?;
+                    if !less_than_fn(&pivot_value, &value, ctx)? {
+                        break;
+                    }
+
+                    if right_index <= left_index {
+                        break;
+                    }
+                }
+
+                // crossed
+                if left_index >= right_index {
+                    // use the left_index as the end of the range as it may have passed the right index
+                    if range.start != left_index {
+                        if left_index - range.start > 1 {
+                            // avoid growing the partition stack for completed ranges
+                            partitions.push(range.start..left_index);
+                        }
+
+                        partitions.push(left_index..range.end);
+                    }
+
+                    break;
+                }
+
+                // swap, but check len just in case the user deleted some values
+                let heap = &mut ctx.vm.execution_data.heap;
+                let table = self.table_mut_unmarked(heap)?;
+
+                if right_index < table.list.len() {
+                    table.list.swap(left_index, right_index);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn next<P: IntoValue, K: FromValue, V: FromValue>(
         &self,
         previous_key: P,

@@ -1,6 +1,6 @@
 use crate::errors::RuntimeError;
 use crate::interpreter::VmContext;
-use crate::values::{ByteString, FromValue, TableRef, Value};
+use crate::values::{ByteString, FromValue, FunctionRef, TableRef, Value};
 
 pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // concat
@@ -151,7 +151,21 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     });
     table_move.rehydrate("table.move", ctx)?;
 
-    // todo: table.sort() https://www.lua.org/manual/5.4/manual.html#pdf-table.sort
+    // sort
+    let sort = ctx.create_function(|call_ctx, ctx| {
+        let (table, less_than_fn): (TableRef, Option<FunctionRef>) = call_ctx.get_args(ctx)?;
+
+        if let Some(less_than_fn) = less_than_fn {
+            table.sort_unstable_by(ctx, |a, b, ctx| {
+                less_than_fn.call((a.clone(), b.clone()), ctx)
+            })?;
+        } else {
+            table.sort_unstable_by(ctx, |a, b, ctx| a.is_less_than(b, ctx))?;
+        }
+
+        Ok(())
+    });
+    sort.rehydrate("table.sort", ctx)?;
 
     if !rehydrating {
         let table = ctx.create_table();
@@ -161,6 +175,7 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         table.raw_set("pack", pack, ctx)?;
         table.raw_set("unpack", unpack, ctx)?;
         table.raw_set("move", table_move, ctx)?;
+        table.raw_set("sort", sort, ctx)?;
 
         let env = ctx.default_environment();
         env.set("table", table, ctx)?;
