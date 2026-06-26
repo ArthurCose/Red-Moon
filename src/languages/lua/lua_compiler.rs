@@ -716,7 +716,7 @@ where
                         // mark the local variables that were lept over
                         // this makes sure we can't skip `local x = ..` if `x` is still in use after this jump
                         let scope_iter = std::iter::once(&mut self.top_function.top_scope)
-                            .chain(&mut self.top_function.scopes);
+                            .chain(self.top_function.scopes.iter_mut().rev());
 
                         for scope in scope_iter {
                             let mut failed_to_leap = false;
@@ -1297,7 +1297,7 @@ where
 
         // try to capture a new variable
         for (i, function) in self.function_stack.iter().rev().enumerate() {
-            for scope in std::iter::once(&function.top_scope).chain(&function.scopes) {
+            for scope in std::iter::once(&function.top_scope).chain(function.scopes.iter().rev()) {
                 if let Some(local) = scope.locals.get(token.content) {
                     if local.jumped_over {
                         return Err(LuaCompilationError {

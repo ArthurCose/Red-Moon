@@ -57,6 +57,29 @@ print(inc2())
 print(inc2())
 print(i)
 
+print("\nloop closures:")
+local loop_closure
+
+for i = 1, 10 do
+  if i == 1 then
+    loop_closure = function()
+      return i
+    end
+  end
+end
+
+print(loop_closure())
+
+for i, v in ipairs({ 5, 4, 3 }) do
+  if i == 1 then
+    loop_closure = function()
+      return v
+    end
+  end
+end
+
+print(loop_closure())
+
 print("\nconditions:")
 local function foo(a)
   local result
