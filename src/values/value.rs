@@ -210,12 +210,6 @@ impl Value {
     }
 
     pub fn is_less_than(&self, other: &Value, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
-        let lt = ctx.metatable_keys().lt.0.key();
-
-        if let Some(result) = self.try_binary_metamethods(other, lt, ctx) {
-            return result;
-        };
-
         let value = match (self, other) {
             (Value::String(l), _) => {
                 let Value::String(r) = other else {
@@ -231,6 +225,12 @@ impl Value {
             (Value::Integer(l), Value::Integer(r)) => *l < *r,
             (Value::Float(l), Value::Integer(r)) => *l < (*r as f64),
             (Value::Integer(l), Value::Float(r)) => (*l as f64) < *r,
+            (Value::Table(_), Value::Table(_))
+                if let Some(result) =
+                    self.try_binary_metamethods(other, ctx.metatable_keys().lt.0.key(), ctx) =>
+            {
+                return result;
+            }
             _ => {
                 return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
                     self.type_name(),
@@ -247,12 +247,6 @@ impl Value {
         other: &Value,
         ctx: &mut VmContext,
     ) -> Result<bool, RuntimeError> {
-        let le = ctx.metatable_keys().le.0.key();
-
-        if let Some(result) = self.try_binary_metamethods(other, le, ctx) {
-            return result;
-        };
-
         let value = match (self, other) {
             (Value::String(l), _) => {
                 let Value::String(r) = other else {
@@ -268,6 +262,12 @@ impl Value {
             (Value::Integer(l), Value::Integer(r)) => *l <= *r,
             (Value::Float(l), Value::Integer(r)) => *l <= (*r as f64),
             (Value::Integer(l), Value::Float(r)) => (*l as f64) <= *r,
+            (Value::Table(_), Value::Table(_))
+                if let Some(result) =
+                    self.try_binary_metamethods(other, ctx.metatable_keys().le.0.key(), ctx) =>
+            {
+                return result;
+            }
             _ => {
                 return Err(RuntimeError::from(RuntimeErrorData::InvalidCompare(
                     self.type_name(),
@@ -280,17 +280,20 @@ impl Value {
     }
 
     pub fn is_eq(&self, other: &Value, ctx: &mut VmContext) -> Result<bool, RuntimeError> {
-        let eq = ctx.metatable_keys().eq.0.key();
-
-        if let Some(result) = self.try_binary_metamethods(other, eq, ctx) {
-            return result;
-        };
-
         let value = match (self, other) {
             (Value::Float(l), Value::Float(r)) => *l == *r,
             (Value::Integer(l), Value::Integer(r)) => *l == *r,
             (Value::Float(l), Value::Integer(r)) => *l == (*r as f64),
-            (Value::Integer(l), Value::Float(r)) => (*l as f64) <= *r,
+            (Value::Integer(l), Value::Float(r)) => (*l as f64) == *r,
+            (Value::Table(l), Value::Table(r)) => {
+                let eq = ctx.metatable_keys().eq.0.key();
+
+                if let Some(result) = self.try_binary_metamethods(other, eq, ctx) {
+                    return result;
+                };
+
+                l == r
+            }
             _ => return Ok(self == other),
         };
 

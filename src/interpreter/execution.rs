@@ -8,7 +8,7 @@ use super::{Continuation, NativeCallContext};
 use super::{UpValueSource, VmContext};
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::coerce_integer;
-use crate::values::{FromValues, MultiValue, TypeName, Value};
+use crate::values::{ByteString, FromValues, MultiValue, TypeName, Value};
 use std::borrow::Cow;
 
 #[cfg(feature = "serde")]
@@ -1114,8 +1114,10 @@ impl Interpreter {
                         | (StackValue::Integer(int), StackValue::Float(float)) => {
                             int as f64 == float
                         }
-                        _ => {
-                            if let Some(call_result) = self.try_binary_metamethods(
+                        (StackValue::Table(a), StackValue::Table(b)) => {
+                            if a == b {
+                                true
+                            } else if let Some(call_result) = self.try_binary_metamethods(
                                 (heap, value_stack),
                                 metamethod_key,
                                 dest,
@@ -1123,10 +1125,11 @@ impl Interpreter {
                                 value_b,
                             ) {
                                 return Ok(call_result);
+                            } else {
+                                false
                             }
-
-                            value_a == value_b
                         }
+                        _ => value_a == value_b,
                     };
 
                     value_stack.set(self.register_base + dest as usize, StackValue::Bool(equal));
@@ -1140,25 +1143,7 @@ impl Interpreter {
                         metamethod_key,
                         |a, b| a < b,
                         |a, b| a < b,
-                        |heap, a, b| {
-                            if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
-                                let Some(bytes_a) = heap.get_bytes(key_a) else {
-                                    crate::debug_unreachable!();
-                                    #[cfg(not(debug_assertions))]
-                                    return None;
-                                };
-
-                                let Some(bytes_b) = heap.get_bytes(key_b) else {
-                                    crate::debug_unreachable!();
-                                    #[cfg(not(debug_assertions))]
-                                    return None;
-                                };
-
-                                Some(bytes_a < bytes_b)
-                            } else {
-                                None
-                            }
-                        },
+                        |a, b| a < b,
                     )? {
                         return Ok(call_result);
                     };
@@ -1172,25 +1157,7 @@ impl Interpreter {
                         metamethod_key,
                         |a, b| a <= b,
                         |a, b| a <= b,
-                        |heap, a, b| {
-                            if let (StackValue::Bytes(key_a), StackValue::Bytes(key_b)) = (a, b) {
-                                let Some(bytes_a) = heap.get_bytes(key_a) else {
-                                    crate::debug_unreachable!();
-                                    #[cfg(not(debug_assertions))]
-                                    return None;
-                                };
-
-                                let Some(bytes_b) = heap.get_bytes(key_b) else {
-                                    crate::debug_unreachable!();
-                                    #[cfg(not(debug_assertions))]
-                                    return None;
-                                };
-
-                                Some(bytes_a <= bytes_b)
-                            } else {
-                                None
-                            }
-                        },
+                        |a, b| a <= b,
                     )? {
                         return Ok(call_result);
                     };
@@ -1800,7 +1767,7 @@ impl Interpreter {
         metamethod_key: BytesObjectKey,
         integer_comparison: fn(i64, i64) -> bool,
         float_comparison: fn(f64, f64) -> bool,
-        heap_comparison: fn(&Heap, StackValue, StackValue) -> Option<bool>,
+        byte_comparison: fn(&ByteString, &ByteString) -> bool,
     ) -> Result<Option<CallResult>, RuntimeErrorData> {
         let value_a = value_stack.get_deref(heap, self.register_base + a as usize);
         let value_b = value_stack.get_deref(heap, self.register_base + b as usize);
@@ -1809,12 +1776,23 @@ impl Interpreter {
             (StackValue::Integer(int_a), StackValue::Integer(int_b)) => {
                 integer_comparison(int_a, int_b)
             }
-            (StackValue::Float(float), StackValue::Integer(int))
-            | (StackValue::Integer(int), StackValue::Float(float)) => {
+            (StackValue::Float(float), StackValue::Integer(int)) => {
+                float_comparison(float, int as f64)
+            }
+            (StackValue::Integer(int), StackValue::Float(float)) => {
                 float_comparison(int as f64, float)
             }
             (StackValue::Float(float_a), StackValue::Float(float_b)) => {
                 float_comparison(float_a, float_b)
+            }
+            (StackValue::Bytes(a), StackValue::Bytes(b)) => {
+                let (Some(bytes_a), Some(bytes_b)) = (heap.get_bytes(a), heap.get_bytes(b)) else {
+                    crate::debug_unreachable!();
+                    #[cfg(not(debug_assertions))]
+                    return Err(RuntimeErrorData::InvalidInternalState);
+                };
+
+                byte_comparison(bytes_a, bytes_b)
             }
             _ => {
                 if let Some(call_result) = self.try_binary_metamethods(
@@ -1827,14 +1805,10 @@ impl Interpreter {
                     return Ok(Some(call_result));
                 }
 
-                let Some(result) = heap_comparison(heap, value_a, value_b) else {
-                    return Err(RuntimeErrorData::InvalidCompare(
-                        value_a.type_name(heap),
-                        value_b.type_name(heap),
-                    ));
-                };
-
-                result
+                return Err(RuntimeErrorData::InvalidCompare(
+                    value_a.type_name(heap),
+                    value_b.type_name(heap),
+                ));
             }
         };
 

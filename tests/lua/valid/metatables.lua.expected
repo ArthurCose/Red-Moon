@@ -26,10 +26,6 @@ __shl	 called with args: 	table	1
 __shl	 called with args: 	1	table
 __shr	 called with args: 	table	1
 __shr	 called with args: 	1	table
-__eq	 called with args: 	table	1
-__eq	 called with args: 	1	table
-__eq	 called with args: 	table	1
-__eq	 called with args: 	1	table
 __lt	 called with args: 	table	1
 __lt	 called with args: 	1	table
 __lt	 called with args: 	1	table
