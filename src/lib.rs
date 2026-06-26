@@ -1,5 +1,6 @@
 #![cfg_attr(any(not(doctest), feature = "serde"), doc = include_str!("../README.md"))]
 
+mod utf8;
 mod vec_cell;
 
 #[cfg(feature = "serde")]

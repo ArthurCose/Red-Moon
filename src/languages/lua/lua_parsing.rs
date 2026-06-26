@@ -1,5 +1,6 @@
 use super::{LuaToken, LuaTokenLabel};
 use crate::errors::{SourcePosition, SyntaxError, SyntaxErrorData};
+use crate::utf8;
 use crate::values::Number;
 use std::borrow::Cow;
 
@@ -125,6 +126,55 @@ pub(crate) fn parse_string<'source>(
                     }
 
                     bytes_vec.push(b);
+                }
+                // unicode char
+                b'u' => {
+                    // skip past u
+                    i += 1;
+
+                    if bytes_slice.get(i) != Some(&b'{') {
+                        return Err(SyntaxError {
+                            source_position: SourcePosition::new(source, token.offset + i),
+                            data: SyntaxErrorData::UnexpectedCharacter,
+                        });
+                    }
+
+                    // skip past {
+                    i += 1;
+
+                    // remove leading zeros
+                    while bytes_slice.get(i) == Some(&b'0') {
+                        i += 1;
+                    }
+
+                    // read codepoint
+                    let mut codepoint: u32 = 0;
+
+                    for _ in 0..6 {
+                        let Some(digit) = bytes_slice.get(i).and_then(|d| parse_hex_digit(*d))
+                        else {
+                            break;
+                        };
+
+                        codepoint <<= 4;
+                        codepoint |= digit as u32;
+
+                        i += 1;
+                    }
+
+                    let (char_bytes, char_len) = utf8::encode(codepoint);
+
+                    if char_len == 0 || bytes_slice.get(i) != Some(&b'}') {
+                        // todo: better error that signals the character was not in range
+                        return Err(SyntaxError {
+                            source_position: SourcePosition::new(source, token.offset + i),
+                            data: SyntaxErrorData::UnexpectedCharacter,
+                        });
+                    }
+
+                    bytes_vec.extend(char_bytes.into_iter().take(char_len));
+
+                    i += 1;
                 }
                 // skip any following whitespace characters
                 b'z' => {
@@ -290,8 +340,8 @@ mod test {
 
     #[test]
     fn string_parsing() {
-        let source = r#""\a \b \f \n \r \t \v \\ \" \' \xFF \z    b""#;
-        let expected = b"\x07 \x08 \x0C \x0A \x0D \x09 \x0B \\ \" ' \xFF b";
+        let source = r#""\a \b \f \n \r \t \v \\ \" \' \xFF \u{e000} \z    b""#;
+        let expected = b"\x07 \x08 \x0C \x0A \x0D \x09 \x0B \\ \" ' \xFF \xEE\x80\x80 b";
 
         let lexer = LuaLexer::default();
         let mut token_iter = lexer.lex(source);
