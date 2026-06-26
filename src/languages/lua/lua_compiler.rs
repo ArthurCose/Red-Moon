@@ -2616,7 +2616,7 @@ where
         instructions.push(Instruction::Jump(0.into()));
 
         // assign locals
-        instructions.push(Instruction::CopyRangeToDeref(
+        instructions.push(Instruction::CopyRange(
             first_local,
             control_register,
             total_locals,

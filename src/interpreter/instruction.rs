@@ -212,6 +212,13 @@ pub enum Instruction {
 
     /// Copies a range of values
     ///
+    /// Does not account for `src` < `dest`
+    ///
+    /// (dest, src, count)
+    CopyRange(Register, Register, Register),
+
+    /// Copies a range of values
+    ///
     /// If a value points to another value, the pointed to value will be updated instead (used for closures)
     ///
     /// Does not account for `src` < `dest`
@@ -342,6 +349,7 @@ impl Instruction {
             Instruction::CopyToUpValueDeref(_, _) => "CopyToUpValueDeref",
             Instruction::Copy(_, _) => "Copy",
             Instruction::CopyToDeref(_, _) => "CopyToDeref",
+            Instruction::CopyRange(_, _, _) => "CopyRange",
             Instruction::CopyRangeToDeref(_, _, _) => "CopyRangeToDeref",
             Instruction::Len(_, _) => "Len",
             Instruction::Not(_, _) => "Not",

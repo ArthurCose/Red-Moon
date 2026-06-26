@@ -905,6 +905,9 @@ impl Interpreter {
                         value_stack.set(dest_index, value);
                     }
                 }
+                Instruction::CopyRange(dest, src, count) => {
+                    self.copy_range(exec_data, value_stack, dest, src, count)?;
+                }
                 Instruction::CopyRangeToDeref(dest, src, count) => {
                     self.copy_range_to_deref(exec_data, value_stack, dest, src, count)?;
                 }
@@ -2169,6 +2172,34 @@ impl Interpreter {
                 value_stack.set(dest_index + i, value);
             }
         }
+    }
+
+    fn copy_range(
+        &self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        src: Register,
+        count: Register,
+    ) -> Result<(), RuntimeErrorData> {
+        let heap = &mut exec_data.heap;
+
+        let src_start = self.register_base + src as usize;
+        let dest_start = self.register_base + dest as usize;
+        let count = count as usize;
+
+        let end = src_start.max(dest_start) + count;
+        let slice = value_stack.get_slice_mut(0..end);
+
+        for i in 0..count {
+            let dest_index = dest_start + i;
+            let src_index = src_start + i;
+
+            let value = slice[src_index].get_deref(heap);
+            slice[dest_index] = value;
+        }
+
+        Ok(())
     }
 
     fn copy_range_to_deref(
