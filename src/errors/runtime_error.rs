@@ -52,18 +52,6 @@ impl std::error::Error for RuntimeError {}
 
 impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let frames = self.trace.frames();
-
-        if let Some(instruction_trace) = frames.iter().flat_map(|f| f.instruction_trace()).next() {
-            write!(
-                f,
-                "{}:{}:{}: ",
-                instruction_trace.source_name, instruction_trace.line, instruction_trace.col
-            )?;
-        }
-
-        write!(f, "{}\n{}", self.data, self.trace)?;
-
-        Ok(())
+        write!(f, "{}\n{}", self.data, self.trace)
     }
 }
