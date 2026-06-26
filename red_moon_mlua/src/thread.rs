@@ -5,6 +5,7 @@ use std::fmt;
 
 #[derive(Clone)]
 pub struct Thread<'lua> {
+    #[allow(unused)]
     pub(crate) lua: &'lua Lua,
     pub(crate) coroutine_ref: CoroutineRef,
 }
