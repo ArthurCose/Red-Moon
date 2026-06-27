@@ -5,6 +5,14 @@ print("hi", 'hello', [[world]], true, 1.0, 2, false, 0xFF, nil)
 print("\nshort circuit:")
 print(false or 1, 2 or false, true and 3, false and 4, true and false)
 
+print("\nshort_circuit_movement:")
+local function short_circuit_movement(a, b, c)
+  -- we've previously returned nil here while still passing tests
+  -- from not copying to the right destinations
+  print(c or 2)
+end
+short_circuit_movement(nil, nil, 1)
+
 print("\nunary:")
 print(not false and 3)
 

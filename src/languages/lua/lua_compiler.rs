@@ -2249,50 +2249,34 @@ where
                 instructions.push(Instruction::LessThanEqual(dest, b, a));
             }
             LuaTokenLabel::And => {
-                // jump / skip calculating `b`` if `a` is falsey (fail the chain)
+                // jump / skip calculating `b`` if `a` is falsy (fail the chain)
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::TestTruthy(a, false));
+                instructions.push(Instruction::TestTruthyThenCopy(dest, a, false));
 
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
 
-                // calculate b, store directly in a's register
-                b = self.resolve_expression(a, return_mode, next_priority)?;
-                self.copy_stack_value(a, b);
-
-                let instructions = &mut self.top_function.instructions;
+                // calculate directly to the dest
+                self.resolve_expression(dest, return_mode, next_priority)?;
 
                 // resolve jump
-                if instructions.len() - jump_index > 2 {
-                    instructions[jump_index] = Instruction::Jump(instructions.len().into());
-                } else {
-                    // optimization, invert condition to remove the jump
-                    instructions[jump_index - 1] = Instruction::TestTruthy(a, true);
-                    instructions.remove(jump_index);
-                }
+                let instructions = &mut self.top_function.instructions;
+                instructions[jump_index] = Instruction::Jump(instructions.len().into());
             }
             LuaTokenLabel::Or => {
-                // jump / skip calculating `b`` if `a` is truthy (accept the first truthy value)
+                // use `a` and jump if `a` is truthy (accept the first truthy value)
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::TestTruthy(a, true));
+                instructions.push(Instruction::TestTruthyThenCopy(dest, a, true));
 
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
 
-                // calculate b in a's register as we want to swap it anyway
-                b = self.resolve_expression(a, return_mode, next_priority)?;
-                self.copy_stack_value(a, b);
-
-                let instructions = &mut self.top_function.instructions;
+                // calculate directly to the dest
+                self.resolve_expression(dest, return_mode, next_priority)?;
 
                 // resolve jump
-                if instructions.len() - jump_index > 2 {
-                    instructions[jump_index] = Instruction::Jump(instructions.len().into());
-                } else {
-                    // optimization, invert condition to remove the jump
-                    instructions[jump_index - 1] = Instruction::TestTruthy(a, false);
-                    instructions.remove(jump_index);
-                }
+                let instructions = &mut self.top_function.instructions;
+                instructions[jump_index] = Instruction::Jump(instructions.len().into());
             }
             _ => unreachable!(),
         }

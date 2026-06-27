@@ -291,6 +291,11 @@ pub enum Instruction {
     /// (src, expected)
     TestTruthy(Register, bool),
 
+    /// Skips an instruction and sets dest to src if (not not src) ~= expected
+    ///
+    /// (dest, src, expected)
+    TestTruthyThenCopy(Register, Register, bool),
+
     /// Skips an instruction if the value is not nil
     ///
     /// (src)
@@ -372,6 +377,7 @@ impl Instruction {
             Instruction::LessThanEqual(_, _, _) => "LessThanEqual",
             Instruction::Concat(_, _, _) => "Concat",
             Instruction::TestTruthy(_, _) => "TestTruthy",
+            Instruction::TestTruthyThenCopy(_, _, _) => "TestTruthyThenCopy",
             Instruction::TestNil(_) => "TestNil",
             Instruction::NumericFor(_, _) => "NumericFor",
             Instruction::JumpToForLoop(_) => "JumpToForLoop",

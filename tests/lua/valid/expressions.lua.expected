@@ -5,6 +5,9 @@ hi	hello	world	true	1.0	2	false	255	nil
 short circuit:
 1	2	3	false	false
 
+short_circuit_movement:
+1
+
 unary:
 3
 

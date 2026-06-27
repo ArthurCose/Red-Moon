@@ -145,6 +145,10 @@ impl StackValue {
             | StackValue::Pointer(_) => true,
         }
     }
+
+    pub(crate) fn is_truthy(&self) -> bool {
+        !matches!(self, StackValue::Nil | StackValue::Bool(false))
+    }
 }
 
 impl From<StorageKey> for StackValue {
@@ -211,9 +215,7 @@ impl ValueStack {
     }
 
     pub(crate) fn is_truthy(&self, index: usize) -> bool {
-        let stack_value = self.get(index);
-
-        !matches!(stack_value, StackValue::Nil | StackValue::Bool(false))
+        self.get(index).is_truthy()
     }
 
     pub(crate) fn set(&mut self, index: usize, value: StackValue) {

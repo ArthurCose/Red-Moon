@@ -1174,6 +1174,15 @@ impl Interpreter {
                         self.next_instruction_index += 1;
                     }
                 }
+                Instruction::TestTruthyThenCopy(dest, src, expected) => {
+                    let value = value_stack.get(self.register_base + src as usize);
+
+                    if value.is_truthy() == expected {
+                        value_stack.set(self.register_base + dest as usize, value);
+                    } else {
+                        self.next_instruction_index += 1;
+                    }
+                }
                 Instruction::TestNil(src) => {
                     if value_stack.get_deref(heap, self.register_base + src as usize)
                         != StackValue::Nil
