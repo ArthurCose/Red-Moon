@@ -1169,7 +1169,7 @@ impl Interpreter {
                         return Ok(call_result);
                     }
                 }
-                Instruction::TestTruthy(expected, src) => {
+                Instruction::TestTruthy(src, expected) => {
                     if value_stack.is_truthy(self.register_base + src as usize) != expected {
                         self.next_instruction_index += 1;
                     }

@@ -288,8 +288,8 @@ pub enum Instruction {
 
     /// Skips an instruction if (not not src) ~= expected
     ///
-    /// (expected, src)
-    TestTruthy(bool, Register),
+    /// (src, expected)
+    TestTruthy(Register, bool),
 
     /// Skips an instruction if the value is not nil
     ///

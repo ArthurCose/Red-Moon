@@ -443,7 +443,7 @@ where
                         self.expect(LuaTokenLabel::Then)?;
 
                         let instructions = &mut self.top_function.instructions;
-                        instructions.push(Instruction::TestTruthy(false, condition_register));
+                        instructions.push(Instruction::TestTruthy(condition_register, false));
                         let branch_index = instructions.len();
                         instructions.push(Instruction::Jump(0.into()));
 
@@ -517,7 +517,7 @@ where
                     self.expect(LuaTokenLabel::Do)?;
 
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::TestTruthy(false, condition_register));
+                    instructions.push(Instruction::TestTruthy(condition_register, false));
                     let branch_index = instructions.len();
                     instructions.push(Instruction::Jump(0.into()));
 
@@ -561,7 +561,7 @@ where
                     let condition_register =
                         self.resolve_expression(top_register, ReturnMode::Static(1), 0)?;
                     let instructions = &mut self.top_function.instructions;
-                    instructions.push(Instruction::TestTruthy(false, condition_register));
+                    instructions.push(Instruction::TestTruthy(condition_register, false));
                     instructions.push(Instruction::Jump(start_index.into()));
 
                     // resolve break jumps
@@ -2251,7 +2251,7 @@ where
             LuaTokenLabel::And => {
                 // jump / skip calculating `b`` if `a` is falsey (fail the chain)
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::TestTruthy(false, a));
+                instructions.push(Instruction::TestTruthy(a, false));
 
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
@@ -2267,14 +2267,14 @@ where
                     instructions[jump_index] = Instruction::Jump(instructions.len().into());
                 } else {
                     // optimization, invert condition to remove the jump
-                    instructions[jump_index - 1] = Instruction::TestTruthy(true, a);
+                    instructions[jump_index - 1] = Instruction::TestTruthy(a, true);
                     instructions.remove(jump_index);
                 }
             }
             LuaTokenLabel::Or => {
                 // jump / skip calculating `b`` if `a` is truthy (accept the first truthy value)
                 let instructions = &mut self.top_function.instructions;
-                instructions.push(Instruction::TestTruthy(true, a));
+                instructions.push(Instruction::TestTruthy(a, true));
 
                 let jump_index = instructions.len();
                 instructions.push(Instruction::Jump(0.into()));
@@ -2290,7 +2290,7 @@ where
                     instructions[jump_index] = Instruction::Jump(instructions.len().into());
                 } else {
                     // optimization, invert condition to remove the jump
-                    instructions[jump_index - 1] = Instruction::TestTruthy(false, a);
+                    instructions[jump_index - 1] = Instruction::TestTruthy(a, false);
                     instructions.remove(jump_index);
                 }
             }
