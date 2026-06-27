@@ -2,7 +2,7 @@ use crate::app_data::AppData;
 use crate::*;
 use app_data::{AppDataRef, AppDataRefMut};
 use red_moon::interpreter::Vm;
-use red_moon::languages::lua::std::{load_basic, load_math, load_table};
+use red_moon::languages::lua::std::{load_basic, load_math, load_string, load_table};
 use red_moon::languages::lua::{coerce_integer, parse_number};
 use red_moon::values::{ByteString, TableRef};
 use rustc_hash::FxHashMap;
@@ -181,6 +181,10 @@ impl Lua {
 
         if libs.contains(StdLib::MATH) {
             load_math(ctx)?;
+        }
+
+        if libs.contains(StdLib::STRING) {
+            load_string(ctx)?;
         }
 
         Ok(())
