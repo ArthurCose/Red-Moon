@@ -2257,7 +2257,8 @@ where
                 instructions.push(Instruction::Jump(0.into()));
 
                 // calculate directly to the dest
-                self.resolve_expression(dest, return_mode, next_priority)?;
+                b = self.resolve_expression(dest, return_mode, next_priority)?;
+                self.copy_stack_value(dest, b);
 
                 // resolve jump
                 let instructions = &mut self.top_function.instructions;
@@ -2272,7 +2273,8 @@ where
                 instructions.push(Instruction::Jump(0.into()));
 
                 // calculate directly to the dest
-                self.resolve_expression(dest, return_mode, next_priority)?;
+                b = self.resolve_expression(dest, return_mode, next_priority)?;
+                self.copy_stack_value(dest, b);
 
                 // resolve jump
                 let instructions = &mut self.top_function.instructions;

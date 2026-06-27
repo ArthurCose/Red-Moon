@@ -13,6 +13,9 @@ local function short_circuit_movement(a, b, c)
 end
 short_circuit_movement(nil, nil, 1)
 
+local a = 1
+print(nil or a)
+
 print("\nunary:")
 print(not false and 3)
 
