@@ -2592,8 +2592,11 @@ where
         // loop start, call the function and store the results over the control variable
         let start_index = instructions.len();
         let control_register = top_register + 3;
+
+        // todo: optimize
+        instructions.push(Instruction::CopyRange(control_register, top_register, 4));
         instructions.push(Instruction::Call(
-            top_register,
+            control_register,
             ReturnMode::UnsizedDestinationPreserve(control_register),
         ));
 

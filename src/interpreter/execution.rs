@@ -2165,24 +2165,21 @@ impl Interpreter {
         src: Register,
         count: Register,
     ) -> Result<(), RuntimeErrorData> {
-        let heap = &mut exec_data.heap;
-
-        let src_start = self.register_base + src as usize;
-        let dest_start = self.register_base + dest as usize;
-        let count = count as usize;
-
-        let end = src_start.max(dest_start) + count;
-        let slice = value_stack.get_slice_mut(0..end);
-
-        for i in 0..count {
-            let dest_index = dest_start + i;
-            let src_index = src_start + i;
+        fn copy_value(
+            exec_data: &mut ExecutionAccessibleData,
+            slice: &mut [StackValue],
+            dest_index: usize,
+            src_index: usize,
+        ) -> Result<(), RuntimeErrorData> {
+            let heap = &mut exec_data.heap;
 
             let value = slice[src_index].get_deref(heap);
             slice[dest_index] = value;
+
+            Ok(())
         }
 
-        Ok(())
+        self.copy_range_loop(exec_data, value_stack, dest, src, count, copy_value)
     }
 
     fn copy_range_to_deref(
@@ -2193,20 +2190,14 @@ impl Interpreter {
         src: Register,
         count: Register,
     ) -> Result<(), RuntimeErrorData> {
-        let gc = &mut exec_data.gc;
-        let heap = &mut exec_data.heap;
-
-        let src_start = self.register_base + src as usize;
-        let dest_start = self.register_base + dest as usize;
-        let count = count as usize;
-
-        let end = src_start.max(dest_start) + count;
-        let slice = value_stack.get_slice_mut(0..end);
-
-        for i in 0..count {
-            let dest_index = dest_start + i;
-            let src_index = src_start + i;
-
+        fn copy_value(
+            exec_data: &mut ExecutionAccessibleData,
+            slice: &mut [StackValue],
+            dest_index: usize,
+            src_index: usize,
+        ) -> Result<(), RuntimeErrorData> {
+            let gc = &mut exec_data.gc;
+            let heap = &mut exec_data.heap;
             let value = slice[src_index].get_deref(heap);
 
             if let StackValue::Pointer(key) = slice[dest_index] {
@@ -2219,6 +2210,52 @@ impl Interpreter {
                 *stored = value
             } else {
                 slice[dest_index] = value;
+            }
+
+            Ok(())
+        }
+
+        self.copy_range_loop(exec_data, value_stack, dest, src, count, copy_value)
+    }
+
+    fn copy_range_loop(
+        &self,
+        exec_data: &mut ExecutionAccessibleData,
+        value_stack: &mut ValueStack,
+        dest: Register,
+        src: Register,
+        count: Register,
+        // the usizes are dest, src
+        copy_value: fn(
+            &mut ExecutionAccessibleData,
+            &mut [StackValue],
+            usize,
+            usize,
+        ) -> Result<(), RuntimeErrorData>,
+    ) -> Result<(), RuntimeErrorData> {
+        let src_start = self.register_base + src as usize;
+        let dest_start = self.register_base + dest as usize;
+        let count = count as usize;
+
+        if src_start < dest_start {
+            let end = dest_start + count;
+            let slice = value_stack.get_slice_mut(0..end);
+
+            for i in (0..count).rev() {
+                let dest_index = dest_start + i;
+                let src_index = src_start + i;
+
+                copy_value(exec_data, slice, dest_index, src_index)?;
+            }
+        } else {
+            let end = src_start + count;
+            let slice = value_stack.get_slice_mut(0..end);
+
+            for i in 0..count {
+                let dest_index = dest_start + i;
+                let src_index = src_start + i;
+
+                copy_value(exec_data, slice, dest_index, src_index)?;
             }
         }
 

@@ -50,7 +50,7 @@ pub enum ReturnMode {
     Destination(Register),
     /// Swap the function and args on the stack with the return values, add the return count subtracted by one to a specific register
     Extend(Register),
-    /// Stores multiple result at a specific register without a return count
+    /// Stores multiple results at a specific register without a return count
     ///
     /// The destination and beyond will be cleared before placing values
     UnsizedDestinationPreserve(Register),
@@ -212,16 +212,12 @@ pub enum Instruction {
 
     /// Copies a range of values
     ///
-    /// Does not account for `src` < `dest`
-    ///
     /// (dest, src, count)
     CopyRange(Register, Register, Register),
 
     /// Copies a range of values
     ///
     /// If a value points to another value, the pointed to value will be updated instead (used for closures)
-    ///
-    /// Does not account for `src` < `dest`
     ///
     /// (dest, src, count)
     CopyRangeToDeref(Register, Register, Register),

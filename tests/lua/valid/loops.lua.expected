@@ -116,3 +116,6 @@ nested break:
 
 nested function break:
 1
+
+generic for loop tail call:
+success

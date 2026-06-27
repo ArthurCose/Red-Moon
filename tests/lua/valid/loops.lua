@@ -150,7 +150,6 @@ for i = 1, 10 do
   end
 end
 
-
 for i = 1, 3 do
   print(i)
 
@@ -173,4 +172,39 @@ for i = 1, 10, 1 do
 
     print("???")
   end
+end
+
+print("\ngeneric for loop tail call:")
+local function identity(value)
+  return value
+end
+
+local function iterate(max_i)
+  local i = 0
+
+  return function()
+    i = i + 1
+
+    if i <= max_i then
+      -- tail call optimization replaces the current function on the stack
+      -- which our for loop wants to reuse
+      return identity(max_i)
+    end
+  end
+end
+
+local iterations = 0
+local max_iterations = 3
+
+for _ in iterate(max_iterations) do
+  if iterations >= max_iterations then
+    error("should only iterate " .. max_iterations .. "x")
+  end
+
+  iterations = iterations + 1
+end
+
+-- print(iterations, iterate()())
+if iterations == max_iterations then
+  print("success")
 end
