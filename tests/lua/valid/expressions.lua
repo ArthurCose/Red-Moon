@@ -44,3 +44,13 @@ print((1) .. "b")
 print("\nlength:")
 print(#"1234")
 print(#{ 1, 2, 3, 4, 5 })
+
+print("\ncaptured operands:")
+local n = 1
+local b = false
+
+local _ = function()
+  return n + b
+end
+
+print(b or 1, b and true, n + 1)

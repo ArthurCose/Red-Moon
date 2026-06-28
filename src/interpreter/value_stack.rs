@@ -214,10 +214,6 @@ impl ValueStack {
         &mut self.values[range]
     }
 
-    pub(crate) fn is_truthy(&self, index: usize) -> bool {
-        self.get(index).is_truthy()
-    }
-
     pub(crate) fn set(&mut self, index: usize, value: StackValue) {
         self.extend_to(index + 1);
 

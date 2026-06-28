@@ -912,8 +912,9 @@ impl Interpreter {
                     self.copy_range_to_deref(exec_data, value_stack, dest, src, count)?;
                 }
                 Instruction::Not(dest, src) => {
-                    let value = !value_stack.is_truthy(self.register_base + src as usize);
-                    value_stack.set(self.register_base + dest as usize, StackValue::Bool(value));
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
+                    let truthy = !value.is_truthy();
+                    value_stack.set(self.register_base + dest as usize, StackValue::Bool(truthy));
                 }
                 Instruction::Len(dest, src) => {
                     if let Some(call_result) =
@@ -1170,12 +1171,14 @@ impl Interpreter {
                     }
                 }
                 Instruction::TestTruthy(src, expected) => {
-                    if value_stack.is_truthy(self.register_base + src as usize) != expected {
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
+
+                    if value.is_truthy() != expected {
                         self.next_instruction_index += 1;
                     }
                 }
                 Instruction::TestTruthyThenCopy(dest, src, expected) => {
-                    let value = value_stack.get(self.register_base + src as usize);
+                    let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
                     if value.is_truthy() == expected {
                         value_stack.set(self.register_base + dest as usize, value);
