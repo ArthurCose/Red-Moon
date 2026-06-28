@@ -61,7 +61,7 @@ pub fn load_table(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let (table, middle, last): (TableRef, Value, Value) = call_ctx.get_args(ctx)?;
 
         if call_ctx.arg_count() <= 2 {
-            table.push(middle, ctx)?;
+            table.raw_push(middle, ctx)?;
         } else {
             let map_err = |err: RuntimeError| {
                 // assume it's related to the middle arg

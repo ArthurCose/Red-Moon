@@ -251,7 +251,7 @@ impl<'lua> Table<'lua> {
 
         let vm = unsafe { self.lua.vm_mut() };
         let ctx = &mut vm.context();
-        self.table_ref.push(value, ctx)?;
+        self.table_ref.raw_push(value, ctx)?;
 
         Ok(())
     }

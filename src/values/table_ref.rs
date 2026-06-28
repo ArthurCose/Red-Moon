@@ -244,7 +244,11 @@ impl TableRef {
         V::from_value(value, ctx)
     }
 
-    pub fn push<V: IntoValue>(&self, value: V, ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    pub fn raw_push<V: IntoValue>(
+        &self,
+        value: V,
+        ctx: &mut VmContext,
+    ) -> Result<(), RuntimeError> {
         let value = value.into_value(ctx)?.to_stack_value();
 
         let heap = &mut ctx.vm.execution_data.heap;
