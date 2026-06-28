@@ -2376,12 +2376,13 @@ where
                     let instruction_start = self.top_function.instructions.len();
 
                     // try reading this as an expression
-                    self.resolve_partially_consumed_expression(
+                    let expression_src = self.resolve_partially_consumed_expression(
                         next_register,
                         ReturnMode::Extend(count_register),
                         token,
                         0,
                     )?;
+                    self.copy_stack_value(next_register, expression_src);
 
                     let instruction_end = self.top_function.instructions.len();
 

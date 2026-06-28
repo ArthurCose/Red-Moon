@@ -1,12 +1,16 @@
 -- saved as txt to avoid formatter
 
 print("basics:")
-a = {
+local a = {
   a = 1;
   ["b"] = 2;
   3,
 }
 print(a.a, a.b, a[1], #a)
+
+print("\ncopying from local:")
+a = 1
+print(({ a })[1])
 
 print("\nlen outside init:")
 a = {}
