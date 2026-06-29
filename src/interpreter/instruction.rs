@@ -54,6 +54,8 @@ pub enum ReturnMode {
     ///
     /// The destination and beyond will be cleared before placing values
     UnsizedDestinationPreserve(Register),
+    /// Coerces the result to a boolean. Used by comparison operators
+    Boolean(Register),
     /// Replace the calling function with this function, adopt the parent's ReturnMode
     TailCall,
     /// Used internally to re-enable hooks after a hook finishes

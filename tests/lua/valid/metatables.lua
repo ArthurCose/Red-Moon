@@ -57,6 +57,14 @@ noop(a[1])
 a[1] = 2
 a(1, 2)
 
+print("\ncomparison coercion:")
+print(a == 1)
+print(a ~= 1)
+print(a < 1)
+print(a > 1)
+print(a <= 1)
+print(a >= 1)
+
 print("\n__index short circuit:")
 local b = { value = 5 }
 print(b.value)

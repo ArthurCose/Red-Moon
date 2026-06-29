@@ -506,6 +506,17 @@ impl ExecutionContext {
                 value_stack.copy_within(start..start + return_count, dest_index);
                 value_stack.chip(dest_index + return_count, 0);
             }
+            ReturnMode::Boolean(dest) => {
+                // coerce value to boolean
+                let value = value_stack.get(return_count_index + 1);
+                let value = StackValue::Bool(value.is_truthy());
+
+                // remove all values
+                value_stack.chip(stack_start, 0);
+
+                // store value
+                value_stack.set(parent_base + dest as usize, value);
+            }
             ReturnMode::TailCall => {
                 // we're going to assume this is the final call
                 // the return mode should've been resolved to something else earlier
@@ -1121,7 +1132,7 @@ impl Interpreter {
                             } else if let Some(call_result) = self.try_binary_metamethods(
                                 (heap, value_stack),
                                 metamethod_key,
-                                dest,
+                                ReturnMode::Boolean(dest),
                                 value_a,
                                 value_b,
                             ) {
@@ -1506,7 +1517,13 @@ impl Interpreter {
         } else {
             // try metamethod as a fallback using the default value
             let call_result = self
-                .try_binary_metamethods((heap, value_stack), metamethod_key, dest, value_a, value_b)
+                .try_binary_metamethods(
+                    (heap, value_stack),
+                    metamethod_key,
+                    ReturnMode::Destination(dest),
+                    value_a,
+                    value_b,
+                )
                 .ok_or_else(|| {
                     let type_name_a = value_a.type_name(heap);
 
@@ -1541,7 +1558,7 @@ impl Interpreter {
                 heap,
                 value_stack,
                 (value, metamethod_key),
-                dest,
+                ReturnMode::Destination(dest),
                 value_a,
                 value_b,
             ) {
@@ -1618,7 +1635,7 @@ impl Interpreter {
                 heap,
                 value_stack,
                 (metamethod_value, metamethod_key),
-                dest,
+                ReturnMode::Destination(dest),
                 value_a,
                 value_b,
             )
@@ -1753,7 +1770,7 @@ impl Interpreter {
                     self.try_binary_metamethods(
                         (heap, value_stack),
                         metamethod_key,
-                        dest,
+                        ReturnMode::Destination(dest),
                         value_a,
                         value_b,
                     )
@@ -1810,7 +1827,7 @@ impl Interpreter {
                 if let Some(call_result) = self.try_binary_metamethods(
                     (heap, value_stack),
                     metamethod_key,
-                    dest,
+                    ReturnMode::Boolean(dest),
                     value_a,
                     value_b,
                 ) {
@@ -1833,7 +1850,7 @@ impl Interpreter {
         &self,
         (heap, value_stack): (&mut Heap, &mut ValueStack),
         metamethod_key: BytesObjectKey,
-        dest: Register,
+        return_mode: ReturnMode,
         value_a: StackValue,
         value_b: StackValue,
     ) -> Option<CallResult> {
@@ -1842,7 +1859,7 @@ impl Interpreter {
                 heap,
                 value_stack,
                 (value_a, metamethod_key),
-                dest,
+                return_mode,
                 value_a,
                 value_b,
             )
@@ -1855,7 +1872,7 @@ impl Interpreter {
                 heap,
                 value_stack,
                 (value_b, metamethod_key),
-                dest,
+                return_mode,
                 value_a,
                 value_b,
             )
@@ -1871,7 +1888,7 @@ impl Interpreter {
         heap: &mut Heap,
         value_stack: &mut ValueStack,
         (heap_key, metamethod_key): (StackValue, BytesObjectKey),
-        dest: Register,
+        return_mode: ReturnMode,
         value_a: StackValue,
         value_b: StackValue,
     ) -> Option<CallResult> {
@@ -1881,10 +1898,7 @@ impl Interpreter {
 
         value_stack.extend([function_key, StackValue::Integer(2), value_a, value_b]);
 
-        Some(CallResult::Call(
-            function_index,
-            ReturnMode::Destination(dest),
-        ))
+        Some(CallResult::Call(function_index, return_mode))
     }
 
     fn unary_number_operation(

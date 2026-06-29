@@ -38,6 +38,18 @@ __index	 called with args: 	table	1
 __newindex	 called with args: 	table	1	2
 __call	 called with args: 	table	1	2
 
+comparison coercion:
+false
+true
+__lt	 called with args: 	table	1
+false
+__lt	 called with args: 	1	table
+false
+__le	 called with args: 	table	1
+false
+__le	 called with args: 	1	table
+false
+
 __index short circuit:
 5
 5
