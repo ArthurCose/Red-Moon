@@ -108,6 +108,7 @@ impl Table {
         let mut size = 0;
         // map
         size += self.map.len() * Self::MAP_ELEMENT_SIZE;
+        size += self.removed_map.len() * Self::MAP_ELEMENT_SIZE;
         // list
         size += self.list.len() * Self::LIST_ELEMENT_SIZE;
         size
