@@ -18,6 +18,37 @@ arithmetic:
 boolean comparison:
 true	false	true	false	false	true	true	true
 
+bitwise and:
+1
+0
+1
+2
+3
+
+bitwise or:
+3
+3
+3
+
+bitwise not:
+-1
+-2
+
+bitwise xor:
+1
+2
+4
+4
+
+bitwise and not:
+6
+4
+
+bitwise bitshift:
+3
+1
+2
+
 string comparison:
 true	false	false	true	false	true
 

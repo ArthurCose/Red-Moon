@@ -949,7 +949,7 @@ impl Interpreter {
                         metamethod_key,
                         |type_name| RuntimeErrorData::InvalidArithmetic(type_name),
                         |heap, value| {
-                            Ok(StackValue::Integer(-arithmetic_cast_integer(heap, value)?))
+                            Ok(StackValue::Integer(!arithmetic_cast_integer(heap, value)?))
                         },
                     )? {
                         return Ok(call_result);
