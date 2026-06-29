@@ -736,7 +736,7 @@ impl Serialize for SerializableTable<'_, '_> {
     where
         S: Serializer,
     {
-        use crate::serde::de::{check_value_for_skip, MapPairs};
+        use crate::serde::de::{MapPairs, check_value_for_skip};
         use crate::value::SerializableValue;
 
         let options = self.options;
@@ -817,6 +817,8 @@ where
 
             let key = Value::from_red_moon(lua, key);
             let value = Value::from_red_moon(lua, value);
+
+            self.key = Some(key.clone());
 
             let key = K::from_lua(key, lua)?;
             let value = V::from_lua(value, lua)?;

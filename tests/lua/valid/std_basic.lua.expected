@@ -12,6 +12,20 @@ pairs:
 a	1
 b	2
 
+pairs first item removed:
+visit_counts["a"] = 1
+visit_counts["b"] = 1
+visit_counts["c"] = 1
+visit_counts["d"] = 1
+4
+
+pairs prev item removed:
+visit_counts["a"] = 1
+visit_counts["b"] = 1
+visit_counts["c"] = 1
+visit_counts["d"] = 1
+4
+
 select:
 1	2	3
 3

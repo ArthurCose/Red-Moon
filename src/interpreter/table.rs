@@ -92,8 +92,9 @@ impl From<&MapKey> for StackValue {
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct Table {
-    pub(crate) map: IndexMap<MapKey, StackValue, BuildFastHasher>,
     pub(crate) list: Vec<StackValue>,
+    pub(crate) map: IndexMap<MapKey, StackValue, BuildFastHasher>,
+    pub(crate) removed_map: IndexMap<MapKey, MapKey, BuildFastHasher>,
 }
 
 const BUCKET_SIZE: usize = std::mem::size_of::<usize>() + std::mem::size_of::<StackValue>() * 2;
@@ -215,10 +216,15 @@ impl Table {
     pub(crate) fn set_in_map(&mut self, key: StackValue, value: StackValue) {
         let key = MapKey::from(key);
 
-        if value == StackValue::Nil {
-            self.map.shift_remove(&key);
-        } else {
-            self.map.insert(key, value);
+        if value != StackValue::Nil {
+            if self.map.insert(key, value).is_none() {
+                // lua doesn't guarantee order when inserting a new key
+                self.removed_map.clear();
+            }
+        } else if let Some((i, ..)) = self.map.shift_remove_full(&key)
+            && let Some((next_key, _)) = self.map.get_index(i)
+        {
+            self.removed_map.insert(key, *next_key);
         }
     }
 
@@ -273,23 +279,29 @@ impl Table {
             self.list.push(value);
             map_key.value += 1;
         }
+
+        self.removed_map.clear();
     }
 
     /// Clears all values from the table, preserves metatable
     pub(crate) fn clear(&mut self) {
         self.list.clear();
         self.map.clear();
+        self.removed_map.clear();
     }
 
     pub(crate) fn next(&self, previous: StackValue) -> Option<(StackValue, StackValue)> {
         if previous == StackValue::Nil {
+            // get the first item from the list
             if let Some(&v) = self.list.first() {
                 return Some((StackValue::Integer(1), v));
             }
 
+            // get the first item from the map
             return self.map.first().map(|(k, v)| (k.into(), *v));
         }
 
+        // see if the key is in the list
         if let StackValue::Integer(i) = previous
             && i > 0
             && let Ok(i) = usize::try_from(i)
@@ -301,7 +313,22 @@ impl Table {
             }
         }
 
-        let index = self.map.get_index_of(&MapKey::from(previous))?;
-        self.map.get_index(index + 1).map(|(k, v)| (k.into(), *v))
+        // see if the key is in the map
+        let mut previous = MapKey::from(previous);
+
+        if let Some(index) = self.map.get_index_of(&previous) {
+            return self.map.get_index(index + 1).map(|(k, v)| (k.into(), *v));
+        }
+
+        // see if the key was removed before a new insert
+        while let Some(next_key) = self.removed_map.get(&previous) {
+            if let Some(i) = self.map.get_index_of(next_key) {
+                return self.map.get_index(i).map(|(k, v)| (k.into(), *v));
+            }
+
+            previous = *next_key;
+        }
+
+        None
     }
 }

@@ -557,7 +557,7 @@ impl GarbageCollector {
                 }
 
                 if weak_keys {
-                    for &element_key in table.map.keys() {
+                    for &element_key in table.map.keys().chain(table.removed_map.keys()) {
                         let element_key = StackValue::from(&element_key);
 
                         if let Some(storage_key) = element_key.as_storage_key() {
