@@ -26,6 +26,13 @@ visit_counts["c"] = 1
 visit_counts["d"] = 1
 4
 
+pairs last list item removed:
+visit_counts["1"] = 1
+visit_counts["2"] = 1
+visit_counts["a"] = 1
+visit_counts["b"] = 1
+4
+
 select:
 1	2	3
 3

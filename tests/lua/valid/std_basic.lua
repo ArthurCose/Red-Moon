@@ -11,9 +11,8 @@ for k, v in pairs(t) do
 end
 
 print("\npairs first item removed:")
-local function iterate_map(callback)
+local function iterate_map(key_list, callback)
   -- generate map
-  local key_list = { "a", "b", "c", "d" }
   local t = {}
 
   for i, k in ipairs(key_list) do
@@ -37,7 +36,7 @@ end
 
 local iterations = 0
 
-iterate_map(function(t, k, v)
+iterate_map({ "a", "b", "c", "d" }, function(t, k, v)
   if iterations == 1 then
     t[k] = nil
   end
@@ -52,12 +51,26 @@ print("\npairs prev item removed:")
 local iterations = 0
 local prev_key
 
-iterate_map(function(t, k)
+iterate_map({ "a", "b", "c", "d" }, function(t, k)
   if prev_key and iterations == 1 then
     t[prev_key] = nil
   end
 
   prev_key = k
+  iterations = iterations + 1
+end)
+
+print(iterations) -- should be #key_list
+
+-- make sure the list -> map boundary doesn't break
+print("\npairs last list item removed:")
+local iterations = 0
+
+iterate_map({ 1, 2, "a", "b" }, function(t, k)
+  if k == 2 then
+    t[k] = nil
+  end
+
   iterations = iterations + 1
 end)
 

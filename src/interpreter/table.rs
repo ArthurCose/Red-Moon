@@ -95,6 +95,7 @@ pub(crate) struct Table {
     pub(crate) list: Vec<StackValue>,
     pub(crate) map: IndexMap<MapKey, StackValue, BuildFastHasher>,
     pub(crate) removed_map: IndexMap<MapKey, MapKey, BuildFastHasher>,
+    prev_list_len: usize,
 }
 
 const BUCKET_SIZE: usize = std::mem::size_of::<usize>() + std::mem::size_of::<StackValue>() * 2;
@@ -221,6 +222,7 @@ impl Table {
             if self.map.insert(key, value).is_none() {
                 // lua doesn't guarantee order when inserting a new key
                 self.removed_map.clear();
+                self.prev_list_len = self.list.len();
             }
         } else if let Some((i, ..)) = self.map.shift_remove_full(&key)
             && let Some((next_key, _)) = self.map.get_index(i)
@@ -282,6 +284,7 @@ impl Table {
         }
 
         self.removed_map.clear();
+        self.prev_list_len = self.list.len();
     }
 
     /// Clears all values from the table, preserves metatable
@@ -289,6 +292,7 @@ impl Table {
         self.list.clear();
         self.map.clear();
         self.removed_map.clear();
+        self.prev_list_len = 0;
     }
 
     pub(crate) fn next(&self, previous: StackValue) -> Option<(StackValue, StackValue)> {
@@ -309,7 +313,7 @@ impl Table {
         {
             if let Some(&v) = self.list.get(i) {
                 return Some((StackValue::Integer((i + 1) as i64), v));
-            } else if i == self.list.len() {
+            } else if i <= self.prev_list_len {
                 return self.map.first().map(|(k, v)| (k.into(), *v));
             }
         }
@@ -331,5 +335,17 @@ impl Table {
         }
 
         None
+    }
+
+    pub(crate) fn is_key_valid(&self, key: StackValue) -> bool {
+        if let StackValue::Integer(i) = key
+            && let Ok(i) = usize::try_from(i)
+            && (1..=self.prev_list_len).contains(&i)
+        {
+            true
+        } else {
+            let key = MapKey::from(key);
+            self.map.get(&key).is_some() || self.removed_map.get(&key).is_some()
+        }
     }
 }
