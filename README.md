@@ -21,7 +21,7 @@ For unsafe functions in non-obvious parts of Lua's standard library:
 
 ## Determinism
 
-`pairs` and `next` iterate based on insertion and removal order for map keys.
+`pairs` and `next` iterate based on insertion order for map keys.
 
 `math.randomseed` always uses 0, 0 as a default instead of the system time.
 
