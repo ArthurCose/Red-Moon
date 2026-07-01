@@ -1,11 +1,8 @@
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 pub type Register = u8;
 pub type ConstantIndex = u16;
 
 #[derive(Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InstructionIndex([u8; 3]);
 
 impl InstructionIndex {
@@ -39,7 +36,7 @@ impl std::fmt::Display for InstructionIndex {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ReturnMode {
     /// Swap the function and args on the stack with an integer representing return count, followed by each return value
     #[default]
@@ -63,7 +60,7 @@ pub enum ReturnMode {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Instruction {
     /// Data carrying instruction that's interpreted by the previous instruction
     ///

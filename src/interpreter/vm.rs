@@ -21,11 +21,8 @@ use std::rc::Rc;
 #[cfg(feature = "instruction_metrics")]
 use super::instruction_metrics::InstructionMetricTracking;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VmLimits {
     pub stack_size: usize,
     pub metatable_chain_depth: usize,
@@ -106,7 +103,7 @@ pub struct Vm {
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for Vm {
+impl serde::Serialize for Vm {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -137,12 +134,12 @@ impl Serialize for Vm {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for Vm {
+impl<'de> serde::Deserialize<'de> for Vm {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Deserialize)]
+        #[derive(serde::Deserialize)]
         #[serde(rename = "Vm")]
         struct Data {
             limits: VmLimits,
@@ -159,7 +156,7 @@ impl<'de> Deserialize<'de> for Vm {
         crate::serde_util::begin_dedup();
 
         // deserialize
-        let result = Deserialize::deserialize(deserializer);
+        let result = serde::Deserialize::deserialize(deserializer);
 
         // reset + disable deduplication
         crate::serde_util::end_dedup();

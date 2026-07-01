@@ -5,11 +5,8 @@ use super::heap::{
 use crate::values::{Number, TypeName};
 use std::ops::Range;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Default, Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) enum StackValue {
     #[default]
     Nil,
@@ -165,7 +162,7 @@ impl From<StorageKey> for StackValue {
 }
 
 #[derive(Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ValueStack {
     values: Vec<StackValue>,
 }

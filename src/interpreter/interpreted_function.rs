@@ -5,13 +5,9 @@ use super::{SourceMapping, UpValueSource};
 use crate::errors::{InstructionTrace, StackTraceFrame};
 use std::rc::Rc;
 
-#[cfg(feature = "serde")]
-use {
-    crate::serde_util::{serde_function_definition_rc, serde_str_rc},
-    serde::{Deserialize, Serialize},
-};
+use crate::serde_util::{serde_function_definition_rc, serde_str_rc};
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct FunctionDefinition {
     #[cfg_attr(feature = "serde", serde(with = "serde_str_rc"))]
     pub(crate) label: Rc<str>,
@@ -76,7 +72,7 @@ impl FunctionDefinition {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Function {
     pub(crate) up_values: UpValues,
     #[cfg_attr(feature = "serde", serde(with = "serde_function_definition_rc"))]

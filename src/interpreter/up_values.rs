@@ -2,13 +2,10 @@ use super::heap::StackObjectKey;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
-use {
-    crate::serde_util::serde_stack_object_key_slice_rc,
-    serde::{Deserialize, Serialize},
-};
+use crate::serde_util::serde_stack_object_key_slice_rc;
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct UpValues {
     #[cfg_attr(feature = "serde", serde(with = "serde_stack_object_key_slice_rc"))]
     keys: Rc<[StackObjectKey]>,

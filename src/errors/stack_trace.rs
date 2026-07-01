@@ -3,13 +3,10 @@ use std::rc::Rc;
 use thin_vec::ThinVec;
 
 #[cfg(feature = "serde")]
-use {
-    crate::serde_util::serde_str_rc,
-    serde::{Deserialize, Serialize},
-};
+use crate::serde_util::serde_str_rc;
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InstructionTrace {
     #[cfg_attr(feature = "serde", serde(with = "serde_str_rc"))]
     pub(crate) source_name: Rc<str>,
@@ -37,7 +34,7 @@ impl InstructionTrace {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StackTraceFrame {
     pub(crate) instruction_trace: Option<InstructionTrace>,
     pub(crate) tail_called: bool,
@@ -54,7 +51,7 @@ impl StackTraceFrame {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StackTrace {
     frames: ThinVec<StackTraceFrame>,
 }

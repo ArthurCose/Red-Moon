@@ -4,7 +4,7 @@ macro_rules! impl_serde_serialize_stub_fn {
         where
             S: serde::Serializer,
         {
-            Serialize::serialize(&(), serializer)
+            serde::Serialize::serialize(&(), serializer)
         }
     };
 }

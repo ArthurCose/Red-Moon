@@ -11,12 +11,9 @@ use crate::interpreter::vm::CoroutineData;
 use crate::{FastHashMap, FastHashSet};
 use std::rc::Rc;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 /// Configuration for the incremental garbage collector
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GarbageCollectorConfig {
     /// used_memory_at_last_collection * pause / 100 = threshold for starting GcPhase::Mark
     ///
@@ -58,7 +55,7 @@ enum Mark {
 }
 
 #[derive(Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct GarbageCollector {
     #[cfg_attr(feature = "serde", serde(skip))]
     phase: Phase,

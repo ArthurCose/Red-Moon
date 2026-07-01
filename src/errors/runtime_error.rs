@@ -3,11 +3,8 @@ use super::stack_trace::StackTrace;
 use crate::tag_native_type;
 use crate::values::ByteString;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RuntimeError {
     pub trace: StackTrace,
     pub data: RuntimeErrorData,

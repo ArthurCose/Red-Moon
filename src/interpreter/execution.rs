@@ -11,9 +11,6 @@ use crate::languages::lua::coerce_integer;
 use crate::values::{ByteString, FromValues, MultiValue, TypeName, Value};
 use std::borrow::Cow;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 pub(crate) enum CallResult {
     Call(usize, ReturnMode),
     Return(usize),
@@ -21,7 +18,7 @@ pub(crate) enum CallResult {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReturnContext {
     pub(crate) interpreted: bool,
     pub(crate) tail_called: bool,
@@ -31,7 +28,7 @@ pub(crate) struct ReturnContext {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ExecutionContext {
     pub(crate) interpreter_stack: Vec<Interpreter>,
     pub(crate) return_contexts: Vec<ReturnContext>,
@@ -614,7 +611,7 @@ impl ExecutionReturnValues {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Interpreter {
     pub(crate) function: Function,
     pub(crate) next_instruction_index: usize,

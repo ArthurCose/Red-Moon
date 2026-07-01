@@ -5,9 +5,6 @@ use super::{Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::values::MultiValue;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Default, Clone, Copy)]
 pub(crate) struct YieldPermissions {
     pub(crate) parent_allows_yield: bool,
@@ -15,7 +12,7 @@ pub(crate) struct YieldPermissions {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) enum Continuation {
     Entry(StorageKey),
     Callback(NativeFnObjectKey, ValueStack),
@@ -23,7 +20,7 @@ pub(crate) enum Continuation {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CoroutineStatus {
     Suspended,
     Running,
@@ -31,7 +28,7 @@ pub enum CoroutineStatus {
 }
 
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Coroutine {
     pub(crate) status: CoroutineStatus,
     /// Vec<Continuation, parent_allows_yield>

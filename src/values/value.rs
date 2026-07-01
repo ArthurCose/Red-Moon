@@ -10,11 +10,8 @@ use crate::interpreter::value_stack::StackValue;
 use crate::languages::lua::parse_number;
 use crate::tag_native_type;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TypeName {
     Nil,
     Bool,

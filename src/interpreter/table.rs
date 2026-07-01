@@ -7,11 +7,8 @@ use crate::BuildFastHasher;
 use crate::languages::lua::coerce_integer;
 use indexmap::IndexMap;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct MapKey {
     variant: u8,
     value: u64,
@@ -90,7 +87,7 @@ impl From<&MapKey> for StackValue {
 }
 
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Table {
     pub(crate) list: Vec<StackValue>,
     pub(crate) map: IndexMap<MapKey, StackValue, BuildFastHasher>,

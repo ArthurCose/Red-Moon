@@ -4,13 +4,10 @@ use slice_dst::SliceWithHeader;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
-use {
-    crate::serde_util::serde_u8_thin_slice_rc,
-    serde::{Deserialize, Serialize},
-};
+use crate::serde_util::serde_u8_thin_slice_rc;
 
 #[derive(Clone, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ByteString(
     #[cfg_attr(feature = "serde", serde(with = "serde_u8_thin_slice_rc"))]
     pub(crate)  Thin<Rc<SliceWithHeader<(), u8>>>,

@@ -16,11 +16,8 @@ use std::rc::Rc;
 
 pub(crate) use crate::interpreter::heap_ref::HeapRef;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Storage {
     pub(super) stack_values: slotmap::SlotMap<StackObjectKey, StackValue>,
     pub(super) byte_strings: slotmap::SlotMap<BytesObjectKey, ByteString>,
@@ -106,7 +103,7 @@ object_key_struct!(FnObjectKey, Function, Function);
 object_key_struct!(CoroutineObjectKey, Coroutine, Coroutine);
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) enum StorageKey {
     StackValue(StackObjectKey),
     Bytes(BytesObjectKey),
@@ -118,7 +115,7 @@ pub(crate) enum StorageKey {
 
 /// Faster than StorageKey when used as a HashMap Key, since the variant and value can be compared directly
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct FastStorageKey {
     variant: u8,
     value: u64,
@@ -170,7 +167,7 @@ impl From<FastStorageKey> for StorageKey {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Heap {
     pub(crate) storage: Storage,
     pub(crate) byte_strings: FastHashMap<ByteString, BytesObjectKey>,

@@ -1,10 +1,7 @@
 use crate::interpreter::ConstantIndex;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum IllegalInstruction {
     MissingReturnCount,
     MissingArgCount,

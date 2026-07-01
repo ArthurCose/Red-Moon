@@ -6,11 +6,8 @@ use std::rc::Rc;
 #[cfg(doc)]
 use crate::interpreter::NativeCallContext;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RuntimeErrorData {
     IllegalInstruction(IllegalInstruction),
     InvalidRef,
