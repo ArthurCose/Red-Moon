@@ -5,6 +5,7 @@ use super::{SourceMapping, UpValueSource};
 use crate::errors::{InstructionTrace, StackTraceFrame};
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
 use crate::serde_util::{serde_function_definition_rc, serde_str_rc};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
