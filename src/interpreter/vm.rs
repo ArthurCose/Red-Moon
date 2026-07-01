@@ -623,7 +623,7 @@ impl VmContext<'_> {
             let heap = &mut ctx.vm.execution_data.heap;
 
             let Some(callback) = heap.resume_callbacks.get(&key) else {
-                return Err(RuntimeErrorData::InvalidInternalState.into());
+                return Err(RuntimeError::new_invalid_internal_state());
             };
 
             let callback = callback.shallow_clone();

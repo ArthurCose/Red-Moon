@@ -107,14 +107,14 @@ impl Coroutine {
                     StorageKey::NativeFunction(key) => {
                         ExecutionContext::call_native_fn(key, args, vm)
                     }
-                    _ => return Err(RuntimeErrorData::InvalidInternalState.into()),
+                    _ => return Err(RuntimeError::new_invalid_internal_state()),
                 },
                 Continuation::Callback(key, state) => {
                     let cache_pools = &vm.execution_data.cache_pools;
                     let heap = &mut vm.execution_data.heap;
                     let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
                     let Some(callback) = heap.resume_callbacks.get(&key) else {
-                        return Err(RuntimeErrorData::InvalidInternalState.into());
+                        return Err(RuntimeError::new_invalid_internal_state());
                     };
 
                     cache_pools.store_short_value_stack(state);
@@ -164,7 +164,7 @@ impl Coroutine {
 
                                 let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key)
                                 else {
-                                    err.data = RuntimeErrorData::InvalidInternalState;
+                                    err.data = RuntimeErrorData::new_invalid_internal_state();
                                     return Err(err);
                                 };
 
@@ -223,7 +223,7 @@ impl Coroutine {
 
         // using get_mut instead of get_mut_unmarked as we're adding to the continuation_stack
         let Some(coroutine) = heap.get_coroutine_mut(gc, co_heap_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         coroutine.status = CoroutineStatus::Suspended;
@@ -255,7 +255,7 @@ impl Coroutine {
             let vm = &mut *ctx.vm;
             let heap = &mut vm.execution_data.heap;
             let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
-                return Err(RuntimeErrorData::InvalidInternalState.into());
+                return Err(RuntimeError::new_invalid_internal_state());
             };
 
             let Some((continuation, parent_allows_yield)) = coroutine.continuation_stack.pop()
@@ -272,7 +272,7 @@ impl Coroutine {
                     let heap = &mut vm.execution_data.heap;
                     let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
                     let Some(callback) = heap.resume_callbacks.get(&key) else {
-                        return Err(RuntimeErrorData::InvalidInternalState.into());
+                        return Err(RuntimeError::new_invalid_internal_state());
                     };
 
                     cache_pools.store_short_value_stack(state);

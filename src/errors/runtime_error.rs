@@ -36,6 +36,12 @@ impl RuntimeError {
     pub fn new_byte_string(message: ByteString) -> RuntimeError {
         RuntimeError::from(RuntimeErrorData::ByteString(message))
     }
+
+    /// Returns an error containing [RuntimeErrorData::InvalidInternalState] in release builds, panics in debug builds.
+    #[track_caller]
+    pub fn new_invalid_internal_state() -> RuntimeError {
+        RuntimeErrorData::new_invalid_internal_state().into()
+    }
 }
 
 impl<T: Into<RuntimeErrorData>> From<T> for RuntimeError {

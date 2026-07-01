@@ -48,7 +48,7 @@ impl ExecutionContext {
         let mut value_stack = exec_data.cache_pools.create_value_stack();
 
         let Some(function) = exec_data.heap.get_interpreted_fn(function_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState.into());
+            return Err(RuntimeError::new_invalid_internal_state());
         };
 
         value_stack.push(function_key.into());
@@ -86,7 +86,7 @@ impl ExecutionContext {
         let exec_data = &mut vm.execution_data;
 
         let Some(function) = exec_data.heap.get_native_fn(function_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState.into());
+            return Err(RuntimeError::new_invalid_internal_state());
         };
 
         let function = function.shallow_clone();
@@ -227,7 +227,7 @@ impl ExecutionContext {
                             let Some(callback) = exec_data.heap.get_native_fn(key) else {
                                 return Err(Self::unwind_error(
                                     vm,
-                                    RuntimeErrorData::InvalidInternalState,
+                                    RuntimeErrorData::new_invalid_internal_state(),
                                 ));
                             };
 
@@ -332,7 +332,7 @@ impl ExecutionContext {
                             let Some(func) = exec_data.heap.get_interpreted_fn(key) else {
                                 return Err(Self::unwind_error(
                                     vm,
-                                    RuntimeErrorData::InvalidInternalState,
+                                    RuntimeErrorData::new_invalid_internal_state(),
                                 ));
                             };
 
@@ -556,9 +556,7 @@ impl ExecutionContext {
 
     pub(crate) fn continue_unwind(vm: &mut Vm, mut err: RuntimeError) -> RuntimeError {
         let Some(execution) = vm.execution_stack.pop() else {
-            crate::debug_unreachable!();
-            #[cfg(not(debug_assertions))]
-            return RuntimeErrorData::InvalidInternalState.into();
+            return RuntimeError::new_invalid_internal_state();
         };
 
         let exec_data = &mut vm.execution_data;
@@ -866,15 +864,11 @@ impl Interpreter {
                 }
                 Instruction::CopyUpValue(dest, src) => {
                     let Some(key) = self.function.up_values.get(src as usize) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        return Err(RuntimeErrorData::InvalidInternalState);
+                        return Err(RuntimeErrorData::new_invalid_internal_state());
                     };
 
                     let Some(value) = heap.get_stack_value(*key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        return Err(RuntimeErrorData::InvalidInternalState);
+                        return Err(RuntimeErrorData::new_invalid_internal_state());
                     };
 
                     value_stack.set(self.register_base + dest as usize, *value);
@@ -883,15 +877,11 @@ impl Interpreter {
                     let value = value_stack.get_deref(heap, self.register_base + src as usize);
 
                     let Some(key) = self.function.up_values.get(dest as usize) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        return Err(RuntimeErrorData::InvalidInternalState);
+                        return Err(RuntimeErrorData::new_invalid_internal_state());
                     };
 
                     let Some(stored) = heap.get_stack_value_mut(gc, *key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        return Err(RuntimeErrorData::InvalidInternalState);
+                        return Err(RuntimeErrorData::new_invalid_internal_state());
                     };
 
                     *stored = value
@@ -906,9 +896,7 @@ impl Interpreter {
 
                     if let StackValue::Pointer(key) = value_stack.get(dest_index) {
                         let Some(stored) = heap.get_stack_value_mut(gc, key) else {
-                            crate::debug_unreachable!();
-                            #[cfg(not(debug_assertions))]
-                            return Err(RuntimeErrorData::InvalidInternalState);
+                            return Err(RuntimeErrorData::new_invalid_internal_state());
                         };
 
                         *stored = value
@@ -1242,14 +1230,14 @@ impl Interpreter {
         let dest_index = self.register_base + dest as usize;
 
         let StackValue::Table(table_key) = value_stack.get(dest_index) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         let gc = &mut exec_data.gc;
         let heap = &mut exec_data.heap;
 
         let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         // get the index offset
@@ -1296,14 +1284,14 @@ impl Interpreter {
         let dest_index = self.register_base + dest as usize;
 
         let StackValue::Table(table_key) = value_stack.get(dest_index) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         let gc = &mut exec_data.gc;
         let heap = &mut exec_data.heap;
 
         let Some(table) = heap.get_table_mut(gc, table_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         // get the index offset
@@ -1361,7 +1349,7 @@ impl Interpreter {
         let heap = &mut exec_data.heap;
 
         let Some(func) = heap.get_interpreted_fn(function_key) else {
-            return Err(RuntimeErrorData::InvalidInternalState);
+            return Err(RuntimeErrorData::new_invalid_internal_state());
         };
 
         if func.definition.up_values.is_empty() {
@@ -1399,9 +1387,7 @@ impl Interpreter {
                         let src_index = *src as usize;
 
                         let Some(key) = self.function.up_values.get(src_index) else {
-                            crate::debug_unreachable!();
-                            #[cfg(not(debug_assertions))]
-                            return Err(RuntimeErrorData::InvalidInternalState);
+                            return Err(RuntimeErrorData::new_invalid_internal_state());
                         };
 
                         *key
@@ -1420,9 +1406,7 @@ impl Interpreter {
             if recursive && let StackValue::Pointer(key) = value_stack.get(dest_index) {
                 let gc = &mut exec_data.gc;
                 let Some(stored) = heap.get_stack_value_mut(gc, key) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 *stored = function_key.into();
@@ -1454,14 +1438,14 @@ impl Interpreter {
         let len = match value_a {
             StackValue::Table(key) => {
                 let Some(table) = heap.get_table(key) else {
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 table.list_len()
             }
             StackValue::Bytes(key) => {
                 let Some(bytes) = heap.get_bytes(key) else {
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 bytes.len()
@@ -1816,9 +1800,7 @@ impl Interpreter {
             }
             (StackValue::Bytes(a), StackValue::Bytes(b)) => {
                 let (Some(bytes_a), Some(bytes_b)) = (heap.get_bytes(a), heap.get_bytes(b)) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 byte_comparison(bytes_a, bytes_b)
@@ -1956,7 +1938,7 @@ impl Interpreter {
         let mut value = match base {
             StackValue::Table(table_key) => {
                 let Some(table) = exec_data.heap.get_table(table_key) else {
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 getter(table, key)
@@ -1984,7 +1966,7 @@ impl Interpreter {
                 match index_base {
                     StackValue::Table(table_key) => {
                         let Some(table) = exec_data.heap.get_table(table_key) else {
-                            return Err(RuntimeErrorData::InvalidInternalState);
+                            return Err(RuntimeErrorData::new_invalid_internal_state());
                         };
 
                         value = getter(table, key);
@@ -2066,7 +2048,7 @@ impl Interpreter {
         } else {
             let gc = &mut exec_data.gc;
             let Some(table) = heap.get_table_mut(gc, table_key) else {
-                return Err(RuntimeErrorData::InvalidInternalState);
+                return Err(RuntimeErrorData::new_invalid_internal_state());
             };
 
             let original_size = table.heap_size();
@@ -2219,9 +2201,7 @@ impl Interpreter {
 
             if let StackValue::Pointer(key) = slice[dest_index] {
                 let Some(stored) = heap.get_stack_value_mut(gc, key) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return Err(RuntimeErrorData::InvalidInternalState);
+                    return Err(RuntimeErrorData::new_invalid_internal_state());
                 };
 
                 *stored = value

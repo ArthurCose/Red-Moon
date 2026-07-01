@@ -87,6 +87,18 @@ impl_serde_deserialize_stub_fn!(
     super::RuntimeError::from(RuntimeErrorData::LostInSerialization).into()
 );
 
+impl RuntimeErrorData {
+    /// Returns [RuntimeErrorData::InvalidInternalState] in release builds, panics in debug builds.
+    #[track_caller]
+    pub fn new_invalid_internal_state() -> RuntimeErrorData {
+        if cfg!(debug_assertions) {
+            panic!("Invalid internal state");
+        } else {
+            RuntimeErrorData::InvalidInternalState
+        }
+    }
+}
+
 impl From<IllegalInstruction> for RuntimeErrorData {
     fn from(value: IllegalInstruction) -> Self {
         Self::IllegalInstruction(value)
