@@ -178,7 +178,14 @@ impl NativeCallContext {
         let execution = vm.execution_stack.last_mut().unwrap();
         let value_stack = &mut execution.value_stack;
         value_stack.chip(self.stack_start + 1, self.return_count + 1);
+
+        // re-add the the return count placeholder value
+        value_stack.push(StackValue::Nil);
+
+        self.arg_count = self.return_count;
         self.return_count = 0;
+
+        debug_assert_eq!(value_stack.len(), self.return_count_index() + 1);
     }
 
     #[inline]

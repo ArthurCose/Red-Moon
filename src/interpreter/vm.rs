@@ -650,8 +650,7 @@ impl VmContext<'_> {
                         return result.map(|_| call_ctx);
                     }
 
-                    if result.is_ok()
-                        || matches!(result, Err(ref err) if matches!(err.data , RuntimeErrorData::Yield(_)))
+                    if matches!(result, Err(ref err) if matches!(err.data, RuntimeErrorData::Yield(_)))
                     {
                         break;
                     }

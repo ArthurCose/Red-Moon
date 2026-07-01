@@ -447,9 +447,10 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         } else {
             // handle the result of the call
             match result {
-                Ok(values) => {
+                Ok(_) => {
                     // return the success flag and pass the return values
-                    call_ctx.return_values((true, values), ctx)?;
+                    call_ctx.return_values(true, ctx)?;
+                    call_ctx.return_arg_range(.., ctx);
                 }
                 Err(err) => {
                     // return the success flag and the error as a value

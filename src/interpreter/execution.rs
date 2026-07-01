@@ -284,8 +284,11 @@ impl ExecutionContext {
                             // revert tracked stack size before handling the result
                             vm.execution_data.tracked_stack_size = old_stack_size;
 
-                            match result {
-                                Ok(call_ctx) => call_ctx.finalize(vm),
+                            let return_count_index = match result {
+                                Ok(call_ctx) => {
+                                    call_ctx.finalize(vm);
+                                    call_ctx.return_count_index()
+                                }
                                 Err(mut err) => {
                                     // handle yielding
                                     if let RuntimeErrorData::Yield(_) = &mut err.data {
@@ -308,7 +311,7 @@ impl ExecutionContext {
 
                                     return Err(Self::continue_unwind(vm, err));
                                 }
-                            }
+                            };
 
                             // juggling lifetimes
                             execution = vm.execution_stack.last_mut().unwrap();
@@ -318,7 +321,8 @@ impl ExecutionContext {
                                 &mut vm.execution_data,
                                 return_context.return_mode,
                                 return_context.stack_start,
-                                return_context.register_base,
+                                // reading from call_ctx in case stack info was modified by flushing args to return values
+                                return_count_index,
                             );
 
                             if let Err(err) = result {
