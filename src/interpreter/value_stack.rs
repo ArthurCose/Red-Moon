@@ -18,7 +18,7 @@ pub(crate) enum StackValue {
     Table(TableObjectKey),
     NativeFunction(NativeFnObjectKey),
     Function(FnObjectKey),
-    Coroutine(CoroutineObjectKey),
+    Thread(CoroutineObjectKey),
 }
 
 impl PartialEq for StackValue {
@@ -36,7 +36,7 @@ impl PartialEq for StackValue {
             (Self::Table(l0), Self::Table(r0)) => l0 == r0,
             (Self::NativeFunction(l0), Self::NativeFunction(r0)) => l0 == r0,
             (Self::Function(l0), Self::Function(r0)) => l0 == r0,
-            (Self::Coroutine(l0), Self::Coroutine(r0)) => l0 == r0,
+            (Self::Thread(l0), Self::Thread(r0)) => l0 == r0,
             (Self::Nil, Self::Nil) => true,
             _ => false,
         }
@@ -58,7 +58,7 @@ impl std::hash::Hash for StackValue {
             StackValue::Table(key) => key.hash(state),
             StackValue::NativeFunction(key) => key.hash(state),
             StackValue::Function(key) => key.hash(state),
-            StackValue::Coroutine(key) => key.hash(state),
+            StackValue::Thread(key) => key.hash(state),
             StackValue::Pointer(key) => key.hash(state),
         }
     }
@@ -98,7 +98,7 @@ impl StackValue {
             StackValue::Table(_) => TypeName::Table,
             StackValue::NativeFunction(_) => TypeName::Function,
             StackValue::Function(_) => TypeName::Function,
-            StackValue::Coroutine(_) => TypeName::Thread,
+            StackValue::Thread(_) => TypeName::Thread,
             StackValue::Pointer(key) => heap
                 .get_stack_value(key)
                 .map(|value| {
@@ -123,7 +123,7 @@ impl StackValue {
             StackValue::Table(key) => Some(StorageKey::Table(key)),
             StackValue::NativeFunction(key) => Some(StorageKey::NativeFunction(key)),
             StackValue::Function(key) => Some(StorageKey::Function(key)),
-            StackValue::Coroutine(key) => Some(StorageKey::Coroutine(key)),
+            StackValue::Thread(key) => Some(StorageKey::Coroutine(key)),
             StackValue::Pointer(key) => Some(StorageKey::StackValue(key)),
         }
     }
@@ -138,7 +138,7 @@ impl StackValue {
             | StackValue::Table(_)
             | StackValue::NativeFunction(_)
             | StackValue::Function(_)
-            | StackValue::Coroutine(_)
+            | StackValue::Thread(_)
             | StackValue::Pointer(_) => true,
         }
     }
@@ -156,7 +156,7 @@ impl From<StorageKey> for StackValue {
             StorageKey::Table(key) => StackValue::Table(key),
             StorageKey::NativeFunction(key) => StackValue::NativeFunction(key),
             StorageKey::Function(key) => StackValue::Function(key),
-            StorageKey::Coroutine(key) => StackValue::Coroutine(key),
+            StorageKey::Coroutine(key) => StackValue::Thread(key),
         }
     }
 }

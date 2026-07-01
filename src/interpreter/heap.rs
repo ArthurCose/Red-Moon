@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) use crate::interpreter::heap_ref::HeapRef;
+pub(crate) use crate::interpreter::ref_counter::CounterRef;
 
 #[derive(Default, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -100,7 +101,7 @@ object_key_struct!(TableObjectKey, Table, Table);
 object_key_struct!(BytesObjectKey, Bytes, Bytes);
 object_key_struct!(NativeFnObjectKey, NativeFunction, NativeFunction);
 object_key_struct!(FnObjectKey, Function, Function);
-object_key_struct!(CoroutineObjectKey, Coroutine, Coroutine);
+object_key_struct!(CoroutineObjectKey, Coroutine, Thread);
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -127,7 +128,7 @@ impl FastStorageKey {
     const VARIANT_TABLE: u8 = 2;
     const VARIANT_NATIVE_FN: u8 = 3;
     const VARIANT_FN: u8 = 4;
-    const VARIANT_COROUTINE: u8 = 5;
+    const VARIANT_THREAD: u8 = 5;
 }
 
 impl From<StorageKey> for FastStorageKey {
@@ -142,7 +143,7 @@ impl From<StorageKey> for FastStorageKey {
             StorageKey::Table(key) => from_pair(Self::VARIANT_TABLE, key.as_ffi()),
             StorageKey::NativeFunction(key) => from_pair(Self::VARIANT_NATIVE_FN, key.as_ffi()),
             StorageKey::Function(key) => from_pair(Self::VARIANT_FN, key.as_ffi()),
-            StorageKey::Coroutine(key) => from_pair(Self::VARIANT_COROUTINE, key.as_ffi()),
+            StorageKey::Coroutine(key) => from_pair(Self::VARIANT_THREAD, key.as_ffi()),
         }
     }
 }
@@ -159,7 +160,7 @@ impl From<FastStorageKey> for StorageKey {
                 StorageKey::NativeFunction(NativeFnObjectKey::from_ffi(key.value))
             }
             FastStorageKey::VARIANT_FN => StorageKey::Function(FnObjectKey::from_ffi(key.value)),
-            FastStorageKey::VARIANT_COROUTINE => {
+            FastStorageKey::VARIANT_THREAD => {
                 StorageKey::Coroutine(CoroutineObjectKey::from_ffi(key.value))
             }
             _ => unreachable!(),

@@ -2,17 +2,24 @@ use super::{ForEachValue, MultiValue};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
 use crate::interpreter::coroutine::{Coroutine, CoroutineStatus};
-use crate::interpreter::heap::{CoroutineObjectKey, HeapRef, Storage};
+use crate::interpreter::heap::{CoroutineObjectKey, CounterRef, HeapRef, Storage};
 use crate::tag_native_type;
 use slotmap::Key;
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CoroutineRef(pub(crate) HeapRef<CoroutineObjectKey>);
+pub struct ThreadRef(pub(crate) HeapRef<CoroutineObjectKey>);
 
-tag_native_type!(CoroutineRef);
+tag_native_type!(ThreadRef);
 
-impl CoroutineRef {
+impl ThreadRef {
+    pub(crate) fn new_main_thread() -> Self {
+        Self(HeapRef {
+            key: CoroutineObjectKey::null(),
+            counter_ref: CounterRef::new_empty(),
+        })
+    }
+
     #[inline]
     pub fn id(&self) -> u64 {
         Storage::key_to_id(self.0.key().data(), Storage::COROUTINES_TAG)

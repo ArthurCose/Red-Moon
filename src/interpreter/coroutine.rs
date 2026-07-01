@@ -4,6 +4,7 @@ use super::value_stack::ValueStack;
 use super::{Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::values::MultiValue;
+use slotmap::Key;
 
 #[derive(Default, Clone, Copy)]
 pub(crate) struct YieldPermissions {
@@ -59,6 +60,10 @@ impl Coroutine {
         mut args: MultiValue,
         ctx: &mut VmContext,
     ) -> Result<MultiValue, RuntimeError> {
+        if co_key.is_null() {
+            return Err(RuntimeErrorData::ResumedNonSuspendedCoroutine.into());
+        }
+
         let vm = &mut *ctx.vm;
         let heap = &mut vm.execution_data.heap;
 

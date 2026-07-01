@@ -3,9 +3,9 @@ use super::ref_counter::CounterRef;
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct HeapRef<K> {
-    pub(super) key: K,
+    pub(crate) key: K,
     #[allow(dead_code)]
-    pub(super) counter_ref: CounterRef,
+    pub(crate) counter_ref: CounterRef,
 }
 
 impl<K: Copy> HeapRef<K> {

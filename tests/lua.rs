@@ -68,7 +68,7 @@ fn valid() {
                     Value::Float(n) => write!(&mut *out, "{n:?}").unwrap(),
                     Value::Table(_) => write!(&mut *out, "table").unwrap(),
                     Value::Function(_) => write!(&mut *out, "function").unwrap(),
-                    Value::Coroutine(_) => write!(&mut *out, "thread").unwrap(),
+                    Value::Thread(_) => write!(&mut *out, "thread").unwrap(),
                     Value::String(string_ref) => write!(
                         &mut *out,
                         "{}",

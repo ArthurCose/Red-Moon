@@ -13,8 +13,7 @@ use crate::interpreter::debug_hooks::{DebugHook, HookMask};
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
 use crate::interpreter::type_set::TypeSet;
 pub use crate::values::{
-    CoroutineRef, ForEachValue, FromValues, FunctionRef, MultiValue, NativeValue, StringRef,
-    TableRef,
+    ForEachValue, FromValues, FunctionRef, MultiValue, NativeValue, StringRef, TableRef, ThreadRef,
 };
 use std::rc::Rc;
 
@@ -701,17 +700,24 @@ impl VmContext<'_> {
     }
 
     #[inline]
-    pub fn top_coroutine(&mut self) -> Option<CoroutineRef> {
+    pub fn top_coroutine(&mut self) -> Option<ThreadRef> {
         let coroutine_data = &mut self.vm.execution_data.coroutine_data;
         let key = *coroutine_data.coroutine_stack.last()?;
 
-        Some(CoroutineRef(self.vm.execution_data.heap.create_ref(key)))
+        Some(ThreadRef(self.vm.execution_data.heap.create_ref(key)))
     }
 
-    pub fn create_coroutine(
-        &mut self,
-        function: FunctionRef,
-    ) -> Result<CoroutineRef, RuntimeError> {
+    #[inline]
+    pub fn top_thread(&mut self) -> ThreadRef {
+        self.top_coroutine().unwrap_or_else(|| self.main_thread())
+    }
+
+    #[inline]
+    pub fn main_thread(&mut self) -> ThreadRef {
+        ThreadRef::new_main_thread()
+    }
+
+    pub fn create_coroutine(&mut self, function: FunctionRef) -> Result<ThreadRef, RuntimeError> {
         let function_key = function.0.key();
 
         let heap = &self.vm.execution_data.heap;
@@ -729,7 +735,7 @@ impl VmContext<'_> {
         // test after creating ref to avoid immediately collecting the generated value
         self.try_gc_step();
 
-        Ok(CoroutineRef(heap_ref))
+        Ok(ThreadRef(heap_ref))
     }
 
     /// Returns true if the calling context allows yielding (Coroutine or resumable)

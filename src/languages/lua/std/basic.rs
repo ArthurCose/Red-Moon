@@ -669,7 +669,7 @@ fn to_string(value: Value, ctx: &mut VmContext) -> Result<String, RuntimeError> 
             Ok(format!("table: 0x{:x}", table.id()))
         }
         Value::Function(f) => Ok(format!("function: 0x{:x}", f.id())),
-        Value::Coroutine(f) => Ok(format!("thread: 0x{:x}", f.id())),
+        Value::Thread(f) => Ok(format!("thread: 0x{:x}", f.id())),
     }
 }
 

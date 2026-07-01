@@ -1,6 +1,6 @@
 use super::{
-    ByteString, CoroutineRef, ForEachValue, FromValues, FunctionRef, MultiValue, Number, StringRef,
-    TableRef,
+    ByteString, ForEachValue, FromValues, FunctionRef, MultiValue, Number, StringRef, TableRef,
+    ThreadRef,
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
@@ -9,6 +9,7 @@ use crate::interpreter::heap::{BytesObjectKey, Heap, StorageKey};
 use crate::interpreter::value_stack::StackValue;
 use crate::languages::lua::parse_number;
 use crate::tag_native_type;
+use slotmap::Key;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -52,7 +53,7 @@ pub enum Value {
     String(StringRef),
     Table(TableRef),
     Function(FunctionRef),
-    Coroutine(CoroutineRef),
+    Thread(ThreadRef),
 }
 
 tag_native_type!(Value);
@@ -76,7 +77,7 @@ impl Value {
             Value::String(_) => TypeName::String,
             Value::Table(_) => TypeName::Table,
             Value::Function(_) => TypeName::Function,
-            Value::Coroutine(_) => TypeName::Thread,
+            Value::Thread(_) => TypeName::Thread,
         }
     }
 
@@ -128,9 +129,9 @@ impl Value {
     }
 
     #[inline]
-    pub fn as_coroutine_ref(&self) -> Option<&CoroutineRef> {
-        if let Value::Coroutine(coroutine_ref) = self {
-            Some(coroutine_ref)
+    pub fn as_thread_ref(&self) -> Option<&ThreadRef> {
+        if let Value::Thread(thread_ref) = self {
+            Some(thread_ref)
         } else {
             None
         }
@@ -164,9 +165,9 @@ impl Value {
     }
 
     #[inline]
-    pub fn into_coroutine_ref(self) -> Option<CoroutineRef> {
-        if let Value::Coroutine(coroutine_ref) = self {
-            Some(coroutine_ref)
+    pub fn into_thread_ref(self) -> Option<ThreadRef> {
+        if let Value::Thread(thread_ref) = self {
+            Some(thread_ref)
         } else {
             None
         }
@@ -327,7 +328,7 @@ impl Value {
             Value::String(heap_ref) => heap_ref.0.key().into(),
             Value::Table(heap_ref) => heap_ref.0.key().into(),
             Value::Function(heap_ref) => heap_ref.0.key().into(),
-            Value::Coroutine(heap_ref) => heap_ref.0.key().into(),
+            Value::Thread(heap_ref) => heap_ref.0.key().into(),
         }
     }
 
@@ -344,7 +345,11 @@ impl Value {
             StackValue::NativeFunction(key) => {
                 Value::Function(FunctionRef(heap.create_ref(key.into())))
             }
-            StackValue::Coroutine(key) => Value::Coroutine(CoroutineRef(heap.create_ref(key))),
+            StackValue::Thread(key) => Value::Thread(if key.is_null() {
+                ThreadRef::new_main_thread()
+            } else {
+                ThreadRef(heap.create_ref(key))
+            }),
             StackValue::Pointer(key) => {
                 if let Some(value) = heap.get_stack_value(key) {
                     if matches!(value, StackValue::Pointer(_)) {
@@ -372,7 +377,7 @@ impl Value {
                 StorageKey::Function(key) => heap.get_interpreted_fn(key).is_some(),
                 _ => unreachable!(),
             },
-            Value::Coroutine(r) => heap.get_coroutine(r.0.key()).is_some(),
+            Value::Thread(r) => r.0.key().is_null() || heap.get_coroutine(r.0.key()).is_some(),
             Value::Nil | Value::Bool(_) | Value::Integer(_) | Value::Float(_) => return Ok(()),
         };
 
@@ -405,10 +410,10 @@ impl From<FunctionRef> for Value {
     }
 }
 
-impl From<CoroutineRef> for Value {
+impl From<ThreadRef> for Value {
     #[inline]
-    fn from(value: CoroutineRef) -> Self {
-        Self::Coroutine(value)
+    fn from(value: ThreadRef) -> Self {
+        Self::Thread(value)
     }
 }
 
@@ -454,10 +459,10 @@ impl IntoValue for FunctionRef {
     }
 }
 
-impl IntoValue for CoroutineRef {
+impl IntoValue for ThreadRef {
     #[inline]
     fn into_value(self, _: &mut VmContext) -> Result<Value, RuntimeError> {
-        Ok(Value::Coroutine(self))
+        Ok(Value::Thread(self))
     }
 }
 
@@ -592,11 +597,11 @@ impl FromValue for FunctionRef {
     }
 }
 
-impl FromValue for CoroutineRef {
+impl FromValue for ThreadRef {
     #[inline]
     fn from_value(value: Value, _: &mut VmContext) -> Result<Self, RuntimeError> {
-        if let Value::Coroutine(coroutine_ref) = value {
-            Ok(coroutine_ref)
+        if let Value::Thread(thread_ref) = value {
+            Ok(thread_ref)
         } else {
             Err(RuntimeErrorData::ExpectedType {
                 expected: TypeName::Thread,

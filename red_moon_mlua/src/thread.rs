@@ -1,5 +1,5 @@
 use crate::Lua;
-use red_moon::values::CoroutineRef;
+use red_moon::values::ThreadRef;
 use std::ffi::c_void;
 use std::fmt;
 
@@ -7,7 +7,7 @@ use std::fmt;
 pub struct Thread<'lua> {
     #[allow(unused)]
     pub(crate) lua: &'lua Lua,
-    pub(crate) coroutine_ref: CoroutineRef,
+    pub(crate) coroutine_ref: ThreadRef,
 }
 
 impl Thread<'_> {

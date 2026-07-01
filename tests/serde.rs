@@ -4,7 +4,7 @@ use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{Vm, VmContext};
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::load_coroutine;
-use red_moon::values::{CoroutineRef, FunctionRef, MultiValue, TableRef, Value, tag_native_type};
+use red_moon::values::{FunctionRef, MultiValue, TableRef, ThreadRef, Value, tag_native_type};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -138,7 +138,7 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
         .create_resumable_function(|(call_ctx, _, state), ctx| call_ctx.return_values(state, ctx));
     assert!(resumable.rehydrate("resumable_fn", ctx)?);
 
-    let co: CoroutineRef = env.get("co", ctx)?;
+    let co: ThreadRef = env.get("co", ctx)?;
     assert_eq!(co.resume((), ctx)?, MultiValue::pack("resumed", ctx)?);
 
     // rehydrate closure using the same implementation

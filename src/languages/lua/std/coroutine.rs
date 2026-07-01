@@ -1,6 +1,6 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
-use crate::values::{CoroutineRef, CoroutineStatus, FunctionRef, MultiValue, Value};
+use crate::values::{CoroutineStatus, FunctionRef, MultiValue, ThreadRef};
 
 pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     // todo: close
@@ -15,7 +15,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // isyieldable
     let isyieldable = ctx.create_function(|call_ctx, ctx| {
-        let co: Option<CoroutineRef> = call_ctx.get_args(ctx)?;
+        let co: Option<ThreadRef> = call_ctx.get_args(ctx)?;
 
         if !ctx.is_yieldable() {
             return call_ctx.return_values(false, ctx);
@@ -34,7 +34,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // resume
     let resume = ctx.create_function(|call_ctx, ctx| {
-        let (co, args): (CoroutineRef, MultiValue) = call_ctx.get_args(ctx)?;
+        let (co, args): (ThreadRef, MultiValue) = call_ctx.get_args(ctx)?;
 
         match co.resume(args, ctx) {
             Ok(values) => call_ctx.return_values((true, values), ctx),
@@ -50,7 +50,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         if let Some(co) = co {
             call_ctx.return_values((co, false), ctx)?;
         } else {
-            call_ctx.return_values((Value::Nil, true), ctx)?;
+            call_ctx.return_values((ctx.main_thread(), true), ctx)?;
         }
 
         Ok(())
@@ -59,7 +59,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // status
     let status = ctx.create_function(|call_ctx, ctx| {
-        let co: CoroutineRef = call_ctx.get_args(ctx)?;
+        let co: ThreadRef = call_ctx.get_args(ctx)?;
         let status = match co.status(ctx)? {
             CoroutineStatus::Suspended => "suspended",
             CoroutineStatus::Running => {
@@ -79,7 +79,7 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     let wrapped = ctx.create_function(|call_ctx, ctx| {
         let args: MultiValue = call_ctx.get_args(ctx)?;
 
-        if let Some(co) = call_ctx.get_capture::<CoroutineRef>(ctx) {
+        if let Some(co) = call_ctx.get_capture::<ThreadRef>(ctx) {
             let values = co.clone().resume(args, ctx)?;
             call_ctx.return_values(values, ctx)?;
         }

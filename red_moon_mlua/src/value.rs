@@ -478,7 +478,7 @@ impl<'lua> Value<'lua> {
                 byte_string: Default::default(),
             }),
             RedMoonValue::Table(table_ref) => Value::Table(Table { lua, table_ref }),
-            RedMoonValue::Coroutine(coroutine_ref) => Value::Thread(Thread { lua, coroutine_ref }),
+            RedMoonValue::Thread(coroutine_ref) => Value::Thread(Thread { lua, coroutine_ref }),
             RedMoonValue::Function(function_ref) => Value::Function(Function { lua, function_ref }),
         }
     }
@@ -495,7 +495,7 @@ impl<'lua> Value<'lua> {
             Value::String(s) => RedMoonValue::String(s.string_ref),
             Value::Table(t) => RedMoonValue::Table(t.table_ref),
             Value::Function(f) => RedMoonValue::Function(f.function_ref),
-            Value::Thread(t) => RedMoonValue::Coroutine(t.coroutine_ref),
+            Value::Thread(t) => RedMoonValue::Thread(t.coroutine_ref),
             // todo:
             Value::Error(_) => todo!(),
         }

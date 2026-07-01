@@ -1987,7 +1987,7 @@ impl Interpreter {
                     | StackValue::Integer(_)
                     | StackValue::Float(_)
                     | StackValue::Pointer(_)
-                    | StackValue::Coroutine(_) => {
+                    | StackValue::Thread(_) => {
                         return Err(RuntimeErrorData::AttemptToIndex(
                             index_base.type_name(&exec_data.heap),
                         ));

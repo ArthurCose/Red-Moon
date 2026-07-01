@@ -24,7 +24,7 @@ impl MapKey {
     const VARIANT_TABLE: u8 = 6;
     const VARIANT_NATIVE_FN: u8 = 7;
     const VARIANT_FN: u8 = 8;
-    const VARIANT_COROUTINE: u8 = 9;
+    const VARIANT_THREAD: u8 = 9;
 
     fn as_float(&self) -> f64 {
         f64::from_le_bytes(self.value.to_le_bytes())
@@ -60,7 +60,7 @@ impl From<StackValue> for MapKey {
             StackValue::Table(key) => from_pair(Self::VARIANT_TABLE, key.as_ffi()),
             StackValue::NativeFunction(key) => from_pair(Self::VARIANT_NATIVE_FN, key.as_ffi()),
             StackValue::Function(key) => from_pair(Self::VARIANT_FN, key.as_ffi()),
-            StackValue::Coroutine(key) => from_pair(Self::VARIANT_COROUTINE, key.as_ffi()),
+            StackValue::Thread(key) => from_pair(Self::VARIANT_THREAD, key.as_ffi()),
         }
     }
 }
@@ -78,9 +78,7 @@ impl From<&MapKey> for StackValue {
                 StackValue::NativeFunction(NativeFnObjectKey::from_ffi(key.value))
             }
             MapKey::VARIANT_FN => StackValue::Function(FnObjectKey::from_ffi(key.value)),
-            MapKey::VARIANT_COROUTINE => {
-                StackValue::Coroutine(CoroutineObjectKey::from_ffi(key.value))
-            }
+            MapKey::VARIANT_THREAD => StackValue::Thread(CoroutineObjectKey::from_ffi(key.value)),
             _ => StackValue::Nil,
         }
     }
