@@ -10,6 +10,11 @@ for k, v in pairs(t) do
   print(k, v)
 end
 
+print("\npairs empty table:")
+for k, v in pairs({}) do
+  print(k, v)
+end
+
 print("\npairs first item removed:")
 local function iterate_map(key_list, callback)
   -- generate map
@@ -89,7 +94,6 @@ print("\npairs gap in pure list:")
 for k, v in pairs({ 1, nil, 3, 4 }) do
   print(k, v)
 end
-
 
 print("\nselect:")
 print(select(1, 1, 2, 3))

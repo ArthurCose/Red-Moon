@@ -482,7 +482,7 @@ impl TableRef {
         let heap = &mut ctx.vm.execution_data.heap;
         let table = self.table(heap)?;
         let Some((k, v)) = table.next(previous_key) else {
-            if !table.is_key_valid(previous_key) {
+            if previous_key != StackValue::Nil && !table.is_key_valid(previous_key) {
                 return Err(RuntimeError::new_static_string("invalid key to 'next'"));
             }
             return Ok(None);

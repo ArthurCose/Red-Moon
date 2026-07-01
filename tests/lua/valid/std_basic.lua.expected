@@ -12,6 +12,8 @@ pairs:
 a	1
 b	2
 
+pairs empty table:
+
 pairs first item removed:
 visit_counts["a"] = 1
 visit_counts["b"] = 1
