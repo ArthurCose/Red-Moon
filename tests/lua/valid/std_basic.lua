@@ -76,6 +76,21 @@ end)
 
 print(iterations) -- should be #key_list
 
+print("\npairs on pure list:")
+local iterations = 0
+
+iterate_map({ 1, 2, 3 }, function(t, k)
+  iterations = iterations + 1
+end)
+
+print(iterations) -- should be #key_list
+
+print("\npairs gap in pure list:")
+for k, v in pairs({ 1, nil, 3, 4 }) do
+  print(k, v)
+end
+
+
 print("\nselect:")
 print(select(1, 1, 2, 3))
 print(select(-1, 1, 2, 3))

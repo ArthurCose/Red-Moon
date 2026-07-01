@@ -269,6 +269,7 @@ impl Table {
         if self.map.is_empty() {
             // quick exit optimization
             // assumes we usually don't need to merge map data into the list
+            self.prev_list_len = self.list.len();
             return;
         }
 
@@ -309,11 +310,17 @@ impl Table {
         // see if the key is in the list
         if let StackValue::Integer(i) = previous
             && i > 0
-            && let Ok(i) = usize::try_from(i)
+            && let Ok(mut i) = usize::try_from(i)
         {
-            if let Some(&v) = self.list.get(i) {
-                return Some((StackValue::Integer((i + 1) as i64), v));
-            } else if i <= self.prev_list_len {
+            while let Some(&v) = self.list.get(i) {
+                if v != StackValue::Nil {
+                    return Some((StackValue::Integer((i + 1) as i64), v));
+                }
+
+                i += 1;
+            }
+
+            if i <= self.prev_list_len {
                 return self.map.first().map(|(k, v)| (k.into(), *v));
             }
         }
