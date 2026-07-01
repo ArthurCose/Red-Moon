@@ -90,6 +90,9 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     assert!(!f.rehydrate("hydrated_fn", ctx)?);
     env.set("native_fn", f, ctx)?;
 
+    // make sure the main thread (a nullptr) is serializable
+    env.set("main_thread", ctx.main_thread(), ctx)?;
+
     // create holes and make sure the hydration tag doesn't get collected
     ctx.gc_collect();
 
@@ -152,6 +155,12 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     // retrieve singleton
     let my_singleton: &MySingleton = ctx.singleton().unwrap();
     assert_eq!(my_singleton, &MySingleton(1));
+
+    // compare main thread
+    assert_eq!(
+        env.get::<_, ThreadRef>("main_thread", ctx)?,
+        ctx.main_thread()
+    );
 
     Ok(())
 }

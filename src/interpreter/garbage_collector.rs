@@ -1,3 +1,5 @@
+use slotmap::Key;
+
 use super::heap::{FastStorageKey, Heap, NativeFnObjectKey, StorageKey, TableObjectKey};
 use crate::interpreter::Continuation;
 use crate::interpreter::cache_pools::CachePools;
@@ -613,8 +615,10 @@ impl GarbageCollector {
             }
             StorageKey::Coroutine(key) => {
                 let Some(co) = heap.get_coroutine(key) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
+                    #[cfg(debug_assertions)]
+                    if !key.is_null() {
+                        crate::debug_unreachable!();
+                    }
                     return;
                 };
 
