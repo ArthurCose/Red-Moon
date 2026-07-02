@@ -38,3 +38,9 @@ success b:	false
 
 resuming main:
 result:	false
+
+coroutine.isyieldable():
+from main:	false
+from coroutine:	true
+from table.sort() inside coroutine:	false
+from pcall() inside coroutine:	true

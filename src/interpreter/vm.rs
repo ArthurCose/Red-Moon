@@ -683,11 +683,20 @@ impl VmContext<'_> {
             value.test_validity(heap)?;
         }
 
+        let execution_data = &mut self.vm.execution_data;
+        let coroutine_data = &mut execution_data.coroutine_data;
+        let yield_prev_permitted = coroutine_data.yield_permitted;
+        coroutine_data.yield_permitted = false;
+
         let result = match function_value {
             StackValue::NativeFunction(key) => ExecutionContext::call_native_fn(key, args, self.vm),
             StackValue::Function(key) => ExecutionContext::call_interpreted(key, args, self.vm),
             _ => ExecutionContext::call_value(function_value, args, self.vm),
         };
+
+        let execution_data = &mut self.vm.execution_data;
+        let coroutine_data = &mut execution_data.coroutine_data;
+        coroutine_data.yield_permitted = yield_prev_permitted;
 
         if let Err(
             mut err @ RuntimeError {
@@ -697,8 +706,7 @@ impl VmContext<'_> {
         ) = result
         {
             // can't yield from this function
-            let execution_data = &mut self.vm.execution_data;
-            let coroutine_data = &mut execution_data.coroutine_data;
+            coroutine_data.yield_pending = false;
             coroutine_data.in_progress_yield.clear();
 
             err.data = RuntimeErrorData::InvalidYield;

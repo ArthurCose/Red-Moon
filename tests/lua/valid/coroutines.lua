@@ -93,3 +93,22 @@ coroutine.resume(co)
 print("\nresuming main:")
 local success = coroutine.resume(coroutine.running())
 print("result:", success)
+
+print("\ncoroutine.isyieldable():")
+print("from main:", coroutine.isyieldable())
+co = coroutine.create(function()
+  print("from coroutine:", coroutine.isyieldable())
+
+  local yield_permitted
+  table.sort({ 1, 2 }, function(a, b)
+    yield_permitted = coroutine.isyieldable()
+    return a < b
+  end)
+
+  print("from table.sort() inside coroutine:", yield_permitted)
+
+  pcall(function()
+    print("from pcall() inside coroutine:", coroutine.isyieldable())
+  end)
+end)
+coroutine.resume(co)
