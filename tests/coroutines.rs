@@ -1,4 +1,4 @@
-use red_moon::errors::RuntimeError;
+use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::Vm;
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::{load_basic, load_coroutine};
@@ -116,6 +116,151 @@ fn resumable() -> Result<(), RuntimeError> {
     let module = compile(SOURCE).unwrap();
     ctx.load_function(file!(), None, module)?
         .call::<_, ()>((), ctx)?;
+
+    Ok(())
+}
+
+#[test]
+fn non_yieldable_boundary() -> Result<(), RuntimeError> {
+    let mut vm = Vm::default();
+    let ctx = &mut vm.context();
+
+    load_basic(ctx)?;
+    load_coroutine(ctx)?;
+
+    const SOURCE: &str = r#"
+        local co = coroutine.create(
+            function()
+                table.sort({ 1, 3, 2 }, function()
+                    coroutine.yield()
+                    return false
+                end)
+            end
+        )
+
+        return coroutine.resume(co)
+    "#;
+
+    let module = compile(SOURCE).unwrap();
+    let success = ctx
+        .load_function(file!(), None, module)?
+        .call::<_, bool>((), ctx)?;
+
+    assert!(!success);
+
+    Ok(())
+}
+
+#[test]
+fn yield_in_main() -> Result<(), RuntimeError> {
+    let mut vm = Vm::default();
+    let ctx = &mut vm.context();
+
+    load_basic(ctx)?;
+    load_coroutine(ctx)?;
+
+    const SOURCE: &str = r#"
+        coroutine.yield()
+    "#;
+
+    let module = compile(SOURCE).unwrap();
+    let result = ctx
+        .load_function(file!(), None, module)?
+        .call::<_, ()>((), ctx);
+
+    let err = result.unwrap_err();
+    assert_eq!(err.data, RuntimeErrorData::InvalidYield);
+
+    Ok(())
+}
+
+#[test]
+fn double_yield() -> Result<(), RuntimeError> {
+    let mut vm = Vm::default();
+    let ctx = &mut vm.context();
+
+    load_basic(ctx)?;
+    load_coroutine(ctx)?;
+
+    let noop = ctx.create_function(|_, _| Ok(()));
+    let yielder = ctx
+        .create_function(|call_ctx, ctx| {
+            let Some(resume_fn) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                return Err(RuntimeError::new_invalid_internal_state());
+            };
+            let resume_fn = resume_fn.clone();
+
+            // ignoring the first yield
+            let _ = call_ctx.yield_data((), resume_fn.clone(), ctx);
+
+            // yielding again
+            call_ctx.yield_data((), resume_fn, ctx)?;
+
+            Ok(())
+        })
+        .create_closure(noop, ctx)?;
+
+    let env = ctx.default_environment();
+    env.set("double_yield", yielder, ctx)?;
+
+    const SOURCE: &str = r#"
+        local co = coroutine.create(function()
+            double_yield()
+        end)
+
+        return coroutine.resume(co)
+    "#;
+
+    let module = compile(SOURCE).unwrap();
+    let success = ctx
+        .load_function(file!(), None, module)?
+        .call::<_, bool>((), ctx)?;
+
+    assert!(!success);
+
+    Ok(())
+}
+
+#[test]
+fn unhandled_yield() -> Result<(), RuntimeError> {
+    let mut vm = Vm::default();
+    let ctx = &mut vm.context();
+
+    load_basic(ctx)?;
+    load_coroutine(ctx)?;
+
+    let noop = ctx.create_function(|_, _| Ok(()));
+    let yielder = ctx
+        .create_function(|call_ctx, ctx| {
+            let Some(resume_fn) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                return Err(RuntimeError::new_invalid_internal_state());
+            };
+            let resume_fn = resume_fn.clone();
+
+            // unhandled yield
+            let _ = call_ctx.yield_data((), resume_fn, ctx);
+
+            Ok(())
+        })
+        .create_closure(noop, ctx)?;
+
+    let env = ctx.default_environment();
+    env.set("unhandled_yield", yielder, ctx)?;
+
+    const SOURCE: &str = r#"
+        local co = coroutine.create(function()
+            unhandled_yield()
+        end)
+
+        return coroutine.resume(co)
+    "#;
+
+    let module = compile(SOURCE).unwrap();
+    let success = ctx
+        .load_function(file!(), None, module)?
+        .call::<_, bool>((), ctx)?;
+
+    assert!(!success);
 
     Ok(())
 }

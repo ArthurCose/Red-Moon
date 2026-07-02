@@ -317,7 +317,7 @@ impl ExecutionContext {
 
                                 return Err(Self::unwind_error(
                                     vm,
-                                    RuntimeErrorData::new_invalid_internal_state(),
+                                    RuntimeErrorData::UnhandledYield,
                                 ));
                             }
 

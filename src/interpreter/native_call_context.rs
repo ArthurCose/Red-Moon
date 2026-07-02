@@ -201,6 +201,13 @@ impl NativeCallContext {
             return Err(RuntimeErrorData::InvalidYield.into());
         }
 
+        if coroutine_data.yield_pending {
+            coroutine_data.yield_pending = false;
+            coroutine_data.in_progress_yield.clear();
+
+            return Err(RuntimeErrorData::UnhandledYield.into());
+        }
+
         coroutine_data
             .in_progress_yield
             .push((Continuation::Callback(resume_function), true));
