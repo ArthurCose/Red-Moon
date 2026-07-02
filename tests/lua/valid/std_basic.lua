@@ -101,3 +101,14 @@ print(select(-1, 1, 2, 3))
 print(select(5, 1, 2, 3))
 print(select(2, 1, 2, 3))
 print(select("#", 1, 2, 3))
+
+print("\npcall")
+print(
+  pcall(
+    function(...)
+      print(...)
+      error("test")
+    end,
+    "a", "b", "c"
+  )
+)

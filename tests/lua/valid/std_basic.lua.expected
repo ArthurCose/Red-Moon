@@ -52,3 +52,7 @@ select:
 
 2	3
 3
+
+pcall
+a	b	c
+false	test

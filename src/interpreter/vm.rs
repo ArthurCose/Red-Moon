@@ -719,21 +719,6 @@ impl VmContext<'_> {
             &mut VmContext,
         ) -> Result<FunctionRef, RuntimeError>,
     ) -> Result<Result<R, RuntimeError>, RuntimeError> {
-        // make sure we can yield
-        let execution_data = &mut self.vm.execution_data;
-        let coroutine_data = &mut execution_data.coroutine_data;
-
-        if !coroutine_data.yield_permitted {
-            return Err(RuntimeErrorData::InvalidYield.into());
-        }
-
-        if coroutine_data.yield_pending {
-            coroutine_data.yield_pending = false;
-            coroutine_data.in_progress_yield.clear();
-
-            return Err(RuntimeErrorData::UnhandledYield.into());
-        }
-
         // pack args
         let args = MultiValue::pack(args, self)?;
 
@@ -759,6 +744,17 @@ impl VmContext<'_> {
                     ..
                 },
             ) => {
+                // make sure we can yield
+                let execution_data = &mut self.vm.execution_data;
+                let coroutine_data = &mut execution_data.coroutine_data;
+
+                if !coroutine_data.yield_pending || !coroutine_data.yield_permitted {
+                    coroutine_data.yield_pending = false;
+                    coroutine_data.in_progress_yield.clear();
+
+                    return Err(RuntimeErrorData::InvalidYield.into());
+                }
+
                 let response_result = yield_response(call_ctx, self);
 
                 let execution_data = &mut self.vm.execution_data;
@@ -777,7 +773,8 @@ impl VmContext<'_> {
 
                 Err(err)
             }
-            result => Ok(result?.unpack(self)),
+            Err(err) => Ok(Err(err)),
+            Ok(values) => Ok(values.unpack(self)),
         }
     }
 }

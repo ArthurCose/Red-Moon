@@ -443,7 +443,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             }
             Err(err) => {
                 // return the success flag and the error as a value
-                call_ctx.return_values((false, err.to_string()), ctx)
+                call_ctx.return_values((false, err.data.to_string()), ctx)
             }
         }
     }
@@ -494,7 +494,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                 Err(err) => err,
             };
 
-            let err_message = err.to_string();
+            let err_message = err.data.to_string();
             result = handler.call::<_, MultiValue>(err_message, ctx);
         };
 
