@@ -106,7 +106,7 @@ impl FunctionRef {
         ctx.call_function_key(self.0.key().into(), args)
     }
 
-    /// Allows the called function to yield
+    /// The function called may yield if the caller is also yieldable.
     pub fn yieldable_call<A: ForEachValue, R: FromValues>(
         &self,
         args: A,

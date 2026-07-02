@@ -1,11 +1,10 @@
 use super::{
-    ByteString, ForEachValue, FromValues, FunctionRef, MultiValue, Number, StringRef, TableRef,
-    ThreadRef,
+    ByteString, ForEachValue, FromValues, FunctionRef, Number, StringRef, TableRef, ThreadRef,
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::VmContext;
 use crate::interpreter::heap::{BytesObjectKey, Heap, StorageKey};
 use crate::interpreter::value_stack::StackValue;
+use crate::interpreter::{NativeCallContext, VmContext};
 use crate::languages::lua::parse_number;
 use crate::tag_native_type;
 use slotmap::Key;
@@ -172,19 +171,29 @@ impl Value {
         }
     }
 
+    /// Attempts to use the value as if it was a FunctionRef, using the `__call` metamethod if necessary.
     pub fn call<A: ForEachValue, R: FromValues>(
         &self,
         args: A,
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
-        let args = MultiValue::pack(args, ctx)?;
-
-        // must test validity of every arg, since invalid keys in the ctx will cause a panic
-        for value in &args.values {
-            value.test_validity(&ctx.vm.execution_data.heap)?;
-        }
-
         ctx.call_function_key(self.to_stack_value(), args)
+    }
+
+    /// Attempts to use the value as if it was a FunctionRef, using the `__call` metamethod if necessary.
+    ///
+    /// The function called may yield if the caller is also yieldable.
+    pub fn yieldable_call<A: ForEachValue, R: FromValues>(
+        &self,
+        args: A,
+        call_ctx: &mut NativeCallContext,
+        ctx: &mut VmContext,
+        yield_response: impl FnOnce(
+            &mut NativeCallContext,
+            &mut VmContext,
+        ) -> Result<FunctionRef, RuntimeError>,
+    ) -> Result<Result<R, RuntimeError>, RuntimeError> {
+        ctx.yieldable_call_function_key(self.to_stack_value(), args, call_ctx, yield_response)
     }
 
     #[inline]
