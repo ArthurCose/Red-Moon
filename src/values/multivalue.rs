@@ -1,8 +1,6 @@
 use super::{ForEachValue, FromValues, Value};
 use crate::errors::RuntimeError;
 use crate::interpreter::VmContext;
-use crate::interpreter::cache_pools::CachePools;
-use crate::interpreter::heap::Heap;
 use crate::interpreter::value_stack::{StackValue, ValueStack};
 use crate::tag_native_type;
 use thin_vec::ThinVec;
@@ -79,22 +77,6 @@ impl MultiValue<Value> {
         let result = T::from_values(ctx, |_| self.pop_front());
         ctx.store_multi(self);
         result
-    }
-
-    pub(crate) fn from_value_stack(
-        cache_pools: &CachePools,
-        heap: &mut Heap,
-        value_stack: &ValueStack,
-    ) -> Self {
-        let mut multi = cache_pools.create_multi();
-        multi.values.extend(
-            value_stack
-                .iter()
-                .rev()
-                .map(|&value| Value::from_stack_value(heap, value)),
-        );
-
-        multi
     }
 
     /// Pushes values into a ValueStack, places an integer storing the length first

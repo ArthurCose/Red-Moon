@@ -4,7 +4,6 @@ use super::{
 };
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::VmContext;
-use crate::interpreter::execution::ExecutionContext;
 use crate::interpreter::heap::{BytesObjectKey, Heap, StorageKey};
 use crate::interpreter::value_stack::StackValue;
 use crate::languages::lua::parse_number;
@@ -185,8 +184,7 @@ impl Value {
             value.test_validity(&ctx.vm.execution_data.heap)?;
         }
 
-        let return_values = ExecutionContext::call_value(self.to_stack_value(), args, ctx.vm)?;
-        return_values.unpack(ctx)
+        ctx.call_function_key(self.to_stack_value(), args)
     }
 
     #[inline]

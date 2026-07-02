@@ -1,13 +1,11 @@
-use super::NativeCallContext;
 use super::coroutine::Coroutine;
 use super::interpreted_function::Function;
 use super::native_function::NativeFunction;
 use super::ref_counter::*;
 use super::table::Table;
 use super::value_stack::StackValue;
-use crate::errors::RuntimeError;
 use crate::interpreter::garbage_collector::GarbageCollector;
-use crate::values::{ByteString, MultiValue, NativeValue};
+use crate::values::{ByteString, NativeValue};
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap};
 use indexmap::IndexMap;
@@ -24,8 +22,7 @@ pub(crate) struct Storage {
     pub(super) byte_strings: slotmap::SlotMap<BytesObjectKey, ByteString>,
     pub(super) tables: slotmap::SlotMap<TableObjectKey, Table>,
     pub(super) metatables: slotmap::SecondaryMap<TableObjectKey, TableObjectKey>,
-    pub(super) native_functions:
-        slotmap::SlotMap<NativeFnObjectKey, NativeFunction<NativeCallContext>>,
+    pub(super) native_functions: slotmap::SlotMap<NativeFnObjectKey, NativeFunction>,
     pub(super) functions: slotmap::SlotMap<FnObjectKey, Function>,
     pub(super) coroutines: slotmap::SlotMap<CoroutineObjectKey, Coroutine>,
     #[cfg(feature = "serde")]
@@ -175,10 +172,6 @@ pub(crate) struct Heap {
     pub(crate) ref_roots: IndexMap<FastStorageKey, RefCounter, BuildFastHasher>,
     #[cfg(feature = "serde")]
     pub(crate) tags: IndexMap<StackValue, NativeFnObjectKey, BuildFastHasher>,
-    pub(crate) resume_callbacks: FastHashMap<
-        NativeFnObjectKey,
-        NativeFunction<(NativeCallContext, Result<(), RuntimeError>, MultiValue)>,
-    >,
     #[cfg_attr(feature = "serde", serde(skip))]
     pub(crate) recycled_tables: Rc<VecCell<Table>>,
     // feels a bit weird in here and not on VM, but easier to work with here
@@ -193,7 +186,6 @@ impl Clone for Heap {
             ref_roots: self.ref_roots.clone(),
             #[cfg(feature = "serde")]
             tags: self.tags.clone(),
-            resume_callbacks: self.resume_callbacks.clone(),
             recycled_tables: self.recycled_tables.clone(),
             string_metatable_ref: self.string_metatable_ref.clone(),
         }
@@ -205,7 +197,6 @@ impl Clone for Heap {
         self.ref_roots.clone_from(&source.ref_roots);
         #[cfg(feature = "serde")]
         self.tags.clone_from(&source.tags);
-        self.resume_callbacks.clone_from(&source.resume_callbacks);
         self.recycled_tables.clone_from(&source.recycled_tables);
         self.string_metatable_ref
             .clone_from(&source.string_metatable_ref);
@@ -240,7 +231,6 @@ impl Heap {
             ref_roots,
             #[cfg(feature = "serde")]
             tags: Default::default(),
-            resume_callbacks: Default::default(),
             recycled_tables: Default::default(),
             string_metatable_ref,
         }
@@ -289,7 +279,7 @@ impl Heap {
     pub(crate) fn store_native_fn(
         &mut self,
         gc: &mut GarbageCollector,
-        value: NativeFunction<NativeCallContext>,
+        value: NativeFunction,
     ) -> NativeFnObjectKey {
         gc.modify_used_memory(std::mem::size_of_val(&value) as _);
         self.storage.native_functions.insert(value)
@@ -393,10 +383,7 @@ impl Heap {
         self.storage.functions.get(key)
     }
 
-    pub(crate) fn get_native_fn(
-        &self,
-        key: NativeFnObjectKey,
-    ) -> Option<&NativeFunction<NativeCallContext>> {
+    pub(crate) fn get_native_fn(&self, key: NativeFnObjectKey) -> Option<&NativeFunction> {
         self.storage.native_functions.get(key)
     }
 
@@ -430,11 +417,7 @@ impl Heap {
     }
 
     #[cfg(feature = "serde")]
-    pub(crate) fn rehydrate(
-        &mut self,
-        key: NativeFnObjectKey,
-        value: NativeFunction<NativeCallContext>,
-    ) {
+    pub(crate) fn rehydrate(&mut self, key: NativeFnObjectKey, value: NativeFunction) {
         if let Some(closure_keys) = self.storage.base_to_closures.get(&key) {
             for &closure_key in closure_keys {
                 self.storage.native_functions[closure_key] = value.clone();

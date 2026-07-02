@@ -9,7 +9,6 @@ pub(crate) const RECYCLE_LIMIT: usize = 64;
 pub(crate) struct CachePools {
     pub(crate) multivalues: VecCell<MultiValue>,
     pub(crate) value_stacks: VecCell<ValueStack>,
-    pub(crate) short_value_stacks: VecCell<ValueStack>,
     pub(crate) weak_associations: VecCell<Vec<(TableObjectKey, StackValue)>>,
 }
 
@@ -37,17 +36,6 @@ impl CachePools {
         if self.value_stacks.len() < RECYCLE_LIMIT {
             value_stack.clear();
             self.value_stacks.push(value_stack);
-        }
-    }
-
-    pub(crate) fn create_short_value_stack(&self) -> ValueStack {
-        self.short_value_stacks.pop().unwrap_or_default()
-    }
-
-    pub(crate) fn store_short_value_stack(&self, mut value_stack: ValueStack) {
-        if self.short_value_stacks.len() < RECYCLE_LIMIT {
-            value_stack.clear();
-            self.short_value_stacks.push(value_stack);
         }
     }
 

@@ -1,7 +1,7 @@
 use super::{ForEachValue, FromValues, NativeValue};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::VmContext;
 use crate::interpreter::heap::{Heap, HeapRef, Storage, StorageKey};
+use crate::interpreter::{NativeCallContext, VmContext};
 use crate::tag_native_type;
 use slotmap::Key;
 
@@ -91,10 +91,6 @@ impl FunctionRef {
 
             heap.rehydrate(old_key, function);
 
-            if let Some(callback) = heap.resume_callbacks.get(&new_key) {
-                heap.resume_callbacks.insert(old_key, callback.clone());
-            }
-
             Ok(true)
         }
 
@@ -108,6 +104,20 @@ impl FunctionRef {
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
         ctx.call_function_key(self.0.key().into(), args)
+    }
+
+    /// Allows the called function to yield
+    pub fn yieldable_call<A: ForEachValue, R: FromValues>(
+        &self,
+        args: A,
+        call_ctx: &mut NativeCallContext,
+        ctx: &mut VmContext,
+        yield_response: impl FnOnce(
+            &mut NativeCallContext,
+            &mut VmContext,
+        ) -> Result<FunctionRef, RuntimeError>,
+    ) -> Result<Result<R, RuntimeError>, RuntimeError> {
+        ctx.yieldable_call_function_key(self.0.key().into(), args, call_ctx, yield_response)
     }
 
     /// Creates a rollback safe closure.

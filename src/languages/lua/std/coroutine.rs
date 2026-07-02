@@ -1,4 +1,4 @@
-use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::errors::RuntimeError;
 use crate::interpreter::VmContext;
 use crate::values::{CoroutineStatus, FunctionRef, MultiValue, ThreadRef};
 
@@ -103,21 +103,28 @@ pub fn load_coroutine(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     wrap.rehydrate("coroutine.wrap", ctx)?;
 
     // yield
-    let r#yield = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
-        let first_call = state.is_empty();
-        ctx.store_multi(state);
+    let yield_resume = ctx.create_function(|call_ctx, ctx| {
+        let Some(result) = call_ctx.take_resumed_result(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
 
-        if first_call {
-            ctx.resume_call_with_state(true)?;
-            result?;
-
-            let args = call_ctx.get_args(ctx)?;
-            Err(RuntimeErrorData::Yield(args).into())
-        } else {
-            call_ctx.return_arg_range(.., ctx);
-            result
-        }
+        call_ctx.return_values(result?, ctx)
     });
+    yield_resume.rehydrate("coroutine.yield.resume", ctx)?;
+
+    let r#yield = ctx
+        .create_function(|call_ctx, ctx| {
+            let args: MultiValue = call_ctx.get_args(ctx)?;
+
+            let Some(resume_function) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                return Err(RuntimeError::new_invalid_internal_state());
+            };
+
+            let resume_function = resume_function.clone();
+
+            call_ctx.yield_data(args, resume_function, ctx)
+        })
+        .create_closure(yield_resume, ctx)?;
     r#yield.rehydrate("coroutine.yield", ctx)?;
 
     if !rehydrating {

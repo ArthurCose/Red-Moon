@@ -4,7 +4,9 @@ use red_moon::errors::{RuntimeError, RuntimeErrorData};
 use red_moon::interpreter::{Vm, VmContext};
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::load_coroutine;
-use red_moon::values::{FunctionRef, MultiValue, TableRef, ThreadRef, Value, tag_native_type};
+use red_moon::values::{
+    FunctionRef, IntoValue, MultiValue, TableRef, ThreadRef, Value, tag_native_type,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -38,14 +40,29 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     ctx.create_table();
 
     // create resumable native function
-    let resumable = ctx.create_resumable_function(|(_, result, _), ctx| {
-        result?;
+    let resumed_fn = ctx.create_function(|call_ctx, ctx| {
+        let Some(message) = call_ctx.get_capture::<Value>(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
 
-        // store "resumed" in state
-        ctx.resume_call_with_state("resumed")?;
-
-        Err(RuntimeErrorData::Yield(ctx.create_multi()).into())
+        call_ctx.return_values(message.clone(), ctx)
     });
+    assert!(!resumed_fn.rehydrate("resumed_fn", ctx)?);
+
+    let resumable = ctx
+        .create_function(|call_ctx, ctx| {
+            let message = "resumed".into_value(ctx)?;
+
+            let Some(resume_function) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                return Err(RuntimeError::new_invalid_internal_state());
+            };
+
+            let resume_function = resume_function.clone().create_closure(message, ctx)?;
+            call_ctx.yield_data((), resume_function, ctx)?;
+
+            Ok(())
+        })
+        .create_closure(resumed_fn, ctx)?;
 
     assert!(!resumable.rehydrate("resumable_fn", ctx)?);
     env.set("resumable_fn", resumable, ctx)?;
@@ -137,9 +154,14 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     assert_eq!(f.call::<_, MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
 
     // test resumable, expecting "resumed" to be stored in state
-    let resumable = ctx
-        .create_resumable_function(|(call_ctx, _, state), ctx| call_ctx.return_values(state, ctx));
-    assert!(resumable.rehydrate("resumable_fn", ctx)?);
+    let resumed_fn = ctx.create_function(|call_ctx, ctx| {
+        let Some(message) = call_ctx.get_capture::<Value>(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
+
+        call_ctx.return_values(message.clone(), ctx)
+    });
+    assert!(resumed_fn.rehydrate("resumed_fn", ctx)?);
 
     let co: ThreadRef = env.get("co", ctx)?;
     assert_eq!(co.resume((), ctx)?, MultiValue::pack("resumed", ctx)?);

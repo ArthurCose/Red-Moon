@@ -36,6 +36,7 @@ pub(crate) struct ExecutionContext {
 }
 
 impl ExecutionContext {
+    /// Does not check coroutine state, that's handled in VmContext
     pub(crate) fn call_interpreted(
         function_key: FnObjectKey,
         args: MultiValue,
@@ -75,6 +76,7 @@ impl ExecutionContext {
         ExecutionContext::resume(vm)
     }
 
+    /// Does not check coroutine state, that's handled in VmContext
     pub(crate) fn call_native_fn(
         function_key: NativeFnObjectKey,
         args: MultiValue,
@@ -89,18 +91,16 @@ impl ExecutionContext {
         let function = function.shallow_clone();
 
         Self::call_closure(function_key, args, vm, |call_ctx, ctx| {
-            function.call(function_key, call_ctx, ctx)
+            function.call(call_ctx, ctx)
         })
     }
 
+    /// Does not check coroutine state, that's handled in VmContext
     pub(crate) fn call_closure(
         function_key: NativeFnObjectKey,
         args: MultiValue,
         vm: &mut Vm,
-        callback: impl FnOnce(
-            NativeCallContext,
-            &mut VmContext,
-        ) -> Result<NativeCallContext, RuntimeError>,
+        callback: impl FnOnce(&mut NativeCallContext, &mut VmContext) -> Result<(), RuntimeError>,
     ) -> Result<ExecutionReturnValues, RuntimeError> {
         let exec_data = &mut vm.execution_data;
         let mut value_stack = exec_data.cache_pools.create_value_stack();
@@ -116,7 +116,7 @@ impl ExecutionContext {
         // push a placeholder for the return count
         value_stack.push(Default::default());
 
-        let native_call_ctx = NativeCallContext {
+        let mut native_call_ctx = NativeCallContext {
             key: function_key,
             stack_start: 0,
             arg_count,
@@ -130,17 +130,16 @@ impl ExecutionContext {
         });
 
         let return_count_index = native_call_ctx.return_count_index();
-        let result = callback(native_call_ctx, &mut vm.context());
+        let result = callback(&mut native_call_ctx, &mut vm.context());
 
-        match result {
-            Ok(call_ctx) => call_ctx.finalize(vm),
-            Err(err) => {
-                let execution = vm.execution_stack.pop().unwrap();
-                let value_stack = execution.value_stack;
-                vm.execution_data.cache_pools.store_value_stack(value_stack);
-                return Err(err);
-            }
+        if let Err(err) = result {
+            let execution = vm.execution_stack.pop().unwrap();
+            let value_stack = execution.value_stack;
+            vm.execution_data.cache_pools.store_value_stack(value_stack);
+            return Err(err);
         }
+
+        native_call_ctx.finalize(vm);
 
         let execution = vm.execution_stack.pop().unwrap();
 
@@ -150,6 +149,7 @@ impl ExecutionContext {
         })
     }
 
+    /// Does not check coroutine state, that's handled in VmContext
     pub(crate) fn call_value(
         value: StackValue,
         mut args: MultiValue,
@@ -259,7 +259,7 @@ impl ExecutionContext {
                             }
 
                             // resolve call context and return register
-                            let native_call_ctx = NativeCallContext {
+                            let mut native_call_ctx = NativeCallContext {
                                 key,
                                 stack_start: return_context.stack_start,
                                 arg_count: arg_count as _,
@@ -279,39 +279,49 @@ impl ExecutionContext {
                             execution.return_contexts.push(return_context);
 
                             // call the function
-                            let result = callback.call(key, native_call_ctx, &mut vm.context());
+                            let result = callback.call(&mut native_call_ctx, &mut vm.context());
 
                             // revert tracked stack size before handling the result
                             vm.execution_data.tracked_stack_size = old_stack_size;
 
-                            let return_count_index = match result {
-                                Ok(call_ctx) => {
-                                    call_ctx.finalize(vm);
-                                    call_ctx.return_count_index()
-                                }
-                                Err(mut err) => {
-                                    // handle yielding
-                                    if let RuntimeErrorData::Yield(_) = &mut err.data {
-                                        let coroutine_data = &mut vm.execution_data.coroutine_data;
+                            let coroutine_data = &mut vm.execution_data.coroutine_data;
 
-                                        if !coroutine_data.yield_permissions.allows_yield {
-                                            // we can't yield here
-                                            err.data = RuntimeErrorData::InvalidYield;
-                                            return Err(Self::continue_unwind(vm, err));
-                                        }
+                            if let Err(mut err) = result {
+                                // handle yielding
+                                if let RuntimeErrorData::Yield(_) = &mut err.data {
+                                    if !coroutine_data.yield_pending
+                                        || !coroutine_data.yield_permitted
+                                    {
+                                        coroutine_data.in_progress_yield.clear();
 
-                                        let execution = vm.execution_stack.pop().unwrap();
-
-                                        coroutine_data
-                                            .in_progress_yield
-                                            .push((Continuation::Execution(execution), true));
-
-                                        return Err(err);
+                                        // we can't yield here
+                                        err.data = RuntimeErrorData::InvalidYield;
+                                        return Err(Self::continue_unwind(vm, err));
                                     }
 
-                                    return Err(Self::continue_unwind(vm, err));
+                                    let execution = vm.execution_stack.pop().unwrap();
+
+                                    coroutine_data
+                                        .in_progress_yield
+                                        .push((Continuation::Execution(execution), true));
+
+                                    return Err(err);
                                 }
-                            };
+
+                                return Err(Self::continue_unwind(vm, err));
+                            }
+
+                            if coroutine_data.yield_pending {
+                                coroutine_data.yield_pending = false;
+                                coroutine_data.in_progress_yield.clear();
+
+                                return Err(Self::unwind_error(
+                                    vm,
+                                    RuntimeErrorData::new_invalid_internal_state(),
+                                ));
+                            }
+
+                            native_call_ctx.finalize(vm);
 
                             // juggling lifetimes
                             execution = vm.execution_stack.last_mut().unwrap();
@@ -321,8 +331,7 @@ impl ExecutionContext {
                                 &mut vm.execution_data,
                                 return_context.return_mode,
                                 return_context.stack_start,
-                                // reading from call_ctx in case stack info was modified by flushing args to return values
-                                return_count_index,
+                                return_context.register_base,
                             );
 
                             if let Err(err) = result {

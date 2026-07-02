@@ -2,6 +2,7 @@ use red_moon::errors::RuntimeError;
 use red_moon::interpreter::Vm;
 use red_moon::languages::lua::compile;
 use red_moon::languages::lua::std::{load_basic, load_coroutine};
+use red_moon::tag_native_type;
 use red_moon::values::FunctionRef;
 
 #[test]
@@ -12,26 +13,86 @@ fn resumable() -> Result<(), RuntimeError> {
     load_basic(ctx)?;
     load_coroutine(ctx)?;
 
-    let for_range = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
-        let (i, end, f): (i64, i64, FunctionRef) = if state.is_empty() {
-            // just called, the result passed in are the args
-            result?;
-            call_ctx.get_args(ctx)?
-        } else {
-            // restore from state
-            state.unpack(ctx)?
+    #[derive(Clone)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    struct ForRangeResumeState {
+        start: i64,
+        end: i64,
+        f: FunctionRef,
+        resume_fn: FunctionRef,
+    }
+
+    tag_native_type!(ForRangeResumeState);
+
+    let resumed_for_range = ctx.create_function(|call_ctx, ctx| {
+        let Some(ForRangeResumeState { start, end, f, .. }) =
+            call_ctx.get_capture::<ForRangeResumeState>(ctx)
+        else {
+            return Err(RuntimeError::new_invalid_internal_state());
         };
 
-        if i < end {
-            // set state to allow yielding and provide information on how to resume
-            ctx.resume_call_with_state((i + 1, end, f.clone()))?;
+        let mut i = *start;
+        let end = *end;
+        let f = f.clone();
 
+        while i < end {
             // call a function that can yield
-            f.call::<_, ()>(i, ctx)?;
+            f.yieldable_call::<_, ()>(i, call_ctx, ctx, move |call_ctx, ctx| {
+                let Some(ForRangeResumeState { f, resume_fn, .. }) =
+                    call_ctx.get_capture::<ForRangeResumeState>(ctx)
+                else {
+                    return Err(RuntimeError::new_invalid_internal_state());
+                };
+
+                let f = f.clone();
+                let resume_fn = resume_fn.clone();
+
+                resume_fn.clone().create_closure(
+                    ForRangeResumeState {
+                        start: i + 1,
+                        end,
+                        f,
+                        resume_fn,
+                    },
+                    ctx,
+                )
+            })??;
+
+            i += 1;
         }
 
         Ok(())
     });
+
+    let for_range = ctx
+        .create_function(|call_ctx, ctx| {
+            let (mut i, end, f): (i64, i64, FunctionRef) = call_ctx.get_args(ctx)?;
+
+            while i < end {
+                // call a function that can yield
+                let f_capture = f.clone();
+                f.yieldable_call::<_, ()>(i, call_ctx, ctx, move |call_ctx, ctx| {
+                    let Some(resume_fn) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                        return Err(RuntimeError::new_invalid_internal_state());
+                    };
+
+                    resume_fn.clone().create_closure(
+                        ForRangeResumeState {
+                            start: i + 1,
+                            end,
+                            f: f_capture,
+                            resume_fn: resume_fn.clone(),
+                        },
+                        ctx,
+                    )
+                })??;
+
+                i += 1;
+            }
+
+            Ok(())
+        })
+        .create_closure(resumed_for_range, ctx)?;
 
     let env = ctx.default_environment();
     env.set("for_range", for_range, ctx)?;

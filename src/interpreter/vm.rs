@@ -1,11 +1,10 @@
 use super::cache_pools::CachePools;
-use super::coroutine::{Coroutine, YieldPermissions};
+use super::coroutine::Coroutine;
 use super::execution::ExecutionContext;
 use super::garbage_collector::{GarbageCollector, GarbageCollectorConfig};
-use super::heap::{CoroutineObjectKey, Heap, NativeFnObjectKey};
+use super::heap::{CoroutineObjectKey, Heap};
 use super::metatable_keys::MetatableKeys;
-use super::native_function::NativeFunction;
-use super::value_stack::{StackValue, ValueStack};
+use super::value_stack::StackValue;
 use super::{Continuation, NativeCallContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::Module;
@@ -38,9 +37,9 @@ impl Default for VmLimits {
 
 #[derive(Default)]
 pub(crate) struct CoroutineData {
-    pub(crate) yield_permissions: YieldPermissions,
-    pub(crate) continuation_state_set: bool,
-    pub(crate) continuation_states: Vec<ValueStack>,
+    pub(crate) yield_permitted: bool,
+    pub(crate) yield_pending: bool,
+    pub(crate) resumed_result: Option<Result<MultiValue, RuntimeError>>,
     pub(crate) coroutine_stack: Vec<CoroutineObjectKey>,
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) in_progress_yield: Vec<(Continuation, bool)>,
@@ -508,188 +507,8 @@ impl VmContext<'_> {
     ) -> FunctionRef {
         let heap = &mut self.vm.execution_data.heap;
         let gc = &mut self.vm.execution_data.gc;
-        let wrapper = move |_, mut call_ctx, ctx: &mut VmContext| {
-            callback(&mut call_ctx, ctx)?;
-            Ok(call_ctx)
-        };
 
-        let key = heap.store_native_fn(gc, wrapper.into());
-        let heap_ref = heap.create_ref(key.into());
-
-        // test after creating ref to avoid immediately collecting the generated value
-        self.try_gc_step();
-
-        FunctionRef(heap_ref)
-    }
-
-    /// Creates a function that can be resumed if a yield occurs.
-    /// [VmContext::resume_call_with_state()] must be called within the function's scope to allow yielding for the rest of the call.
-    /// The function will be resumed immediately if a yield does not occur.
-    ///
-    /// Arguments passed to the call context will be from the initial call and `coroutine.resume()`
-    ///
-    /// The result received by this function is for handling errors raised by resumed sub calls.
-    ///
-    /// ```
-    /// # use red_moon::interpreter::Vm;
-    /// # use red_moon::values::{FunctionRef, MultiValue};
-    /// # use red_moon::errors::RuntimeError;
-    /// # use red_moon::languages::lua::std::{load_basic, load_coroutine};
-    /// # use red_moon::languages::lua::compile;
-    ///
-    /// let mut vm = Vm::default();
-    /// let ctx = &mut vm.context();
-    ///
-    /// load_basic(ctx)?;
-    /// load_coroutine(ctx)?;
-    ///
-    /// let for_range = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
-    ///     // forward error
-    ///     result?;
-    ///
-    ///     let mut next_increment = 0;
-    ///
-    ///     let (mut i, end, f): (i64, i64, FunctionRef) = if state.is_empty() {
-    ///         // just called, the result passed in are the args
-    ///         call_ctx.get_args(ctx)?
-    ///     } else {
-    ///         // restore from state
-    ///         let (mut i, end, f) = state.unpack(ctx)?;
-    ///
-    ///         // result is the return value from the call that passed yield to us
-    ///         // increment i the same way we would in the loop
-    ///         i += call_ctx.get_args::<i64>(ctx)?;
-    ///
-    ///         (i, end, f)
-    ///     };
-    ///
-    ///     while i < end {
-    ///         // set state to allow yielding and provide information on how to resume
-    ///         ctx.resume_call_with_state((i, end, f.clone()))?;
-    ///
-    ///         // call a function that can yield
-    ///         // use the return value to increment i
-    ///         i += f.call::<_, i64>(i, ctx)?;
-    ///     }
-    ///
-    ///     Ok(())
-    /// });
-    ///
-    /// let env = ctx.default_environment();
-    /// env.set("for_range", for_range, ctx)?;
-    ///
-    /// const SOURCE: &str = r#"
-    ///   co = coroutine.create(function()
-    ///     for_range(1, 10, function(i)
-    ///       if i % 2 == 0 then
-    ///         coroutine.yield(i)
-    ///       end
-    ///
-    ///       return 1
-    ///     end)
-    ///   end)
-    ///
-    ///   assert(select(2, coroutine.resume(co)) == 2)
-    ///   assert(select(2, coroutine.resume(co)) == 4)
-    /// "#;
-    ///
-    /// let module = compile(SOURCE).unwrap();
-    /// ctx.load_function(file!(), None, module)?.call::<_, ()>((), ctx)?;
-    ///
-    /// # Ok::<_, RuntimeError>(())
-    /// ```
-    pub fn create_resumable_function(
-        &mut self,
-        #[cfg(not(feature = "implicit_closures"))] callback: fn(
-            (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
-            &mut VmContext<'_>,
-        )
-            -> Result<(), RuntimeError>,
-        #[cfg(feature = "implicit_closures")] callback: impl Fn(
-            (&mut NativeCallContext, Result<(), RuntimeError>, MultiValue),
-            &mut VmContext<'_>,
-        ) -> Result<(), RuntimeError>
-        + Clone
-        + 'static,
-    ) -> FunctionRef {
-        let heap = &mut self.vm.execution_data.heap;
-        let gc = &mut self.vm.execution_data.gc;
-
-        let function_callback = |key, call_ctx, ctx: &mut VmContext<'_>| {
-            let heap = &mut ctx.vm.execution_data.heap;
-
-            let Some(callback) = heap.resume_callbacks.get(&key) else {
-                return Err(RuntimeError::new_invalid_internal_state());
-            };
-
-            let callback = callback.shallow_clone();
-
-            let state = MultiValue {
-                values: Default::default(),
-            };
-
-            (callback.callback)(key, (call_ctx, Ok(()), state), ctx)
-        };
-
-        let key = heap.store_native_fn(gc, function_callback.into());
-
-        let callback = NativeFunction::from(
-            move |_: NativeFnObjectKey,
-                  (mut call_ctx, mut result, mut state): (
-                NativeCallContext,
-                Result<(), RuntimeError>,
-                MultiValue,
-            ),
-                  ctx: &mut VmContext<'_>| {
-                loop {
-                    result = callback((&mut call_ctx, result, state), ctx);
-
-                    let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
-
-                    if !coroutine_data.continuation_state_set {
-                        return result.map(|_| call_ctx);
-                    }
-
-                    if matches!(result, Err(ref err) if matches!(err.data, RuntimeErrorData::Yield(_)))
-                    {
-                        break;
-                    }
-
-                    coroutine_data.continuation_state_set = false;
-                    coroutine_data.yield_permissions.allows_yield = false;
-
-                    let cache_pools = &ctx.vm.execution_data.cache_pools;
-
-                    let heap = &mut ctx.vm.execution_data.heap;
-                    let state_stack = coroutine_data.continuation_states.pop().unwrap();
-                    state = MultiValue::from_value_stack(cache_pools, heap, &state_stack);
-
-                    cache_pools.store_short_value_stack(state_stack);
-                    call_ctx.flush_return_values_to_args(ctx.vm);
-                }
-
-                let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
-
-                if !coroutine_data.yield_permissions.parent_allows_yield
-                    && coroutine_data.continuation_state_set
-                {
-                    // we don't want to leak data here
-                    coroutine_data.continuation_states.pop();
-                    coroutine_data.continuation_state_set = false;
-                }
-
-                result.map(|_| call_ctx)
-            },
-        );
-
-        let size = std::mem::size_of::<NativeFnObjectKey>() + std::mem::size_of_val(&callback);
-
-        let gc = &mut self.vm.execution_data.gc;
-
-        if heap.resume_callbacks.insert(key, callback).is_none() {
-            gc.modify_used_memory(size as _);
-        }
-
+        let key = heap.store_native_fn(gc, callback.into());
         let heap_ref = heap.create_ref(key.into());
 
         // test after creating ref to avoid immediately collecting the generated value
@@ -741,55 +560,7 @@ impl VmContext<'_> {
     #[inline]
     pub fn is_yieldable(&self) -> bool {
         let coroutine_data = &self.vm.execution_data.coroutine_data;
-        coroutine_data.yield_permissions.parent_allows_yield
-    }
-
-    /// Sets values to carry to the next resume of a function created by [VmContext::create_resumable_function()].
-    /// Also allows the function to yield if [VmContext::is_yieldable()] is true.
-    pub fn resume_call_with_state<S: ForEachValue>(
-        &mut self,
-        state: S,
-    ) -> Result<(), RuntimeError> {
-        let execution_data = &mut self.vm.execution_data;
-        let coroutine_data = &mut execution_data.coroutine_data;
-
-        if coroutine_data.continuation_state_set {
-            // take existing state stack and update values
-            let mut existing_stack =
-                std::mem::take(coroutine_data.continuation_states.last_mut().unwrap());
-
-            existing_stack.clear();
-            state.for_each_value(self, |result, _| {
-                existing_stack.push(result?.to_stack_value());
-                Ok(())
-            })?;
-
-            // put the state back
-            let execution_data = &mut self.vm.execution_data;
-            let coroutine_data = &mut execution_data.coroutine_data;
-
-            std::mem::swap(
-                coroutine_data.continuation_states.last_mut().unwrap(),
-                &mut existing_stack,
-            );
-        } else {
-            // create a new stack to store state
-            let mut stack = execution_data.cache_pools.create_short_value_stack();
-
-            state.for_each_value(self, |result, _| {
-                stack.push(result?.to_stack_value());
-                Ok(())
-            })?;
-
-            let execution_data = &mut self.vm.execution_data;
-            let coroutine_data = &mut execution_data.coroutine_data;
-            coroutine_data.continuation_states.push(stack);
-            coroutine_data.continuation_state_set = true;
-            coroutine_data.yield_permissions.allows_yield =
-                coroutine_data.yield_permissions.parent_allows_yield;
-        }
-
-        Ok(())
+        coroutine_data.yield_permitted
     }
 
     #[inline]
@@ -912,12 +683,101 @@ impl VmContext<'_> {
             value.test_validity(heap)?;
         }
 
-        let return_values = match function_value {
+        let result = match function_value {
             StackValue::NativeFunction(key) => ExecutionContext::call_native_fn(key, args, self.vm),
             StackValue::Function(key) => ExecutionContext::call_interpreted(key, args, self.vm),
             _ => ExecutionContext::call_value(function_value, args, self.vm),
-        }?;
+        };
 
-        return_values.unpack(self)
+        if let Err(
+            mut err @ RuntimeError {
+                data: RuntimeErrorData::Yield(_),
+                ..
+            },
+        ) = result
+        {
+            // can't yield from this function
+            let execution_data = &mut self.vm.execution_data;
+            let coroutine_data = &mut execution_data.coroutine_data;
+            coroutine_data.in_progress_yield.clear();
+
+            err.data = RuntimeErrorData::InvalidYield;
+
+            return Err(err);
+        }
+
+        result?.unpack(self)
+    }
+
+    pub(crate) fn yieldable_call_function_key<A: ForEachValue, R: FromValues>(
+        &mut self,
+        function_value: StackValue,
+        args: A,
+        call_ctx: &mut NativeCallContext,
+        yield_response: impl FnOnce(
+            &mut NativeCallContext,
+            &mut VmContext,
+        ) -> Result<FunctionRef, RuntimeError>,
+    ) -> Result<Result<R, RuntimeError>, RuntimeError> {
+        // make sure we can yield
+        let execution_data = &mut self.vm.execution_data;
+        let coroutine_data = &mut execution_data.coroutine_data;
+
+        if !coroutine_data.yield_permitted {
+            return Err(RuntimeErrorData::InvalidYield.into());
+        }
+
+        if coroutine_data.yield_pending {
+            coroutine_data.yield_pending = false;
+            coroutine_data.in_progress_yield.clear();
+
+            return Err(RuntimeErrorData::UnhandledYield.into());
+        }
+
+        // pack args
+        let args = MultiValue::pack(args, self)?;
+
+        // must test validity of every arg, since invalid keys in the vm will cause a panic
+        let heap = &self.vm.execution_data.heap;
+
+        for value in &args.values {
+            value.test_validity(heap)?;
+        }
+
+        // call the function
+        let result = match function_value {
+            StackValue::NativeFunction(key) => ExecutionContext::call_native_fn(key, args, self.vm),
+            StackValue::Function(key) => ExecutionContext::call_interpreted(key, args, self.vm),
+            _ => ExecutionContext::call_value(function_value, args, self.vm),
+        };
+
+        // handle the result
+        match result {
+            Err(
+                err @ RuntimeError {
+                    data: RuntimeErrorData::Yield(_),
+                    ..
+                },
+            ) => {
+                let response_result = yield_response(call_ctx, self);
+
+                let execution_data = &mut self.vm.execution_data;
+                let coroutine_data = &mut execution_data.coroutine_data;
+
+                let function_ref = match response_result {
+                    Ok(function_ref) => function_ref,
+                    Err(err) => {
+                        return Err(err);
+                    }
+                };
+
+                coroutine_data
+                    .in_progress_yield
+                    .push((Continuation::Callback(function_ref), true));
+
+                Err(err)
+            }
+            result => Ok(result?.unpack(self)),
+        }
     }
 }

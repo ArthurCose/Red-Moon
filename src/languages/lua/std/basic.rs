@@ -1,5 +1,5 @@
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::VmContext;
+use crate::interpreter::{NativeCallContext, VmContext};
 use crate::languages::lua::{compile, parse_number};
 use crate::values::{ByteString, FromValue, FunctionRef, MultiValue, StringRef, TableRef, Value};
 
@@ -431,72 +431,111 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     tonumber.rehydrate("lua.tonumber", ctx)?;
 
     // pcall
-    let pcall = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
-        let first_call = state.is_empty();
-        ctx.store_multi(state);
-
-        if first_call {
-            result?;
-
-            let (function, args): (FunctionRef, MultiValue) = call_ctx.get_args(ctx)?;
-
-            ctx.resume_call_with_state(true)?;
-
-            let values = function.call::<_, MultiValue>(args, ctx)?;
-            call_ctx.return_values(values, ctx)?;
-        } else {
-            // handle the result of the call
-            match result {
-                Ok(_) => {
-                    // return the success flag and pass the return values
-                    call_ctx.return_values(true, ctx)?;
-                    call_ctx.return_arg_range(.., ctx);
-                }
-                Err(err) => {
-                    // return the success flag and the error as a value
-                    call_ctx.return_values((false, err.to_string()), ctx)?;
-                }
+    fn pcall_end(
+        call_ctx: &mut NativeCallContext,
+        ctx: &mut VmContext,
+        result: Result<MultiValue, RuntimeError>,
+    ) -> Result<(), RuntimeError> {
+        match result {
+            Ok(values) => {
+                // return the success flag and pass the return values
+                call_ctx.return_values((true, values), ctx)
+            }
+            Err(err) => {
+                // return the success flag and the error as a value
+                call_ctx.return_values((false, err.to_string()), ctx)
             }
         }
+    }
 
-        Ok(())
+    let pcall_resumed = ctx.create_function(|call_ctx, ctx| {
+        let Some(result) = call_ctx.take_resumed_result(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
+
+        pcall_end(call_ctx, ctx, result)
     });
+    pcall_resumed.rehydrate("lua.pcall.resume", ctx)?;
+
+    let pcall = ctx
+        .create_function(|call_ctx, ctx| {
+            let (function, args): (FunctionRef, MultiValue) = call_ctx.get_args(ctx)?;
+
+            let result = function.yieldable_call::<_, MultiValue>(
+                args,
+                call_ctx,
+                ctx,
+                |call_ctx, ctx| {
+                    let Some(f) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                        return Err(RuntimeError::new_invalid_internal_state());
+                    };
+
+                    Ok(f.clone())
+                },
+            )?;
+
+            pcall_end(call_ctx, ctx, result)
+        })
+        .create_closure(pcall_resumed, ctx)?;
     pcall.rehydrate("lua.pcall", ctx)?;
 
     // xpcall
-    let xpcall = ctx.create_resumable_function(|(call_ctx, result, state), ctx| {
-        let handler: Option<FunctionRef> = state.unpack(ctx)?;
+    fn xpcall_end(
+        call_ctx: &mut NativeCallContext,
+        ctx: &mut VmContext,
+        handler: FunctionRef,
+        mut result: Result<MultiValue, RuntimeError>,
+    ) -> Result<(), RuntimeError> {
+        let success = result.is_ok();
 
-        if let Some(handler) = handler {
-            // resumed
-            if let Err(err) = result {
-                let mut err_message = err.to_string();
+        let values = loop {
+            let err = match result {
+                Ok(result) => break result,
+                Err(err) => err,
+            };
 
-                if let Err(handler_err) = handler.call::<_, ()>(err_message, ctx) {
-                    err_message = handler_err.to_string();
-                    // pass our handler's error into itself, give up on future errors (lua does not specify max retries)
-                    let _ = handler.call::<_, ()>(err_message, ctx);
-                }
+            let err_message = err.to_string();
+            result = handler.call::<_, MultiValue>(err_message, ctx);
+        };
 
-                return Err(err);
-            }
+        call_ctx.return_values((success, values), ctx)
+    }
 
-            call_ctx.return_arg_range(.., ctx);
-        } else {
-            result?;
+    let xpcall_resumed = ctx.create_function(|call_ctx, ctx| {
+        let Some(result) = call_ctx.take_resumed_result(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
 
-            // first call
+        let Some(handler) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+            return Err(RuntimeError::new_invalid_internal_state());
+        };
+
+        xpcall_end(call_ctx, ctx, handler.clone(), result)
+    });
+    xpcall_resumed.rehydrate("lua.xpcall.resume", ctx)?;
+
+    let xpcall = ctx
+        .create_function(|call_ctx, ctx| {
             let (function, handler, args): (FunctionRef, FunctionRef, MultiValue) =
                 call_ctx.get_args(ctx)?;
 
-            ctx.resume_call_with_state(handler.clone())?;
+            let handler_capture = handler.clone();
+            let result = function.yieldable_call::<_, MultiValue>(
+                args,
+                call_ctx,
+                ctx,
+                move |call_ctx, ctx| {
+                    let Some(f) = call_ctx.get_capture::<FunctionRef>(ctx) else {
+                        return Err(RuntimeError::new_invalid_internal_state());
+                    };
 
-            let values = function.call::<_, MultiValue>(args, ctx)?;
-            call_ctx.return_values(values, ctx)?;
-        }
+                    f.clone().create_closure(handler_capture, ctx)
+                },
+            )?;
 
-        Ok(())
-    });
+            xpcall_end(call_ctx, ctx, handler, result)
+        })
+        .create_closure(xpcall_resumed, ctx)?;
     xpcall.rehydrate("lua.xpcall", ctx)?;
 
     // load

@@ -1,6 +1,4 @@
-use slotmap::Key;
-
-use super::heap::{FastStorageKey, Heap, NativeFnObjectKey, StorageKey, TableObjectKey};
+use super::heap::{FastStorageKey, Heap, StorageKey, TableObjectKey};
 use crate::interpreter::Continuation;
 use crate::interpreter::cache_pools::CachePools;
 use crate::interpreter::cache_pools::RECYCLE_LIMIT;
@@ -254,18 +252,11 @@ impl GarbageCollector {
 
         // mark coroutine related data
 
-        for value_stack in &coroutine_data.continuation_states {
-            self.mark_value_stack(value_stack);
-        }
-
         for (continuation, _) in &coroutine_data.in_progress_yield {
             match continuation {
                 Continuation::Entry(key) => self.mark_storage_key(*key),
-                Continuation::Callback(key, state) => {
-                    self.mark_storage_key(key.into());
-                    self.mark_value_stack(state);
-                }
                 Continuation::Execution(execution) => self.mark_execution_context(execution),
+                Continuation::Callback(..) => {}
             }
         }
 
@@ -408,11 +399,6 @@ impl GarbageCollector {
                     heap.storage.captures.remove(&key);
 
                     self.used_memory -= std::mem::size_of_val(&native_fn);
-
-                    if let Some(callback) = heap.resume_callbacks.remove(&key) {
-                        self.used_memory -= std::mem::size_of::<NativeFnObjectKey>()
-                            + std::mem::size_of_val(&callback);
-                    }
                 }
                 StorageKey::Function(key) => {
                     let Some(function) = heap.storage.functions.remove(key) else {
@@ -616,22 +602,24 @@ impl GarbageCollector {
             StorageKey::Coroutine(key) => {
                 let Some(co) = heap.get_coroutine(key) else {
                     #[cfg(debug_assertions)]
-                    if !key.is_null() {
-                        crate::debug_unreachable!();
+                    {
+                        use slotmap::Key;
+
+                        if !key.is_null() {
+                            crate::debug_unreachable!();
+                        }
                     }
+
                     return;
                 };
 
                 for (continuation, _) in &co.continuation_stack {
                     match continuation {
                         Continuation::Entry(key) => self.mark_storage_key(*key),
-                        Continuation::Callback(key, state) => {
-                            self.mark_storage_key(key.into());
-                            self.mark_value_stack(state);
-                        }
                         Continuation::Execution(execution) => {
                             self.mark_execution_context(execution)
                         }
+                        Continuation::Callback(..) => {}
                     }
                 }
             }

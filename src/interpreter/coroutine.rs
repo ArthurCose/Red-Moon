@@ -1,22 +1,15 @@
 use super::execution::ExecutionContext;
-use super::heap::{CoroutineObjectKey, NativeFnObjectKey, StorageKey};
-use super::value_stack::ValueStack;
+use super::heap::{CoroutineObjectKey, StorageKey};
 use super::{Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::values::MultiValue;
+use crate::values::{FunctionRef, MultiValue, Value};
 use slotmap::Key;
-
-#[derive(Default, Clone, Copy)]
-pub(crate) struct YieldPermissions {
-    pub(crate) parent_allows_yield: bool,
-    pub(crate) allows_yield: bool,
-}
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) enum Continuation {
     Entry(StorageKey),
-    Callback(NativeFnObjectKey, ValueStack),
+    Callback(FunctionRef),
     Execution(ExecutionContext),
 }
 
@@ -87,7 +80,7 @@ impl Coroutine {
         let coroutine_data = &mut vm.execution_data.coroutine_data;
         coroutine_data.coroutine_stack.push(co_key);
 
-        let previous_yield_permissions = coroutine_data.yield_permissions;
+        let previous_yield_permissions = coroutine_data.yield_permitted;
 
         let original_size = coroutine.heap_size();
 
@@ -101,7 +94,7 @@ impl Coroutine {
 
             let vm = &mut *ctx.vm;
             let coroutine_data = &mut vm.execution_data.coroutine_data;
-            coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
+            coroutine_data.yield_permitted = parent_allows_yield;
 
             let result = match continuation {
                 Continuation::Entry(key) => match key {
@@ -111,21 +104,14 @@ impl Coroutine {
                     }
                     _ => return Err(RuntimeError::new_invalid_internal_state()),
                 },
-                Continuation::Callback(key, state) => {
-                    let cache_pools = &vm.execution_data.cache_pools;
-                    let heap = &mut vm.execution_data.heap;
-                    let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
-                    let Some(callback) = heap.resume_callbacks.get(&key) else {
-                        return Err(RuntimeError::new_invalid_internal_state());
-                    };
+                Continuation::Callback(function_ref) => {
+                    coroutine_data.resumed_result = Some(Ok(args));
 
-                    cache_pools.store_short_value_stack(state);
-
-                    let callback = callback.shallow_clone();
-
-                    ExecutionContext::call_closure(key, args, vm, |call_ctx, ctx| {
-                        callback.call(key, (call_ctx, Ok(()), state_multi), ctx)
-                    })
+                    ExecutionContext::call_value(
+                        Value::Function(function_ref).to_stack_value(),
+                        vm.context().create_multi(),
+                        vm,
+                    )
                 }
                 Continuation::Execution(mut execution) => {
                     let exec_data = &mut vm.execution_data;
@@ -138,6 +124,9 @@ impl Coroutine {
                         .and_then(|_| ExecutionContext::resume(vm))
                 }
             };
+
+            let coroutine_data = &mut vm.execution_data.coroutine_data;
+            coroutine_data.yield_pending = false;
 
             match result {
                 Ok(values) => args = values.unpack(ctx).unwrap(),
@@ -214,7 +203,7 @@ impl Coroutine {
 
         let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
         coroutine_data.coroutine_stack.pop();
-        coroutine_data.yield_permissions = previous_yield_permissions;
+        coroutine_data.yield_permitted = previous_yield_permissions;
 
         result
     }
@@ -246,13 +235,8 @@ impl Coroutine {
     ) -> Result<MultiValue, RuntimeError> {
         loop {
             let coroutine_data = &mut ctx.vm.execution_data.coroutine_data;
-            let cache_pools = &ctx.vm.execution_data.cache_pools;
 
-            for (continuation, _) in coroutine_data.in_progress_yield.drain(..) {
-                if let Continuation::Callback(_, state) = continuation {
-                    cache_pools.store_short_value_stack(state);
-                }
-            }
+            coroutine_data.in_progress_yield.clear();
 
             let vm = &mut *ctx.vm;
             let heap = &mut vm.execution_data.heap;
@@ -266,26 +250,15 @@ impl Coroutine {
             };
 
             match continuation {
-                Continuation::Callback(key, state) => {
+                Continuation::Callback(function_ref) => {
                     let coroutine_data = &mut vm.execution_data.coroutine_data;
-                    coroutine_data.yield_permissions.allows_yield = parent_allows_yield;
+                    coroutine_data.yield_permitted = parent_allows_yield;
+                    coroutine_data.resumed_result = Some(Err(err));
 
-                    let cache_pools = &vm.execution_data.cache_pools;
-                    let heap = &mut vm.execution_data.heap;
-                    let state_multi = MultiValue::from_value_stack(cache_pools, heap, &state);
-                    let Some(callback) = heap.resume_callbacks.get(&key) else {
-                        return Err(RuntimeError::new_invalid_internal_state());
-                    };
-
-                    cache_pools.store_short_value_stack(state);
-
-                    let callback = callback.shallow_clone();
-
-                    match ExecutionContext::call_closure(
-                        key,
+                    match ExecutionContext::call_value(
+                        Value::Function(function_ref).to_stack_value(),
                         vm.context().create_multi(),
                         vm,
-                        |call_ctx, ctx| callback.call(key, (call_ctx, Err(err), state_multi), ctx),
                     ) {
                         Ok(values) => {
                             // converted to Ok ("pcall"-like function)

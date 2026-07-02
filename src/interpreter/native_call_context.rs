@@ -1,8 +1,10 @@
 use super::value_stack::StackValue;
-use crate::errors::RuntimeError;
+use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::heap::NativeFnObjectKey;
-use crate::interpreter::{Vm, VmContext};
-use crate::values::{ForEachValue, FromValue, FromValues, NativeValue, Value};
+use crate::interpreter::{Continuation, Vm, VmContext};
+use crate::values::{
+    ForEachValue, FromValue, FromValues, FunctionRef, MultiValue, NativeValue, Value,
+};
 use std::ops::RangeBounds;
 
 pub struct NativeCallContext {
@@ -99,6 +101,14 @@ impl NativeCallContext {
         Some(*capture.downcast().ok()?)
     }
 
+    /// Takes the result of the last yieldable call
+    pub fn take_resumed_result(
+        &self,
+        ctx: &mut VmContext,
+    ) -> Option<Result<MultiValue, RuntimeError>> {
+        ctx.vm.execution_data.coroutine_data.resumed_result.take()
+    }
+
     /// Appends values to the return multivalue
     pub fn return_values(
         &mut self,
@@ -173,19 +183,31 @@ impl NativeCallContext {
         self.return_args(start, end - start, ctx);
     }
 
-    #[inline]
-    pub(crate) fn flush_return_values_to_args(&mut self, vm: &mut Vm) {
-        let execution = vm.execution_stack.last_mut().unwrap();
-        let value_stack = &mut execution.value_stack;
-        value_stack.chip(self.stack_start + 1, self.return_count + 1);
+    /// Suspends the currently running coroutine, data passed in are passed as extra results to `coroutine.resume(co)`
+    ///
+    /// This function always returns an error to bubble [RuntimeErrorData::Yield].
+    pub fn yield_data<A: ForEachValue>(
+        &mut self,
+        data: A,
+        resume_function: FunctionRef,
+        ctx: &mut VmContext,
+    ) -> Result<(), RuntimeError> {
+        let multi = MultiValue::pack(data, ctx)?;
 
-        // re-add the the return count placeholder value
-        value_stack.push(StackValue::Nil);
+        let execution_data = &mut ctx.vm.execution_data;
+        let coroutine_data = &mut execution_data.coroutine_data;
 
-        self.arg_count = self.return_count;
-        self.return_count = 0;
+        if !coroutine_data.yield_permitted {
+            return Err(RuntimeErrorData::InvalidYield.into());
+        }
 
-        debug_assert_eq!(value_stack.len(), self.return_count_index() + 1);
+        coroutine_data
+            .in_progress_yield
+            .push((Continuation::Callback(resume_function), true));
+
+        coroutine_data.yield_pending = true;
+
+        Err(RuntimeErrorData::Yield(multi).into())
     }
 
     #[inline]
