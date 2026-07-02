@@ -7,7 +7,7 @@ use super::value_stack::StackValue;
 use crate::interpreter::garbage_collector::GarbageCollector;
 use crate::values::{ByteString, NativeValue};
 use crate::vec_cell::VecCell;
-use crate::{BuildFastHasher, FastHashMap};
+use crate::{BuildFastHasher, FastHashMap, debug_unreachable_or};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -459,10 +459,9 @@ impl Heap {
         };
 
         let Some(metatable) = self.storage.tables.get(*metatable_key) else {
-            #[cfg(debug_assertions)]
-            unreachable!();
-            #[cfg(not(debug_assertions))]
-            return StackValue::Nil;
+            debug_unreachable_or!({
+                return StackValue::Nil;
+            })
         };
 
         metatable.get(name.into())
@@ -499,10 +498,9 @@ impl Heap {
         };
 
         let Some(metatable) = self.storage.tables.get(metatable_key) else {
-            #[cfg(debug_assertions)]
-            unreachable!();
-            #[cfg(not(debug_assertions))]
-            return StackValue::Nil;
+            debug_unreachable_or!({
+                return StackValue::Nil;
+            });
         };
 
         metatable.get(name.into())

@@ -352,18 +352,18 @@ impl GarbageCollector {
                 }
                 StorageKey::Bytes(key) => {
                     let Some(bytes) = heap.storage.byte_strings.remove(key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        continue;
+                        crate::debug_unreachable_or!({
+                            continue;
+                        });
                     };
                     heap.byte_strings.remove(&bytes);
                     self.used_memory -= std::mem::size_of_val(&bytes) + bytes.heap_size();
                 }
                 StorageKey::Table(key) => {
                     let Some(mut table) = heap.storage.tables.remove(key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        continue;
+                        crate::debug_unreachable_or!({
+                            continue;
+                        });
                     };
 
                     // we shouldn't need to clear the table's metatable since we're using slotmap's SecondaryMap
@@ -377,9 +377,9 @@ impl GarbageCollector {
                 }
                 StorageKey::NativeFunction(key) => {
                     let Some(native_fn) = heap.storage.native_functions.remove(key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        continue;
+                        crate::debug_unreachable_or!({
+                            continue;
+                        });
                     };
 
                     #[cfg(feature = "serde")]
@@ -402,9 +402,9 @@ impl GarbageCollector {
                 }
                 StorageKey::Function(key) => {
                     let Some(function) = heap.storage.functions.remove(key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        continue;
+                        crate::debug_unreachable_or!({
+                            continue;
+                        });
                     };
                     self.used_memory -= std::mem::size_of_val(&function) + function.heap_size();
 
@@ -417,9 +417,9 @@ impl GarbageCollector {
                 }
                 StorageKey::Coroutine(key) => {
                     let Some(co) = heap.storage.coroutines.remove(key) else {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        continue;
+                        crate::debug_unreachable_or!({
+                            continue;
+                        });
                     };
                     self.used_memory -= std::mem::size_of_val(&co) + co.heap_size();
                 }
@@ -486,9 +486,9 @@ impl GarbageCollector {
         match key {
             StorageKey::Function(key) => {
                 let Some(function) = heap.get_interpreted_fn(key) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return;
+                    crate::debug_unreachable_or!({
+                        return;
+                    });
                 };
 
                 self.mark_up_values(&function.up_values);
@@ -513,9 +513,9 @@ impl GarbageCollector {
             }
             StorageKey::Table(table_key) => {
                 let Some(table) = heap.get_table(table_key) else {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return;
+                    crate::debug_unreachable_or!({
+                        return;
+                    });
                 };
 
                 let mut weak_keys = false;

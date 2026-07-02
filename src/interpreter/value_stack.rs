@@ -83,9 +83,7 @@ impl StackValue {
         if let Some(value) = heap.get_stack_value(key) {
             *value
         } else {
-            crate::debug_unreachable!();
-            #[cfg(not(debug_assertions))]
-            StackValue::Nil
+            crate::debug_unreachable_or!(StackValue::Nil)
         }
     }
 
@@ -103,9 +101,9 @@ impl StackValue {
                 .get_stack_value(key)
                 .map(|value| {
                     if matches!(value, StackValue::Pointer(_)) {
-                        crate::debug_unreachable!();
-                        #[cfg(not(debug_assertions))]
-                        return TypeName::Nil;
+                        crate::debug_unreachable_or!({
+                            return TypeName::Nil;
+                        });
                     }
 
                     value.type_name(heap)

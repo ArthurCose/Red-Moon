@@ -25,4 +25,15 @@ macro_rules! debug_unreachable {
     };
 }
 
+macro_rules! debug_unreachable_or {
+    ($expr:expr) => {
+        if cfg!(debug_assertions) {
+            unreachable!()
+        } else {
+            $expr
+        }
+    };
+}
+
 pub(crate) use debug_unreachable;
+pub(crate) use debug_unreachable_or;

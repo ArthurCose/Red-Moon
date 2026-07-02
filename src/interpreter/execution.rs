@@ -2347,9 +2347,7 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<'_, [u8]>> {
             if let Some(bytes) = heap.get_bytes(key) {
                 Some(Cow::Borrowed(bytes.as_bytes()))
             } else {
-                crate::debug_unreachable!();
-                #[cfg(not(debug_assertions))]
-                None
+                crate::debug_unreachable_or!(None)
             }
         }
         StackValue::Integer(i) => Some(i.to_string().into_bytes().into()),
@@ -2357,16 +2355,14 @@ fn stringify(heap: &Heap, value: StackValue) -> Option<Cow<'_, [u8]>> {
         StackValue::Pointer(key) => {
             if let Some(value) = heap.get_stack_value(key) {
                 if matches!(value, StackValue::Pointer(_)) {
-                    crate::debug_unreachable!();
-                    #[cfg(not(debug_assertions))]
-                    return None;
+                    crate::debug_unreachable_or!({
+                        return None;
+                    });
                 }
 
                 stringify(heap, *value)
             } else {
-                crate::debug_unreachable!();
-                #[cfg(not(debug_assertions))]
-                None
+                crate::debug_unreachable_or!(None)
             }
         }
         _ => None,
