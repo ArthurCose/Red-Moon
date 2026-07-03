@@ -86,6 +86,7 @@ macro_rules! tag_native_type {
 
 pub use tag_native_type;
 
+/// Shares NativeValues between VM clones, creates a private copy of the value when it's time to mutate
 #[derive(Clone)]
 pub(crate) struct SharedNativeValue {
     v: Rc<dyn NativeValue>,
