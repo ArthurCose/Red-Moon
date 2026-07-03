@@ -332,7 +332,7 @@ impl VmContext<'_> {
     }
 
     #[inline]
-    pub fn remove_singleton<T: 'static>(&mut self) -> Option<T> {
+    pub fn remove_singleton<T: Clone + 'static>(&mut self) -> Option<T> {
         self.vm.singletons.remove()
     }
 

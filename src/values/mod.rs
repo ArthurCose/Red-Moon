@@ -9,6 +9,8 @@ mod thread_ref;
 mod value;
 mod value_traits;
 
+pub(crate) use native_value::SharedNativeValue;
+
 pub use byte_string::ByteString;
 pub use function_ref::FunctionRef;
 pub use multivalue::MultiValue;

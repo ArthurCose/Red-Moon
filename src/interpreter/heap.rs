@@ -5,7 +5,7 @@ use super::ref_counter::*;
 use super::table::Table;
 use super::value_stack::StackValue;
 use crate::interpreter::garbage_collector::GarbageCollector;
-use crate::values::{ByteString, NativeValue};
+use crate::values::{ByteString, NativeValue, SharedNativeValue};
 use crate::vec_cell::VecCell;
 use crate::{BuildFastHasher, FastHashMap, debug_unreachable_or};
 use indexmap::IndexMap;
@@ -30,7 +30,7 @@ pub(crate) struct Storage {
     #[cfg(feature = "serde")]
     pub(crate) base_to_closures:
         FastHashMap<NativeFnObjectKey, indexmap::IndexSet<NativeFnObjectKey>>,
-    pub(super) captures: HashMap<NativeFnObjectKey, Box<dyn NativeValue>>,
+    pub(super) captures: HashMap<NativeFnObjectKey, SharedNativeValue>,
 }
 
 impl Storage {
@@ -296,7 +296,8 @@ impl Heap {
 
     pub(crate) fn store_capture(&mut self, key: NativeFnObjectKey, value: impl NativeValue) {
         debug_assert!(self.storage.native_functions.contains_key(key));
-        self.storage.captures.insert(key, Box::new(value));
+        let value = SharedNativeValue::new(value);
+        self.storage.captures.insert(key, value);
     }
 
     pub(crate) fn create_ref<K: Copy + Into<StorageKey>>(&mut self, key: K) -> HeapRef<K> {

@@ -3,7 +3,8 @@ use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::heap::NativeFnObjectKey;
 use crate::interpreter::{Continuation, Vm, VmContext};
 use crate::values::{
-    ForEachValue, FromValue, FromValues, FunctionRef, MultiValue, NativeValue, Value,
+    ForEachValue, FromValue, FromValues, FunctionRef, MultiValue, NativeValue, SharedNativeValue,
+    Value,
 };
 use std::ops::RangeBounds;
 
@@ -70,35 +71,36 @@ impl NativeCallContext {
         .map_err(|err| RuntimeError::new_bad_argument(index, err))
     }
 
-    pub fn set_capture<V: NativeValue>(
+    pub fn set_capture<V: NativeValue + Clone>(
         &self,
         value: impl NativeValue,
         ctx: &mut VmContext,
     ) -> Option<V> {
         let heap = &mut ctx.vm.execution_data.heap;
-        let prev_capture = heap.storage.captures.insert(self.key, Box::new(value))?;
-        Some(*prev_capture.downcast().ok()?)
+        let value = SharedNativeValue::new(value);
+        let prev_capture = heap.storage.captures.insert(self.key, value)?;
+        prev_capture.take()
     }
 
     pub fn get_capture<'vm, V: NativeValue>(&self, ctx: &'vm VmContext) -> Option<&'vm V> {
         let heap = &ctx.vm.execution_data.heap;
         let capture = heap.storage.captures.get(&self.key)?;
-        capture.downcast_ref().ok()
+        capture.get()
     }
 
-    pub fn get_capture_mut<'vm, V: NativeValue>(
+    pub fn get_capture_mut<'vm, V: NativeValue + Clone>(
         &self,
         ctx: &'vm mut VmContext,
     ) -> Option<&'vm mut V> {
         let heap = &mut ctx.vm.execution_data.heap;
         let capture = heap.storage.captures.get_mut(&self.key)?;
-        capture.downcast_mut().ok()
+        capture.get_mut()
     }
 
-    pub fn remove_capture<V: NativeValue>(&self, ctx: &mut VmContext) -> Option<V> {
+    pub fn remove_capture<V: NativeValue + Clone>(&self, ctx: &mut VmContext) -> Option<V> {
         let heap = &mut ctx.vm.execution_data.heap;
         let capture = heap.storage.captures.remove(&self.key)?;
-        Some(*capture.downcast().ok()?)
+        capture.take()
     }
 
     /// Takes the result of the last yieldable call
