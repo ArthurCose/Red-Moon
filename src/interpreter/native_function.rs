@@ -1,5 +1,5 @@
 use super::VmContext;
-use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::errors::RuntimeError;
 use crate::interpreter::NativeCallContext;
 use std::rc::Rc;
 
@@ -23,6 +23,8 @@ impl<'de> serde::Deserialize<'de> for NativeFunction {
     where
         D: serde::Deserializer<'de>,
     {
+        use crate::errors::RuntimeErrorData;
+
         let _: () = serde::Deserialize::deserialize(deserializer)?;
 
         Ok(Self::from(
