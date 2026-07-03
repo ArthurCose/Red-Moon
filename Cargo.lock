@@ -718,6 +718,7 @@ dependencies = [
  "clap",
  "red_moon",
  "rustyline",
+ "serde",
  "tabled",
 ]
 

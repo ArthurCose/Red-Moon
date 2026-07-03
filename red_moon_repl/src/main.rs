@@ -2,11 +2,10 @@ use clap::Parser;
 use red_moon::errors::{LuaCompilationErrorData, RuntimeError, RuntimeErrorData, SyntaxErrorData};
 use red_moon::interpreter::{Vm, VmContext};
 use red_moon::languages::lua::{compile, std as lua_std};
+use red_moon::tag_native_type;
 use red_moon::values::{FunctionRef, IntoValue, MultiValue, Value};
 use rustyline::error::ReadlineError;
-use std::cell::{Cell, RefCell};
 use std::process::ExitCode;
-use std::rc::Rc;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -167,11 +166,15 @@ fn repl(vm: &mut Vm) -> Result<(), ()> {
 
     println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
-    let queued_rewind = impl_rewind(ctx).unwrap();
+    impl_rewind(ctx).unwrap();
 
     loop {
-        if let Some(snapshot) = queued_rewind.take() {
+        if let Some(queued_rewind) = vm.context().singleton_mut::<QueuedRewind>()
+            && let Some(snapshot) = queued_rewind.0.take()
+            && let Some(snapshots) = vm.context().remove_singleton::<Snapshots>()
+        {
             *vm = snapshot;
+            vm.context().set_singleton(snapshots);
         }
 
         let ctx = &mut vm.context();
@@ -232,10 +235,10 @@ fn repl(vm: &mut Vm) -> Result<(), ()> {
         match function.call::<_, MultiValue>((), ctx) {
             Err(err) => println!("{err}"),
             Ok(multi) => {
-                if !multi.is_empty() {
-                    if let Err(err) = print_function.call::<_, Value>(multi, ctx) {
-                        println!("{err}")
-                    }
+                if !multi.is_empty()
+                    && let Err(err) = print_function.call::<_, Value>(multi, ctx)
+                {
+                    println!("{err}")
                 }
             }
         }
@@ -247,53 +250,66 @@ fn repl(vm: &mut Vm) -> Result<(), ()> {
     }
 }
 
-type QueuedRewind = Rc<Cell<Option<Vm>>>;
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+struct Snapshots(Vec<Vm>);
 
-fn impl_rewind(ctx: &mut VmContext) -> Result<QueuedRewind, RuntimeError> {
-    let snapshots: Rc<RefCell<Vec<Vm>>> = Default::default();
-    let queued_rewind = QueuedRewind::default();
+tag_native_type!(Snapshots);
+
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+struct QueuedRewind(Option<Vm>);
+
+tag_native_type!(QueuedRewind);
+
+fn impl_rewind(ctx: &mut VmContext) -> Result<(), RuntimeError> {
+    ctx.set_singleton(Snapshots::default());
+    ctx.set_singleton(QueuedRewind::default());
 
     let env = ctx.default_environment();
 
-    let snapshots_capture = snapshots.clone();
     let snap = ctx.create_function(move |_, ctx| {
-        let mut snapshots = snapshots_capture.borrow_mut();
-        snapshots.push(ctx.clone_vm());
+        // remove singleton to avoid it being part of the snapshot
+        if let Some(mut snapshots) = ctx.remove_singleton::<Snapshots>() {
+            snapshots.0.push(ctx.clone_vm());
+            ctx.set_singleton(snapshots);
+        }
+
         Ok(())
     });
     env.set("snap", snap, ctx)?;
 
-    let queued_rewind_capture = queued_rewind.clone();
-    let rewind = ctx.create_function(move |call_ctx, ctx| {
+    let rewind = ctx.create_function(|call_ctx, ctx| {
         let x: Option<i64> = call_ctx.get_args(ctx)?;
         let x = x.unwrap_or(-1);
 
-        let mut snapshots = snapshots.borrow_mut();
+        if let Some(mut snapshots) = ctx.remove_singleton::<Snapshots>()
+            && let Some(mut queued_rewind) = ctx.remove_singleton::<QueuedRewind>()
+        {
+            let x = match x.cmp(&0) {
+                std::cmp::Ordering::Less => return Err(RuntimeErrorData::OutOfBounds.into()),
+                std::cmp::Ordering::Equal => return Ok(()),
+                std::cmp::Ordering::Greater => {
+                    let x = x as usize;
 
-        let x = match x.cmp(&0) {
-            std::cmp::Ordering::Less => return Err(RuntimeErrorData::OutOfBounds.into()),
-            std::cmp::Ordering::Equal => return Ok(()),
-            std::cmp::Ordering::Greater => {
-                let x = x as usize;
+                    if x > snapshots.0.len() {
+                        return Err(RuntimeError::new_static_string(
+                            "not enough snapshots taken",
+                        ));
+                    }
 
-                if x > snapshots.len() {
-                    return Err(RuntimeError::new_static_string(
-                        "not enough snapshots taken",
-                    ));
+                    snapshots.0.len() - x
                 }
+            };
 
-                snapshots.len() - x
-            }
-        };
-
-        snapshots.truncate(x + 1);
-        queued_rewind_capture.set(snapshots.pop());
+            snapshots.0.truncate(x + 1);
+            queued_rewind.0 = snapshots.0.pop();
+            ctx.set_singleton(snapshots);
+        }
 
         Ok(())
     });
     env.set("queue_rewind", rewind, ctx)?;
 
-    Ok(queued_rewind)
+    Ok(())
 }
 
 #[cfg(feature = "instruction_metrics")]
@@ -368,8 +384,8 @@ pub(crate) fn print_instruction_metrics(ctx: &mut VmContext) {
     }
 
     use tabled::settings::{
-        object::{Columns, Rows},
         Alignment, Style,
+        object::{Columns, Rows},
     };
 
     let mut table = table_builder.build();

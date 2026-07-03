@@ -1,14 +1,15 @@
 [package]
 name = "red_moon_repl"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-red_moon = { path = "../", features = ["implicit_closures"] }
+red_moon = { path = "../", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 rustyline = { version = "14", default-features = false }
 tabled = { version = "0.19", optional = true }
+serde = { version = "1", features = ["derive"] }
 
 [features]
 # separate feature as it affects performance
