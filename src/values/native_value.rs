@@ -58,8 +58,12 @@ downcast::downcast!(dyn NativeValue);
 #[macro_export]
 macro_rules! tag_native_type {
     ($struct: ty) => {
-        #[$crate::typetag::serde]
-        impl $crate::values::NativeValue for $struct {}
+        const _: () = {
+            use $crate::typetag;
+
+            #[typetag::serde]
+            impl $crate::values::NativeValue for $struct {}
+        };
     };
 }
 
