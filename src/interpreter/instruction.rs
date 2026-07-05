@@ -321,6 +321,13 @@ pub enum Instruction {
     /// (register)
     GenericFor(u8),
 
+    /// Expects an iterator function, arg count, invariant state, control variable, and local variable from the GenericFor call
+    ///
+    /// Tests the local variable, if it isn't nil the local variable will be copied into the control variable and the next instruction will be skipped
+    ///
+    /// (register)
+    GenericForTest(u8),
+
     JumpToForLoop(InstructionIndex),
 
     Jump(InstructionIndex),
@@ -393,6 +400,7 @@ impl Instruction {
             Instruction::NumericFor(_, _) => "NumericFor",
             Instruction::GenericForPrep(_) => "GenericForPrep",
             Instruction::GenericFor(_) => "GenericFor",
+            Instruction::GenericForTest(_) => "GenericForTest",
             Instruction::JumpToForLoop(_) => "JumpToForLoop",
             Instruction::Jump(_) => "Jump",
             Instruction::Call(_, _) => "Call",

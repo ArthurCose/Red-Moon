@@ -1228,6 +1228,22 @@ impl Interpreter {
                         ReturnMode::UnsizedDestinationPreserve(first_local_register),
                     ));
                 }
+                Instruction::GenericForTest(iterator_register) => {
+                    let iterator_index = self.register_base + iterator_register as usize;
+                    // GenericFor stores the iterator result in the first local register
+                    let first_local_index = iterator_index + 4;
+
+                    let control_value = value_stack.get(first_local_index);
+
+                    if control_value != StackValue::Nil {
+                        // skip the jump
+                        self.next_instruction_index += 1;
+
+                        // back up the control variable value in the control variable register
+                        let control_variable_index = iterator_index + 3;
+                        value_stack.set(control_variable_index, control_value);
+                    }
+                }
                 Instruction::JumpToForLoop(i) => {
                     self.next_instruction_index = i.into();
                     for_loop_jump = true;

@@ -2558,7 +2558,7 @@ where
         self.top_function.next_register += 4;
 
         // register local
-        let first_local = self.top_function.register_local(self.source, name_token)?;
+        self.top_function.register_local(self.source, name_token)?;
         let mut name_token;
         let mut next_token = next_token;
 
@@ -2599,12 +2599,11 @@ where
         // calls the iterator function and stores the results over the first local
         instructions.push(Instruction::GenericFor(iterator_register));
 
-        instructions.push(Instruction::TestNil(first_local));
+        // tests to see if the first local is nil
+        // if it isn't, it copies the local into the control variable register and skips the jump
+        instructions.push(Instruction::GenericForTest(iterator_register));
         let jump_index = instructions.len();
         instructions.push(Instruction::Jump(0.into()));
-
-        // copy the control variable result of the generic for, to avoid users overwriting it
-        instructions.push(Instruction::Copy(iterator_register + 3, first_local));
 
         Ok((start_index, jump_index))
     }
