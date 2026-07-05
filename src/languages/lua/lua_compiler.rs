@@ -2553,9 +2553,9 @@ where
         name_token: LuaToken<'source>,
         next_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
-        // consume registers for the iterator, invariant state, and control variable
+        // consume registers for the iterator, arg count, invariant state, and control variable
         let iterator_register = self.top_function.next_register;
-        self.top_function.next_register += 3;
+        self.top_function.next_register += 4;
 
         // register local
         let first_local = self.top_function.register_local(self.source, name_token)?;
@@ -2589,25 +2589,22 @@ where
 
         let instructions = &mut self.top_function.instructions;
 
-        // overwrite the expression count with the iterator
-        instructions.push(Instruction::Copy(iterator_register, iterator_register + 1));
-        // store arg count to prepare for a call
-        instructions.push(Instruction::SetInt(iterator_register + 1, 2));
+        // overwrites the count with the iterator function, and stores 2 where the iterator was
+        // prepares for the iterator to be called with the invariant state / control variable
+        instructions.push(Instruction::GenericForPrep(iterator_register));
 
         // loop start, call the function and store the results over the control variable
         let start_index = instructions.len();
 
-        // copy our prepared function call to the first local register so the results can be directly stored over them
-        instructions.push(Instruction::CopyRange(first_local, iterator_register, 4));
-
-        instructions.push(Instruction::Call(
-            first_local,
-            ReturnMode::UnsizedDestinationPreserve(first_local),
-        ));
+        // calls the iterator function and stores the results over the first local
+        instructions.push(Instruction::GenericFor(iterator_register));
 
         instructions.push(Instruction::TestNil(first_local));
         let jump_index = instructions.len();
         instructions.push(Instruction::Jump(0.into()));
+
+        // copy the control variable result of the generic for, to avoid users overwriting it
+        instructions.push(Instruction::Copy(iterator_register + 3, first_local));
 
         Ok((start_index, jump_index))
     }

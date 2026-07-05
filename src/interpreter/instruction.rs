@@ -305,6 +305,22 @@ pub enum Instruction {
     /// (src, forward_jump)
     NumericFor(Register, u16),
 
+    /// Expects a count, an iterator function, invariant state, and control variable
+    ///
+    /// Overwrites the count value with the iterator, and stores the number two where the iterator was previously stored
+    ///
+    /// This prepares for a function call, or the GenericFor instruction
+    ///
+    /// (register)
+    GenericForPrep(u8),
+
+    /// Expects an iterator function, arg count, invariant state, and control variable
+    ///
+    /// Calls the iterator function, storing an unsized result to the right of the control variable
+    ///
+    /// (register)
+    GenericFor(u8),
+
     JumpToForLoop(InstructionIndex),
 
     Jump(InstructionIndex),
@@ -375,6 +391,8 @@ impl Instruction {
             Instruction::TestTruthyThenCopy(_, _, _) => "TestTruthyThenCopy",
             Instruction::TestNil(_) => "TestNil",
             Instruction::NumericFor(_, _) => "NumericFor",
+            Instruction::GenericForPrep(_) => "GenericForPrep",
+            Instruction::GenericFor(_) => "GenericFor",
             Instruction::JumpToForLoop(_) => "JumpToForLoop",
             Instruction::Jump(_) => "Jump",
             Instruction::Call(_, _) => "Call",

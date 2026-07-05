@@ -208,3 +208,20 @@ end
 if iterations == max_iterations then
   print("success")
 end
+
+print("\ngeneric for loop, control variable:")
+iterate = function(invariant, control)
+  if control >= invariant then
+    return
+  end
+
+  control = control + 1
+
+  return control
+end
+
+for i in iterate, 5, 0 do
+  print(i)
+  -- make sure we can't modify the control variable
+  i = i + 1
+end

@@ -119,3 +119,10 @@ nested function break:
 
 generic for loop tail call:
 success
+
+generic for loop, control variable:
+1
+2
+3
+4
+5

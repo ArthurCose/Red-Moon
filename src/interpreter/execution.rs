@@ -1206,6 +1206,28 @@ impl Interpreter {
                     for_loop_jump =
                         self.numeric_for(heap, value_stack, for_loop_jump, src, forward_jump)?;
                 }
+                Instruction::GenericForPrep(expr_count_register) => {
+                    let expr_count_index = self.register_base + expr_count_register as usize;
+                    value_stack.set(expr_count_index, value_stack.get(expr_count_index + 1));
+                    value_stack.set(expr_count_index + 1, StackValue::Integer(2));
+                }
+                Instruction::GenericFor(iterator_register) => {
+                    let first_local_register = iterator_register + 4;
+
+                    let iterator_index = self.register_base + iterator_register as usize;
+                    let first_local_index = self.register_base + first_local_register as usize;
+
+                    // copy iterator, arg count, invariant state, and control variable (stored in the first local index)
+                    // to the first local index
+                    // we copy to avoid tailcalls deleting our iterator function
+                    value_stack.copy_within(iterator_index..iterator_index + 4, first_local_index);
+
+                    // store the results over the first local index
+                    return Ok(CallResult::Call(
+                        first_local_register as _,
+                        ReturnMode::UnsizedDestinationPreserve(first_local_register),
+                    ));
+                }
                 Instruction::JumpToForLoop(i) => {
                     self.next_instruction_index = i.into();
                     for_loop_jump = true;
