@@ -2553,8 +2553,12 @@ where
         name_token: LuaToken<'source>,
         next_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
+        // consume registers for the iterator, invariant state, and control variable
+        let iterator_register = self.top_function.next_register;
+        self.top_function.next_register += 3;
+
+        // register local
         let first_local = self.top_function.register_local(self.source, name_token)?;
-        let mut total_locals = 1;
         let mut name_token;
         let mut next_token = next_token;
 
@@ -2567,7 +2571,6 @@ where
 
             name_token = self.expect(LuaTokenLabel::Name)?;
             self.top_function.register_local(self.source, name_token)?;
-            total_locals += 1;
 
             if next_token.label == LuaTokenLabel::In {
                 break;
@@ -2577,43 +2580,34 @@ where
         }
 
         // resolve the initial expression
-        // we expect it to return an iterator, invariant state, and control variable
-        let top_register = self.top_function.next_register;
-        self.resolve_exp_list(top_register)?;
+        // we expect it to resolve to a count (due to resolve_exp_list), an iterator, invariant state, and control variable
+        // our control variable will bleed into the first local
+        self.resolve_exp_list(iterator_register)?;
 
         self.top_function
             .map_following_instructions(self.source, next_token.offset);
 
         let instructions = &mut self.top_function.instructions;
-        // copy the iterator function into the top register
-        instructions.push(Instruction::Copy(top_register, top_register + 1));
-        // arg count
-        instructions.push(Instruction::SetInt(top_register + 1, 2));
+
+        // overwrite the expression count with the iterator
+        instructions.push(Instruction::Copy(iterator_register, iterator_register + 1));
+        // store arg count to prepare for a call
+        instructions.push(Instruction::SetInt(iterator_register + 1, 2));
 
         // loop start, call the function and store the results over the control variable
         let start_index = instructions.len();
-        let control_register = top_register + 3;
 
-        // todo: optimize
-        instructions.push(Instruction::CopyRange(control_register, top_register, 4));
+        // copy our prepared function call to the first local register so the results can be directly stored over them
+        instructions.push(Instruction::CopyRange(first_local, iterator_register, 4));
+
         instructions.push(Instruction::Call(
-            control_register,
-            ReturnMode::UnsizedDestinationPreserve(control_register),
+            first_local,
+            ReturnMode::UnsizedDestinationPreserve(first_local),
         ));
 
-        instructions.push(Instruction::TestNil(control_register));
+        instructions.push(Instruction::TestNil(first_local));
         let jump_index = instructions.len();
         instructions.push(Instruction::Jump(0.into()));
-
-        // assign locals
-        instructions.push(Instruction::CopyRange(
-            first_local,
-            control_register,
-            total_locals,
-        ));
-
-        // avoid overwriting control registers
-        self.top_function.next_register += control_register + 1;
 
         Ok((start_index, jump_index))
     }
