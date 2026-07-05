@@ -6,6 +6,7 @@ use super::value_stack::{StackValue, ValueStack};
 use super::vm::{ExecutionAccessibleData, Vm};
 use super::{Continuation, NativeCallContext};
 use super::{UpValueSource, VmContext};
+use crate::debug_unreachable_or;
 use crate::errors::{IllegalInstruction, RuntimeError, RuntimeErrorData};
 use crate::languages::lua::coerce_integer;
 use crate::values::{ByteString, FromValues, MultiValue, TypeName, Value};
@@ -1206,21 +1207,23 @@ impl Interpreter {
                     for_loop_jump =
                         self.numeric_for(heap, value_stack, for_loop_jump, src, forward_jump)?;
                 }
-                Instruction::GenericForPrep(expr_count_register) => {
-                    let expr_count_index = self.register_base + expr_count_register as usize;
-                    value_stack.set(expr_count_index, value_stack.get(expr_count_index + 1));
-                    value_stack.set(expr_count_index + 1, StackValue::Integer(2));
-                }
                 Instruction::GenericFor(iterator_register) => {
-                    let first_local_register = iterator_register + 4;
+                    let first_local_register = iterator_register + 3;
 
                     let iterator_index = self.register_base + iterator_register as usize;
-                    let first_local_index = self.register_base + first_local_register as usize;
 
-                    // copy iterator, arg count, invariant state, and control variable (stored in the first local index)
-                    // to the first local index
-                    // we copy to avoid tailcalls deleting our iterator function
-                    value_stack.copy_within(iterator_index..iterator_index + 4, first_local_index);
+                    let [iterator, invariant, control, dest1, dest2, dest3, dest4] =
+                        value_stack.get_slice_mut(iterator_index..iterator_index + 7)
+                    else {
+                        debug_unreachable_or!({
+                            return Err(RuntimeErrorData::InvalidInternalState);
+                        });
+                    };
+
+                    *dest1 = *iterator;
+                    *dest2 = StackValue::Integer(2);
+                    *dest3 = *invariant;
+                    *dest4 = *control;
 
                     // store the results over the first local index
                     return Ok(CallResult::Call(
@@ -1231,7 +1234,7 @@ impl Interpreter {
                 Instruction::GenericForTest(iterator_register) => {
                     let iterator_index = self.register_base + iterator_register as usize;
                     // GenericFor stores the iterator result in the first local register
-                    let first_local_index = iterator_index + 4;
+                    let first_local_index = iterator_index + 3;
 
                     let control_value = value_stack.get(first_local_index);
 
@@ -1240,7 +1243,7 @@ impl Interpreter {
                         self.next_instruction_index += 1;
 
                         // back up the control variable value in the control variable register
-                        let control_variable_index = iterator_index + 3;
+                        let control_variable_index = iterator_index + 2;
                         value_stack.set(control_variable_index, control_value);
                     }
                 }

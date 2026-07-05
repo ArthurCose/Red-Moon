@@ -2553,9 +2553,9 @@ where
         name_token: LuaToken<'source>,
         next_token: LuaToken<'source>,
     ) -> Result<(usize, usize), LuaCompilationError> {
-        // consume registers for the iterator, arg count, invariant state, and control variable
+        // consume registers for the iterator, invariant state, and control variable
         let iterator_register = self.top_function.next_register;
-        self.top_function.next_register += 4;
+        self.top_function.next_register += 3;
 
         // register local
         self.top_function.register_local(self.source, name_token)?;
@@ -2589,9 +2589,12 @@ where
 
         let instructions = &mut self.top_function.instructions;
 
-        // overwrites the count with the iterator function, and stores 2 where the iterator was
-        // prepares for the iterator to be called with the invariant state / control variable
-        instructions.push(Instruction::GenericForPrep(iterator_register));
+        // removes the count from the stack
+        instructions.push(Instruction::CopyRange(
+            iterator_register,
+            iterator_register + 1,
+            3,
+        ));
 
         // loop start, call the function and store the results over the control variable
         let start_index = instructions.len();
