@@ -59,39 +59,9 @@ assert_eq!(a, 1);
 
 ### Closures
 
-Values entering the VM must support Clone, and should avoid shared interior mutability, as modifying shared data will affect the state of snapshots.
-
-Note: this is only an issue for interior mutability with shared ownership, such as Rc. Interior mutability with direct ownership is acceptable as long as serialization is not a requirement.
-
-```rust
-use red_moon::interpreter::Vm;
-use std::cell::Cell;
-use std::rc::Rc;
-
-// interior mutability is fine as long as serialization isn't necessary and Rc is not involved:
-let counter = Cell::new(1);
-// Rc is fine as long as the data is immutable and serialization isn't needed:
-let data = Rc::new(1);
-// Rc with interior mutability will cause issues during rollback:
-let rc_counter = Rc::new(Cell::new(1));
-
-let mut vm = Vm::default();
-let ctx = &mut vm.context();
-
-// these can be captured, but not all are bug free:
-#[cfg(feature = "implicit_closures")]
-let f = ctx.create_function(move |call_ctx, ctx| {
-  let count = counter.get();
-  counter.set(count + 1);
-
-  call_ctx.return_values(rc_counter.get() + *data + count, ctx)
-});
-```
-
 Rust closures are prevented by default as implicit captures can not be seen by the VM for serialization.
-If serialization is not necessary, the `implicit_closures` feature can be enabled to loosen `fn` parameters to `impl Fn`.
 
-In any case, function references created from `ctx.create_function()` can use the `create_closure` method to create an explicit closure,
+Function references created from `ctx.create_function()` can use the `create_closure` method to create an explicit closure,
 which allows the VM to serialize and enforce serialization on captures.
 
 ```rust
@@ -116,6 +86,37 @@ let f = ctx.create_function(|call_ctx, ctx| {
 
   call_ctx.return_values(capture.0, ctx)
 }).create_closure(Counter(1), ctx); // explicit capture
+```
+
+Values entering the VM must support Clone (for rollback), and should avoid shared interior mutability, as modifying shared data will affect the state of snapshots.
+
+Note: this is only an issue for interior mutability with shared ownership, such as Rc. Interior mutability with direct ownership is acceptable as long as serialization is not a requirement.
+
+If serialization is not necessary, the `implicit_closures` feature can be enabled to loosen `fn` parameters to `impl Fn`.
+
+```rust
+use red_moon::interpreter::Vm;
+use std::cell::Cell;
+use std::rc::Rc;
+
+// interior mutability is fine as long as serialization isn't necessary and Rc is not involved:
+let counter = Cell::new(1);
+// Rc is fine as long as the data is immutable and serialization isn't needed:
+let data = Rc::new(1);
+// Rc with interior mutability will cause issues during rollback:
+let rc_counter = Rc::new(Cell::new(1));
+
+let mut vm = Vm::default();
+let ctx = &mut vm.context();
+
+// these can be captured, but not all are bug free:
+#[cfg(feature = "implicit_closures")]
+let f = ctx.create_function(move |call_ctx, ctx| {
+  let count = counter.get();
+  counter.set(count + 1);
+
+  call_ctx.return_values(rc_counter.get() + *data + count, ctx)
+});
 ```
 
 ## Serialization
