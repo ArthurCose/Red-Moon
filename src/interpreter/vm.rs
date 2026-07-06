@@ -8,7 +8,7 @@ use super::value_stack::StackValue;
 use super::{Continuation, NativeCallContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
 use crate::interpreter::Module;
-use crate::interpreter::debug_hooks::{DebugHook, HookMask};
+use crate::interpreter::debug_hooks::DebugHook;
 use crate::interpreter::interpreted_function::{Function, FunctionDefinition};
 use crate::interpreter::type_set::TypeSet;
 pub use crate::values::{
@@ -628,45 +628,6 @@ impl VmContext<'_> {
     #[inline]
     pub fn gc_config_mut(&mut self) -> &mut GarbageCollectorConfig {
         &mut self.vm.execution_data.gc.config
-    }
-
-    pub fn set_hook(
-        &mut self,
-        mask: HookMask,
-        instruction_count: usize,
-        callback: FunctionRef,
-    ) -> Result<(), RuntimeErrorData> {
-        let exec_data = &mut self.vm.execution_data;
-        callback.test_validity(&exec_data.heap)?;
-
-        let debug_hook = &mut exec_data.debug_hook;
-        debug_hook.reset();
-        debug_hook.mask = mask;
-        debug_hook.after_instructions = instruction_count;
-        debug_hook.callback = Some(callback.0.key());
-
-        Ok(())
-    }
-
-    #[inline]
-    pub fn remove_hook(&mut self) {
-        self.vm.execution_data.debug_hook.reset();
-    }
-
-    pub fn hook(&mut self) -> Option<FunctionRef> {
-        let storage_key = self.vm.execution_data.debug_hook.callback?;
-        let heap_key = self.vm.execution_data.heap.create_ref(storage_key);
-        Some(FunctionRef(heap_key))
-    }
-
-    #[inline]
-    pub fn hook_mask(&self) -> HookMask {
-        self.vm.execution_data.debug_hook.mask
-    }
-
-    #[inline]
-    pub fn hook_count(&self) -> usize {
-        self.vm.execution_data.debug_hook.after_instructions
     }
 
     pub(crate) fn call_function_key<A: ForEachValue, R: FromValues>(

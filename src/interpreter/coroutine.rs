@@ -2,6 +2,7 @@ use super::execution::ExecutionContext;
 use super::heap::{CoroutineObjectKey, StorageKey};
 use super::{Vm, VmContext};
 use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::interpreter::debug_hooks::DebugHook;
 use crate::values::{FunctionRef, MultiValue, Value};
 use slotmap::Key;
 
@@ -28,6 +29,7 @@ pub(crate) struct Coroutine {
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) continuation_stack: Vec<(Continuation, bool)>,
     pub(crate) err: Option<RuntimeError>,
+    pub(crate) debug_hook: DebugHook,
 }
 
 impl Coroutine {
@@ -45,6 +47,7 @@ impl Coroutine {
             status: CoroutineStatus::Suspended,
             continuation_stack: vec![(Continuation::Entry(function_key), true)],
             err: None,
+            debug_hook: Default::default(),
         }
     }
 
@@ -58,6 +61,7 @@ impl Coroutine {
         }
 
         let vm = &mut *ctx.vm;
+        let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
 
         // must test validity of every arg, since invalid keys in the vm will cause a panic
@@ -65,7 +69,8 @@ impl Coroutine {
             value.test_validity(heap)?;
         }
 
-        let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
+        // using `get_coroutine_mut`` to make sure we don't miss the debug hook callback
+        let Some(coroutine) = heap.get_coroutine_mut(gc, co_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
 
@@ -77,6 +82,10 @@ impl Coroutine {
         }
 
         coroutine.status = CoroutineStatus::Running;
+
+        // apply debug hook, back up the debug hook for the previous thread
+        std::mem::swap(&mut coroutine.debug_hook, &mut vm.execution_data.debug_hook);
+
         let coroutine_data = &mut vm.execution_data.coroutine_data;
         coroutine_data.coroutine_stack.push(co_key);
 
@@ -102,7 +111,7 @@ impl Coroutine {
                     StorageKey::NativeFunction(key) => {
                         ExecutionContext::call_native_fn(key, args, vm)
                     }
-                    _ => return Err(RuntimeError::new_invalid_internal_state()),
+                    _ => Err(RuntimeError::new_invalid_internal_state()),
                 },
                 Continuation::Callback(function_ref) => {
                     coroutine_data.resumed_result = Some(Ok(args));
@@ -156,7 +165,7 @@ impl Coroutine {
                                 let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key)
                                 else {
                                     err.data = RuntimeErrorData::new_invalid_internal_state();
-                                    return Err(err);
+                                    break Err(err);
                                 };
 
                                 coroutine.status = CoroutineStatus::Dead;
@@ -173,7 +182,7 @@ impl Coroutine {
             let heap = &mut vm.execution_data.heap;
 
             let Some(co) = heap.get_coroutine_mut_unmarked(co_key) else {
-                return Err(RuntimeErrorData::InvalidRef.into());
+                break Err(RuntimeErrorData::InvalidRef.into());
             };
 
             coroutine = co;
@@ -183,9 +192,14 @@ impl Coroutine {
         let gc = &mut vm.execution_data.gc;
         let heap = &mut vm.execution_data.heap;
 
-        let Some(coroutine) = heap.get_coroutine_mut_unmarked(co_key) else {
+        // using `get_coroutine_mut`` to make sure we don't miss the debug hook callback
+        let Some(coroutine) = heap.get_coroutine_mut(gc, co_key) else {
             return Err(RuntimeErrorData::InvalidRef.into());
         };
+
+        // store debug hook, reapply the debug hook for the previous thread
+        std::mem::swap(&mut coroutine.debug_hook, &mut vm.execution_data.debug_hook);
+
         let new_size = coroutine.heap_size();
 
         gc.modify_used_memory(new_size as isize - original_size as isize);

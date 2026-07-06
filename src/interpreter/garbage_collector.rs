@@ -622,6 +622,10 @@ impl GarbageCollector {
                         Continuation::Callback(..) => {}
                     }
                 }
+
+                if let Some(key) = co.debug_hook.callback {
+                    self.mark_storage_key(key);
+                }
             }
             StorageKey::StackValue(key) => {
                 if let Some(value) = heap.get_stack_value(key) {

@@ -1,6 +1,6 @@
 use crate::errors::{RuntimeError, StackTrace};
-use crate::interpreter::{HookMask, VmContext};
-use crate::values::{ByteString, FunctionRef, TableRef, Value};
+use crate::interpreter::{HookMask, NativeCallContext, VmContext};
+use crate::values::{ByteString, FunctionRef, TableRef, ThreadRef, Value};
 use std::fmt::Write;
 
 pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
@@ -37,13 +37,15 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // gethook
     let gethook = ctx.create_function(|call_ctx, ctx| {
+        let (thread, _) = get_thread(call_ctx, ctx);
+
         // resolve hook
-        let Some(fn_ref) = ctx.hook() else {
+        let Some(fn_ref) = thread.hook(ctx)? else {
             return call_ctx.return_values(Value::Nil, ctx);
         };
 
         // resolve mask
-        let mask = ctx.hook_mask();
+        let mask = thread.hook_mask(ctx)?;
         let mut mask_bytes = Vec::with_capacity(3);
 
         if mask.contains(HookMask::CALL) {
@@ -61,7 +63,7 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         let mask_string_ref = ctx.intern_string(&mask_bytes);
 
         // resolve count
-        let count = ctx.hook_count();
+        let count = thread.hook_count(ctx)?;
 
         call_ctx.return_values((fn_ref, mask_string_ref, count), ctx)
     });
@@ -92,13 +94,16 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // sethook
     let sethook = ctx.create_function(|call_ctx, ctx| {
-        let Some(callback) = call_ctx.get_arg::<Option<FunctionRef>>(0, ctx)? else {
+        let (thread, arg_offset) = get_thread(call_ctx, ctx);
+
+        let Some(callback) = call_ctx.get_arg::<Option<FunctionRef>>(arg_offset, ctx)? else {
             // when the first arg is nil, ignore the remaining args and remove the hook
-            ctx.remove_hook();
+            thread.remove_hook(ctx)?;
             return Ok(());
         };
 
-        let (mask_string, count): (ByteString, Option<usize>) = call_ctx.get_args_at(1, ctx)?;
+        let (mask_string, count): (ByteString, Option<usize>) =
+            call_ctx.get_args_at(arg_offset + 1, ctx)?;
 
         // resolve mask
         let mut mask = HookMask::default();
@@ -118,7 +123,7 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             mask.set(HookMask::INSTRUCTION, true);
         }
 
-        ctx.set_hook(mask, count, callback)?;
+        thread.set_hook(mask, count, callback, ctx)?;
 
         Ok(())
     });
@@ -138,4 +143,11 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
     }
 
     Ok(())
+}
+
+fn get_thread(call_ctx: &mut NativeCallContext, ctx: &mut VmContext) -> (ThreadRef, usize) {
+    call_ctx
+        .get_arg::<ThreadRef>(0, ctx)
+        .map(|thread| (thread, 1))
+        .unwrap_or_else(|_| (ctx.top_thread(), 0))
 }
