@@ -87,7 +87,9 @@ impl Coroutine {
         std::mem::swap(&mut coroutine.debug_hook, &mut vm.execution_data.debug_hook);
 
         let coroutine_data = &mut vm.execution_data.coroutine_data;
-        coroutine_data.coroutine_stack.push(co_key);
+        coroutine_data
+            .coroutine_stack
+            .push((co_key, vm.execution_stack.len()));
 
         let previous_yield_permissions = coroutine_data.yield_permitted;
 

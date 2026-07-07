@@ -1,9 +1,9 @@
 use super::{ForEachValue, MultiValue};
-use crate::errors::{RuntimeError, RuntimeErrorData};
+use crate::errors::{RuntimeError, RuntimeErrorData, StackTrace};
 use crate::interpreter::coroutine::{Coroutine, CoroutineStatus};
 use crate::interpreter::debug_hooks::DebugHook;
 use crate::interpreter::heap::{CoroutineObjectKey, CounterRef, HeapRef, Storage};
-use crate::interpreter::{HookMask, VmContext};
+use crate::interpreter::{Continuation, HookMask, VmContext};
 use crate::tag_native_type;
 use crate::values::FunctionRef;
 use slotmap::Key;
@@ -27,10 +27,10 @@ impl ThreadRef {
         Storage::key_to_id(self.0.key().data(), Storage::COROUTINES_TAG)
     }
 
-    pub fn status(&self, ctx: &mut VmContext) -> Result<CoroutineStatus, RuntimeError> {
+    pub fn status(&self, ctx: &mut VmContext) -> Result<CoroutineStatus, RuntimeErrorData> {
         let key = self.0.key();
         let Some(coroutine) = ctx.vm.execution_data.heap.get_coroutine(key) else {
-            return Err(RuntimeErrorData::InvalidRef.into());
+            return Err(RuntimeErrorData::InvalidRef);
         };
 
         Ok(coroutine.status)
@@ -57,7 +57,7 @@ impl ThreadRef {
         // see if this is the main thread
         if co_key.is_null() {
             // the first resumed coroutine backs up the main thread's debug
-            if let Some(&bottom_key) = coroutine_stack.first() {
+            if let Some(&(bottom_key, _)) = coroutine_stack.first() {
                 let Some(bottom_co) = exec_data.heap.get_coroutine_mut_unmarked(bottom_key) else {
                     return Err(RuntimeErrorData::InvalidInternalState);
                 };
@@ -72,9 +72,9 @@ impl ThreadRef {
         // not the main thread
 
         // see if this thread is in the coroutine stack as the debug hook may have been backed up
-        if let Some(i) = coroutine_stack.iter().position(|&key| key == co_key) {
+        if let Some(i) = coroutine_stack.iter().position(|&(key, _)| key == co_key) {
             // coroutines back up the prev thread's debug hook when resumed
-            if let Some(&next_key) = coroutine_stack.get(i + 1) {
+            if let Some(&(next_key, _)) = coroutine_stack.get(i + 1) {
                 let Some(next_co) = exec_data.heap.get_coroutine_mut_unmarked(next_key) else {
                     return Err(RuntimeErrorData::InvalidInternalState);
                 };
@@ -137,5 +137,82 @@ impl ThreadRef {
     #[inline]
     pub fn hook_count(&self, ctx: &mut VmContext) -> Result<usize, RuntimeErrorData> {
         Ok(self.debug_hook_mut(ctx)?.after_instructions)
+    }
+
+    pub fn traceback(
+        &self,
+        level: usize,
+        ctx: &mut VmContext,
+    ) -> Result<StackTrace, RuntimeErrorData> {
+        let co_key = self.0.key();
+
+        let coroutine_stack = &ctx.vm.execution_data.coroutine_data.coroutine_stack;
+        let execution_stack = &ctx.vm.execution_stack;
+
+        let executing_range = if co_key.is_null() {
+            // main thread
+            let end = coroutine_stack
+                .first()
+                .map(|&(_, execution_stack_start)| execution_stack_start)
+                .unwrap_or(execution_stack.len());
+
+            0..end
+        } else {
+            // coroutine
+            let mut start = execution_stack.len();
+            let mut end = execution_stack.len();
+
+            for &(key, execution_stack_start) in coroutine_stack.iter().rev() {
+                if key == co_key {
+                    start = execution_stack_start;
+                    break;
+                }
+
+                end = execution_stack_start
+            }
+
+            start..end
+        };
+
+        let Some(traceback_iter) = ctx.vm.execution_stack.get(executing_range) else {
+            return Err(RuntimeErrorData::new_invalid_internal_state());
+        };
+
+        let traceback_iter = traceback_iter
+            .iter()
+            .rev()
+            .flat_map(|execution| StackTrace::execution_traceback_iter(execution))
+            .skip(level);
+
+        let mut trace = StackTrace::default();
+        trace.frames.extend(traceback_iter);
+
+        if co_key.is_null() {
+            // main thread, no need to look up stored coroutine execution stacks
+            return Ok(trace);
+        }
+
+        let heap = &ctx.vm.execution_data.heap;
+        let Some(coroutine) = heap.get_coroutine(co_key) else {
+            return Err(RuntimeErrorData::InvalidRef);
+        };
+
+        let traceback_iter = coroutine
+            .continuation_stack
+            .iter()
+            .rev()
+            .flat_map(|(continuation, _)| {
+                if let Continuation::Execution(execution) = continuation {
+                    Some(StackTrace::execution_traceback_iter(execution))
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .skip(level.saturating_sub(trace.frames.len()));
+
+        trace.frames.extend(traceback_iter);
+
+        Ok(trace)
     }
 }

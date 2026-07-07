@@ -1,4 +1,5 @@
-use crate::{debug_unreachable, interpreter::VmContext};
+use crate::debug_unreachable_or;
+use crate::interpreter::execution::ExecutionContext;
 use std::rc::Rc;
 use thin_vec::ThinVec;
 
@@ -53,55 +54,43 @@ impl StackTraceFrame {
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StackTrace {
-    frames: ThinVec<StackTraceFrame>,
+    pub(crate) frames: ThinVec<StackTraceFrame>,
 }
 
 impl StackTrace {
-    pub fn new_traceback(ctx: &mut VmContext, level: usize) -> Self {
-        let mut trace = Self::default();
-        trace.frames.extend(Self::traceback_iter(ctx).skip(level));
-        trace
-    }
-
-    pub fn traceback_iter<'vm>(
-        ctx: &'vm mut VmContext,
-    ) -> impl Iterator<Item = StackTraceFrame> + 'vm {
-        ctx.vm.execution_stack.iter().rev().flat_map(|execution| {
-            let mut interpreter_stack = execution.interpreter_stack.iter().rev();
-
-            execution
-                .return_contexts
-                .iter()
-                .rev()
-                .flat_map(move |return_context| {
-                    if !return_context.interpreted {
-                        return Some(StackTraceFrame {
-                            instruction_trace: None,
-                            tail_called: return_context.tail_called,
-                        });
-                    }
-
-                    let Some(interpreter) = interpreter_stack.next() else {
-                        debug_unreachable!();
-                        #[allow(unreachable_code)]
-                        return None;
-                    };
-
-                    let instruction_index = interpreter.next_instruction_index.saturating_sub(1);
-                    let definition = &*interpreter.function.definition;
-                    let mut frame = definition.create_stack_trace_frame(instruction_index);
-                    frame.tail_called = return_context.tail_called;
-                    Some(frame)
-                })
-        })
-    }
-
-    pub fn push_frame(&mut self, frame: StackTraceFrame) {
-        self.frames.push(frame);
-    }
-
     pub fn frames(&self) -> &[StackTraceFrame] {
         &self.frames
+    }
+
+    pub(crate) fn execution_traceback_iter(
+        execution: &ExecutionContext,
+    ) -> impl Iterator<Item = StackTraceFrame> {
+        let mut interpreter_stack = execution.interpreter_stack.iter().rev();
+
+        execution
+            .return_contexts
+            .iter()
+            .rev()
+            .flat_map(move |return_context| {
+                if !return_context.interpreted {
+                    return Some(StackTraceFrame {
+                        instruction_trace: None,
+                        tail_called: return_context.tail_called,
+                    });
+                }
+
+                let Some(interpreter) = interpreter_stack.next() else {
+                    debug_unreachable_or!({
+                        return None;
+                    });
+                };
+
+                let instruction_index = interpreter.next_instruction_index.saturating_sub(1);
+                let definition = &*interpreter.function.definition;
+                let mut frame = definition.create_stack_trace_frame(instruction_index);
+                frame.tail_called = return_context.tail_called;
+                Some(frame)
+            })
     }
 }
 

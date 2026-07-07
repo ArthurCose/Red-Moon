@@ -1,4 +1,4 @@
-use crate::errors::{RuntimeError, StackTrace};
+use crate::errors::RuntimeError;
 use crate::interpreter::{HookMask, NativeCallContext, VmContext};
 use crate::values::{ByteString, FunctionRef, TableRef, ThreadRef, Value};
 use std::fmt::Write;
@@ -71,7 +71,8 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // traceback
     let traceback = ctx.create_function(|call_ctx, ctx| {
-        let (message, level): (Value, Option<i64>) = call_ctx.get_args(ctx)?;
+        let (thread, arg_offset) = get_thread(call_ctx, ctx);
+        let (message, level): (Value, Option<i64>) = call_ctx.get_args_at(arg_offset, ctx)?;
 
         let mut message = match message {
             Value::Nil => String::new(),
@@ -83,8 +84,8 @@ pub fn load_debug(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         };
 
         // write stack trace
-        let level = level.unwrap_or(1).max(0) as usize;
-        let trace = StackTrace::new_traceback(ctx, level);
+        let level = level.unwrap_or_default().max(0) as usize;
+        let trace = thread.traceback(level, ctx)?;
 
         let _ = write!(&mut message, "{trace}");
 

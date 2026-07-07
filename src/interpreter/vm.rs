@@ -40,7 +40,8 @@ pub(crate) struct CoroutineData {
     pub(crate) yield_permitted: bool,
     pub(crate) yield_pending: bool,
     pub(crate) resumed_result: Option<Result<MultiValue, RuntimeError>>,
-    pub(crate) coroutine_stack: Vec<CoroutineObjectKey>,
+    // Vec<CoroutineKey, execution_stack_start>
+    pub(crate) coroutine_stack: Vec<(CoroutineObjectKey, usize)>,
     /// Vec<Continuation, parent_allows_yield>
     pub(crate) in_progress_yield: Vec<(Continuation, bool)>,
 }
@@ -520,7 +521,7 @@ impl VmContext<'_> {
     #[inline]
     pub fn top_coroutine(&mut self) -> Option<ThreadRef> {
         let coroutine_data = &mut self.vm.execution_data.coroutine_data;
-        let key = *coroutine_data.coroutine_stack.last()?;
+        let key = coroutine_data.coroutine_stack.last()?.0;
 
         Some(ThreadRef(self.vm.execution_data.heap.create_ref(key)))
     }

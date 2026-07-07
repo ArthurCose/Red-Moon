@@ -91,15 +91,17 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
     // error
     let error = ctx.create_function(|call_ctx, ctx| {
-        // todo: level
-        let message: Value = call_ctx.get_args(ctx)?;
+        let (message, level): (Value, Option<i64>) = call_ctx.get_args(ctx)?;
+        let level = level.unwrap_or_default().max(0) as usize;
 
-        let err = match message {
+        let mut err = match message {
             Value::Integer(i) => RuntimeError::new_string(i.to_string()),
             Value::Float(f) => RuntimeError::new_string(f.to_string()),
             Value::String(s) => RuntimeError::new_byte_string(s.fetch(ctx)?.clone()),
             _ => RuntimeError::new_string(format!("(error is a {} value)", message.type_name())),
         };
+
+        err.trace = ctx.top_thread().traceback(level, ctx)?;
 
         Err(err)
     });

@@ -577,7 +577,7 @@ impl ExecutionContext {
             let instruction_index = interpreter.next_instruction_index.saturating_sub(1);
             let definition = interpreter.function.definition;
             let frame = definition.create_stack_trace_frame(instruction_index);
-            err.trace.push_frame(frame);
+            err.trace.frames.push(frame);
         }
 
         let cache_pools = &mut exec_data.cache_pools;
