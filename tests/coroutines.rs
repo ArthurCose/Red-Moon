@@ -19,7 +19,6 @@ fn resumable() -> Result<(), RuntimeError> {
         start: i64,
         end: i64,
         f: FunctionRef,
-        resume_fn: FunctionRef,
     }
 
     tag_native_type!(ForRangeResumeState);
@@ -38,21 +37,19 @@ fn resumable() -> Result<(), RuntimeError> {
         while i < end {
             // call a function that can yield
             f.yieldable_call::<_, ()>(i, call_ctx, ctx, move |call_ctx, ctx| {
-                let Some(ForRangeResumeState { f, resume_fn, .. }) =
+                let Some(ForRangeResumeState { f, .. }) =
                     call_ctx.get_capture::<ForRangeResumeState>(ctx)
                 else {
                     return Err(RuntimeError::new_invalid_internal_state());
                 };
 
                 let f = f.clone();
-                let resume_fn = resume_fn.clone();
 
-                resume_fn.clone().create_closure(
+                call_ctx.function_ref(ctx).create_closure(
                     ForRangeResumeState {
                         start: i + 1,
                         end,
                         f,
-                        resume_fn,
                     },
                     ctx,
                 )
@@ -81,7 +78,6 @@ fn resumable() -> Result<(), RuntimeError> {
                             start: i + 1,
                             end,
                             f: f_capture,
-                            resume_fn: resume_fn.clone(),
                         },
                         ctx,
                     )

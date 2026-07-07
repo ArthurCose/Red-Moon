@@ -1,6 +1,6 @@
 use super::value_stack::StackValue;
 use crate::errors::{RuntimeError, RuntimeErrorData};
-use crate::interpreter::heap::NativeFnObjectKey;
+use crate::interpreter::heap::{NativeFnObjectKey, StorageKey};
 use crate::interpreter::{Continuation, Vm, VmContext};
 use crate::values::{
     ForEachValue, FromValue, FromValues, FunctionRef, MultiValue, NativeValue, SharedNativeValue,
@@ -16,6 +16,13 @@ pub struct NativeCallContext {
 }
 
 impl NativeCallContext {
+    /// A [FunctionRef] to the called function. Useful for recursion without ref cycles.
+    pub fn function_ref(&self, ctx: &mut VmContext) -> FunctionRef {
+        let heap = &mut ctx.vm.execution_data.heap;
+        let heap_ref = heap.create_ref(StorageKey::NativeFunction(self.key));
+        FunctionRef(heap_ref)
+    }
+
     pub fn arg_count(&self) -> usize {
         self.arg_count
     }
