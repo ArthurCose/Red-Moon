@@ -2169,16 +2169,7 @@ impl Interpreter {
         let total = self.register_base.saturating_sub(arg_index);
 
         if total > 0 {
-            // todo: recycle?
-            let mut values = Vec::new();
-
-            for i in 0..total {
-                values.push(value_stack.get(arg_index + i));
-            }
-
-            for (i, value) in values.into_iter().enumerate() {
-                value_stack.set(dest_index + i, value);
-            }
+            value_stack.copy_within(arg_index..arg_index + total, dest_index);
 
             let count_value = StackValue::Integer(count + total as i64);
             value_stack.set(count_index, count_value);
@@ -2194,16 +2185,7 @@ impl Interpreter {
         let total = self.register_base.saturating_sub(arg_index);
 
         if total > 0 {
-            // todo: recycle?
-            let mut values = Vec::new();
-
-            for i in 0..total {
-                values.push(value_stack.get(arg_index + i));
-            }
-
-            for (i, value) in values.into_iter().enumerate() {
-                value_stack.set(dest_index + i, value);
-            }
+            value_stack.copy_within(arg_index..arg_index + total, dest_index);
         }
     }
 
