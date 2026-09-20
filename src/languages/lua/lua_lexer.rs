@@ -158,13 +158,9 @@ impl Default for LuaLexer {
                 .map(|c| c.len_utf8())
                 .sum();
 
-            let last_char = source_substr[string_length + 1..].chars().next();
+            let last_char = source_substr[string_length + 1..].chars().next()?;
 
-            if let Some(last_char) = last_char {
-                if last_char != first_char {
-                    return None;
-                }
-            } else {
+            if last_char != first_char {
                 return None;
             }
 
