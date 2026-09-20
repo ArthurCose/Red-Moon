@@ -2301,19 +2301,18 @@ impl Interpreter {
         forward_jump: u16,
     ) -> Result<bool, RuntimeErrorData> {
         let slice_start = self.register_base + src as usize;
-        let values = value_stack.get_slice_mut(slice_start..slice_start + 4);
-
-        let (value, limit, step) = (
-            values[0].get_deref(heap),
-            values[1].get_deref(heap),
-            values[2].get_deref(heap),
-        );
+        let Some([value_ref, limit_ref, step_ref, local_ref]) = value_stack
+            .get_slice_mut(slice_start..slice_start + 4)
+            .as_mut_array()
+        else {
+            return Err(RuntimeErrorData::InvalidInternalState);
+        };
 
         if let (
             StackValue::Integer(mut value),
             StackValue::Integer(limit),
             StackValue::Integer(step),
-        ) = (value, limit, step)
+        ) = (*value_ref, *limit_ref, *step_ref)
         {
             if for_loop_jump {
                 value += step;
@@ -2328,17 +2327,17 @@ impl Interpreter {
             if stop {
                 self.next_instruction_index += forward_jump as usize;
             } else {
-                values[0] = StackValue::Integer(value);
-                values[3] = StackValue::Integer(value);
+                *value_ref = StackValue::Integer(value);
+                *local_ref = StackValue::Integer(value);
             }
         } else {
-            let mut value = cast_float(heap, value, |type_name| {
+            let mut value = cast_float(heap, *value_ref, |type_name| {
                 RuntimeErrorData::InvalidForInitialValue(type_name)
             })?;
-            let limit = cast_float(heap, limit, |type_name| {
+            let limit = cast_float(heap, *limit_ref, |type_name| {
                 RuntimeErrorData::InvalidForLimit(type_name)
             })?;
-            let step = cast_float(heap, step, |type_name| {
+            let step = cast_float(heap, *step_ref, |type_name| {
                 RuntimeErrorData::InvalidForStep(type_name)
             })?;
 
@@ -2355,8 +2354,8 @@ impl Interpreter {
             if stop {
                 self.next_instruction_index += forward_jump as usize;
             } else {
-                values[0] = StackValue::Float(value);
-                values[3] = StackValue::Float(value);
+                *value_ref = StackValue::Float(value);
+                *local_ref = StackValue::Float(value);
             }
         }
 

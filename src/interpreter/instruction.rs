@@ -298,6 +298,8 @@ pub enum Instruction {
 
     /// Expects three numbers at src: a value to increment, a limit, and the step
     ///
+    /// A copy of the incremented value will be stored in the fourth position from the src, it's safe to modify this value during iteration
+    ///
     /// Increments the instruction counter by forward_jump when complete
     ///
     /// Jump using JumpToForLoop to increment the local
