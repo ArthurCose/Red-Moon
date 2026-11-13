@@ -136,7 +136,7 @@ impl<'lua> Value<'lua> {
                     let tostring_key = ctx.metatable_keys().tostring.clone();
 
                     if let Ok(function_value) =
-                        metatable.raw_get::<_, red_moon::values::Value>(tostring_key, ctx)
+                        metatable.raw_get::<red_moon::values::Value>(tostring_key, ctx)
                     {
                         return Ok(function_value.call(t.table_ref.clone(), ctx)?);
                     }
@@ -144,7 +144,7 @@ impl<'lua> Value<'lua> {
                     let name_key = ctx.metatable_keys().name.clone();
 
                     if let Ok(name) =
-                        metatable.raw_get::<_, red_moon::values::ByteString>(name_key, ctx)
+                        metatable.raw_get::<red_moon::values::ByteString>(name_key, ctx)
                     {
                         return Ok(format!("{name}: 0x{:x}", t.to_pointer() as usize));
                     }

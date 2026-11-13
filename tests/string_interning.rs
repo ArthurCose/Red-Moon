@@ -32,7 +32,7 @@ fn string_interning() -> Result<(), RuntimeError> {
     // we don't compare bytes inside of the vm
     let module = compile("assert(a == b) assert(a == c)").unwrap();
     ctx.load_function(file!(), None, module)?
-        .call::<_, ()>((), ctx)?;
+        .call::<()>((), ctx)?;
 
     Ok(())
 }

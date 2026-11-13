@@ -71,5 +71,5 @@ fn instructions_print() {
         )
         .unwrap();
 
-    function_ref.call::<_, ()>((), ctx).unwrap();
+    function_ref.call::<()>((), ctx).unwrap();
 }

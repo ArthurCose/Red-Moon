@@ -72,20 +72,20 @@ fn captures() -> Result<(), RuntimeError> {
         .create_closure(IntegerCapture(0), ctx)?;
 
     // test out incrementing
-    assert_eq!(closure.call::<_, i32>((), ctx)?, 1);
-    assert_eq!(closure.call::<_, i32>((), ctx)?, 2);
+    assert_eq!(closure.call::<i32>((), ctx)?, 1);
+    assert_eq!(closure.call::<i32>((), ctx)?, 2);
 
     // take a snapshot
     let mut snapshot = vm.clone();
 
     // update value
     let ctx = &mut vm.context();
-    assert_eq!(closure.call::<_, i32>((), ctx)?, 3);
-    assert_eq!(closure.call::<_, i32>((), ctx)?, 4);
+    assert_eq!(closure.call::<i32>((), ctx)?, 3);
+    assert_eq!(closure.call::<i32>((), ctx)?, 4);
 
     // check snapshot
     let snapshot_ctx = &mut snapshot.context();
-    assert_eq!(closure.call::<_, i32>((), snapshot_ctx)?, 3);
+    assert_eq!(closure.call::<i32>((), snapshot_ctx)?, 3);
 
     Ok(())
 }

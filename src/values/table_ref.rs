@@ -54,9 +54,9 @@ impl TableRef {
     }
 
     /// Gets a value from the table without invoking the `__index` metamethod.
-    pub fn raw_get<K: IntoValue, V: FromValue>(
+    pub fn raw_get<V: FromValue>(
         &self,
-        key: K,
+        key: impl IntoValue,
         ctx: &mut VmContext,
     ) -> Result<V, RuntimeError> {
         let key = key.into_value(ctx)?.to_stack_value();
@@ -112,9 +112,9 @@ impl TableRef {
     }
 
     /// Gets a value from the table, using the `__index` metamethod if available, and falling back to direct access.
-    pub fn get<K: IntoValue, V: FromValue>(
+    pub fn get<V: FromValue>(
         &self,
-        key: K,
+        key: impl IntoValue,
         ctx: &mut VmContext,
     ) -> Result<V, RuntimeError> {
         let table_key = self.0.key();

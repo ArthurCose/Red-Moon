@@ -98,18 +98,18 @@ impl FunctionRef {
         Ok(false)
     }
 
-    pub fn call<A: ForEachValue, R: FromValues>(
+    pub fn call<R: FromValues>(
         &self,
-        args: A,
+        args: impl ForEachValue,
         ctx: &mut VmContext,
     ) -> Result<R, RuntimeError> {
         ctx.call_function_key(self.0.key().into(), args)
     }
 
     /// The function called may yield if the caller is also yieldable.
-    pub fn yieldable_call<A: ForEachValue, R: FromValues>(
+    pub fn yieldable_call<R: FromValues>(
         &self,
-        args: A,
+        args: impl ForEachValue,
         call_ctx: &mut NativeCallContext,
         ctx: &mut VmContext,
         yield_response: impl FnOnce(

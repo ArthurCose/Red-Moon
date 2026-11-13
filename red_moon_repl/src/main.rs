@@ -145,7 +145,7 @@ fn execute_source(
     }
 
     // execute
-    if let Err(err) = function_ref.call::<_, Value>(args_multi, ctx) {
+    if let Err(err) = function_ref.call::<Value>(args_multi, ctx) {
         println!("{err}");
         return Err(());
     }
@@ -232,11 +232,11 @@ fn repl(vm: &mut Vm) -> Result<(), ()> {
 
         let function = ctx.load_function("stdin", None, module).unwrap();
 
-        match function.call::<_, MultiValue>((), ctx) {
+        match function.call::<MultiValue>((), ctx) {
             Err(err) => println!("{err}"),
             Ok(multi) => {
                 if !multi.is_empty()
-                    && let Err(err) = print_function.call::<_, Value>(multi, ctx)
+                    && let Err(err) = print_function.call::<Value>(multi, ctx)
                 {
                     println!("{err}")
                 }

@@ -156,7 +156,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
 
         if let Some(metatable) = &metatable {
             let metatable_key = ctx.metatable_keys().metatable.clone();
-            let metatable_value = metatable.raw_get::<_, Option<Value>>(metatable_key, ctx)?;
+            let metatable_value = metatable.raw_get::<Option<Value>>(metatable_key, ctx)?;
 
             if let Some(metatable_value) = metatable_value {
                 return call_ctx.return_values(metatable_value, ctx);
@@ -174,7 +174,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         if let Some(metatable) = table.metatable(ctx)? {
             let metatable_key = ctx.metatable_keys().metatable.clone();
             let is_protected = metatable
-                .raw_get::<_, Option<Value>>(metatable_key, ctx)?
+                .raw_get::<Option<Value>>(metatable_key, ctx)?
                 .is_some();
 
             if is_protected {
@@ -463,18 +463,14 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
         .create_function(|call_ctx, ctx| {
             let (function, args): (FunctionRef, MultiValue) = call_ctx.get_args(ctx)?;
 
-            let result = function.yieldable_call::<_, MultiValue>(
-                args,
-                call_ctx,
-                ctx,
-                |call_ctx, ctx| {
+            let result =
+                function.yieldable_call::<MultiValue>(args, call_ctx, ctx, |call_ctx, ctx| {
                     let Some(f) = call_ctx.get_capture::<FunctionRef>(ctx) else {
                         return Err(RuntimeError::new_invalid_internal_state());
                     };
 
                     Ok(f.clone())
-                },
-            )?;
+                })?;
 
             pcall_end(call_ctx, ctx, result)
         })
@@ -497,7 +493,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             };
 
             let err_message = err.data.to_string();
-            result = handler.call::<_, MultiValue>(err_message, ctx);
+            result = handler.call::<MultiValue>(err_message, ctx);
         };
 
         call_ctx.return_values((success, values), ctx)
@@ -522,7 +518,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
                 call_ctx.get_args(ctx)?;
 
             let handler_capture = handler.clone();
-            let result = function.yieldable_call::<_, MultiValue>(
+            let result = function.yieldable_call::<MultiValue>(
                 args,
                 call_ctx,
                 ctx,
@@ -565,7 +561,7 @@ pub fn load_basic(ctx: &mut VmContext) -> Result<(), RuntimeError> {
             let chunk_builder: FunctionRef = call_ctx.get_arg(0, ctx)?;
 
             loop {
-                let value = chunk_builder.call::<_, Value>((), ctx)?;
+                let value = chunk_builder.call::<Value>((), ctx)?;
 
                 if value.is_nil() {
                     break;
@@ -696,14 +692,14 @@ fn to_string(value: Value, ctx: &mut VmContext) -> Result<String, RuntimeError> 
                 let tostring_key = ctx.metatable_keys().tostring.clone();
 
                 if let Ok(Some(function_value)) =
-                    metatable.raw_get::<_, Option<Value>>(tostring_key, ctx)
+                    metatable.raw_get::<Option<Value>>(tostring_key, ctx)
                 {
                     return function_value.call(table.clone(), ctx);
                 }
 
                 let name_key = ctx.metatable_keys().name.clone();
 
-                if let Ok(name) = metatable.raw_get::<_, ByteString>(name_key, ctx) {
+                if let Ok(name) = metatable.raw_get::<ByteString>(name_key, ctx) {
                     return Ok(format!("{name}: 0x{:x}", table.id()));
                 }
             }

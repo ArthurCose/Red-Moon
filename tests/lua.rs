@@ -101,7 +101,7 @@ fn valid() {
         let module = compile(&source).expect(path);
         let function_ref = ctx.load_function(path, None, module).unwrap();
 
-        if let Err(err) = function_ref.call::<_, ()>((), ctx) {
+        if let Err(err) = function_ref.call::<()>((), ctx) {
             panic!(
                 "{path}: {err}\n\n{}",
                 String::from_utf8_lossy(&out_capture.out.borrow())
@@ -222,7 +222,7 @@ fn runtime_error() {
 
         assert_eq!(
             function_ref
-                .call::<_, ()>(MultiValue::pack((), ctx).unwrap(), ctx)
+                .call::<()>(MultiValue::pack((), ctx).unwrap(), ctx)
                 .err()
                 .map(|err| err.data),
             Some(expected),

@@ -77,7 +77,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
     let closure = closure.create_closure(Value::Integer(0), ctx)?;
     env.set("native_closure", closure.clone(), ctx)?;
 
-    assert_eq!(closure.call::<_, i64>((), ctx)?, 1);
+    assert_eq!(closure.call::<i64>((), ctx)?, 1);
 
     // load lua
     const SOURCE: &str = r#"
@@ -96,7 +96,7 @@ fn create_vm() -> Result<Vm, RuntimeError> {
 
     let module = compile(SOURCE).unwrap();
     ctx.load_function(file!(), None, module)?
-        .call::<_, ()>((), ctx)?;
+        .call::<()>((), ctx)?;
 
     // create native function
     let f = ctx.create_function(|call_ctx, ctx| {
@@ -132,16 +132,16 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
     assert_eq!(table_a, table_a2);
 
     // test number
-    assert_eq!(table_b.get::<_, i32>(1, ctx)?, 2);
+    assert_eq!(table_b.get::<i32>(1, ctx)?, 2);
 
     // test lua function
     let lua_f: FunctionRef = env.get("lua_fn", ctx)?;
-    assert_eq!(lua_f.call::<_, String>((), ctx)?, "lua_fn success");
+    assert_eq!(lua_f.call::<String>((), ctx)?, "lua_fn success");
 
     // test dehydrated function
     let f: FunctionRef = env.get("native_fn", ctx)?;
     assert!(
-        f.call::<_, MultiValue>(1, ctx)
+        f.call::<MultiValue>(1, ctx)
             .is_err_and(|err| err.data == RuntimeErrorData::FunctionLostInSerialization)
     );
 
@@ -151,7 +151,7 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
         Ok(())
     });
     assert!(f.rehydrate("hydrated_fn", ctx)?);
-    assert_eq!(f.call::<_, MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
+    assert_eq!(f.call::<MultiValue>(1, ctx)?, MultiValue::pack(1, ctx)?);
 
     // test resumable, expecting "resumed" to be stored in state
     let resumed_fn = ctx.create_function(|call_ctx, ctx| {
@@ -172,17 +172,14 @@ fn test_vm(vm: &mut Vm) -> Result<(), RuntimeError> {
 
     // test closure
     let stored_closure: FunctionRef = env.get("native_closure", ctx)?;
-    assert_eq!(stored_closure.call::<_, i64>((), ctx)?, 2);
+    assert_eq!(stored_closure.call::<i64>((), ctx)?, 2);
 
     // retrieve singleton
     let my_singleton: &MySingleton = ctx.singleton().unwrap();
     assert_eq!(my_singleton, &MySingleton(1));
 
     // compare main thread
-    assert_eq!(
-        env.get::<_, ThreadRef>("main_thread", ctx)?,
-        ctx.main_thread()
-    );
+    assert_eq!(env.get::<ThreadRef>("main_thread", ctx)?, ctx.main_thread());
 
     Ok(())
 }

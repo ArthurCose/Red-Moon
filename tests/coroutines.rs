@@ -36,7 +36,7 @@ fn resumable() -> Result<(), RuntimeError> {
 
         while i < end {
             // call a function that can yield
-            f.yieldable_call::<_, ()>(i, call_ctx, ctx, move |call_ctx, ctx| {
+            f.yieldable_call::<()>(i, call_ctx, ctx, move |call_ctx, ctx| {
                 let Some(ForRangeResumeState { f, .. }) =
                     call_ctx.get_capture::<ForRangeResumeState>(ctx)
                 else {
@@ -68,7 +68,7 @@ fn resumable() -> Result<(), RuntimeError> {
             while i < end {
                 // call a function that can yield
                 let f_capture = f.clone();
-                f.yieldable_call::<_, ()>(i, call_ctx, ctx, move |call_ctx, ctx| {
+                f.yieldable_call::<()>(i, call_ctx, ctx, move |call_ctx, ctx| {
                     let Some(resume_fn) = call_ctx.get_capture::<FunctionRef>(ctx) else {
                         return Err(RuntimeError::new_invalid_internal_state());
                     };
@@ -111,7 +111,7 @@ fn resumable() -> Result<(), RuntimeError> {
 
     let module = compile(SOURCE).unwrap();
     ctx.load_function(file!(), None, module)?
-        .call::<_, ()>((), ctx)?;
+        .call::<()>((), ctx)?;
 
     Ok(())
 }
@@ -140,7 +140,7 @@ fn non_yieldable_boundary() -> Result<(), RuntimeError> {
     let module = compile(SOURCE).unwrap();
     let success = ctx
         .load_function(file!(), None, module)?
-        .call::<_, bool>((), ctx)?;
+        .call::<bool>((), ctx)?;
 
     assert!(!success);
 
@@ -162,7 +162,7 @@ fn yield_in_main() -> Result<(), RuntimeError> {
     let module = compile(SOURCE).unwrap();
     let result = ctx
         .load_function(file!(), None, module)?
-        .call::<_, ()>((), ctx);
+        .call::<()>((), ctx);
 
     let err = result.unwrap_err();
     assert_eq!(err.data, RuntimeErrorData::InvalidYield);
@@ -210,7 +210,7 @@ fn double_yield() -> Result<(), RuntimeError> {
     let module = compile(SOURCE).unwrap();
     let success = ctx
         .load_function(file!(), None, module)?
-        .call::<_, bool>((), ctx)?;
+        .call::<bool>((), ctx)?;
 
     assert!(!success);
 
@@ -254,7 +254,7 @@ fn unhandled_yield() -> Result<(), RuntimeError> {
     let module = compile(SOURCE).unwrap();
     let success = ctx
         .load_function(file!(), None, module)?
-        .call::<_, bool>((), ctx)?;
+        .call::<bool>((), ctx)?;
 
     assert!(!success);
 
